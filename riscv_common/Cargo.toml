@@ -11,8 +11,11 @@ categories.workspace = true
 
 [dependencies]
 heapless = { version = "*", default-features = false, optional = true }
+common_constants = { path = "../common_constants" }
 
 [features]
 uart = ["heapless"]
 custom_panic = []
 custom_allocator = []
+boot_sequence = []
+default = ["boot_sequence"]

@@ -1,5 +1,5 @@
 use common_constants::{INITIAL_PC, INITIAL_TIMESTAMP};
-use verifier_common::cs::definitions::split_timestamp;
+use verifier_common::{cs::definitions::split_timestamp, DefaultNonDeterminismSource};
 
 use super::*;
 
@@ -81,6 +81,9 @@ pub const FULL_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS: &[(
     ),
 ];
 
+pub const FULL_MACHINE_NUM_UNROLLED_CIRCUITS: usize =
+    const { FULL_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS.len() };
+
 pub const FULL_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS: &[(
     u32, // family
     u32, // capacity
@@ -118,6 +121,9 @@ pub const FULL_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS: &[(
     ),
 ];
 
+pub const FULL_UNSIGNED_MACHINE_NUM_UNROLLED_CIRCUITS: usize =
+    const { FULL_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS.len() };
+
 pub const RECURSION_WORD_ONLY_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS: &[(
     u32, // family
     u32, // capacity
@@ -145,6 +151,9 @@ pub const RECURSION_WORD_ONLY_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PA
     ),
 ];
 
+pub const RECURSION_WORD_ONLY_UNSIGNED_MACHINE_NUM_UNROLLED_CIRCUITS: usize =
+    const { RECURSION_WORD_ONLY_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS.len() };
+
 pub const INITS_AND_TEARDOWNS_VERIFIER_PTR: VerifierFunctionPointer<
     CAP_SIZE,
     NUM_COSETS,
@@ -152,6 +161,20 @@ pub const INITS_AND_TEARDOWNS_VERIFIER_PTR: VerifierFunctionPointer<
     { inits_and_teardowns_verifier::concrete::size_constants::NUM_AUX_BOUNDARY_VALUES },
     0,
 > = inits_and_teardowns_verifier::verify;
+
+#[allow(invalid_value)]
+#[inline(always)]
+pub unsafe fn read_setups<I: NonDeterminismSource, const N: usize>(
+) -> [[MerkleTreeCap<CAP_SIZE>; NUM_COSETS]; N] {
+    let mut result: [[MaybeUninit<MerkleTreeCap<CAP_SIZE>>; 2]; N] =
+        [[const { core::mem::MaybeUninit::uninit() }; NUM_COSETS]; N];
+
+    for dst in result.iter_mut() {
+        MerkleTreeCap::<CAP_SIZE>::read_caps_into::<I, NUM_COSETS>(dst.as_mut_ptr().cast());
+    }
+
+    result.map(|el| el.map(|el| el.assume_init()))
+}
 
 /// If we recurse over user's program -> we must provide expected final PC,
 /// and setup caps (that encode the program itself!),
@@ -639,4 +662,50 @@ pub unsafe fn verify_full_statement_for_unrolled_circuits<
     }
 
     output
+}
+
+pub fn verify_unrolled_base_layer() -> [u32; 16] {
+    unsafe {
+        let circuits_setups = read_setups::<
+            DefaultNonDeterminismSource,
+            FULL_UNSIGNED_MACHINE_NUM_UNROLLED_CIRCUITS,
+        >();
+        let circuits_setups_refs = circuits_setups.each_ref();
+        let inits_and_teardowns_setups = read_setups::<DefaultNonDeterminismSource, 1>();
+        verify_full_statement_for_unrolled_circuits::<
+            true,
+            { inits_and_teardowns_verifier::concrete::size_constants::NUM_AUX_BOUNDARY_VALUES },
+        >(
+            &circuits_setups_refs,
+            &FULL_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS,
+            (
+                &inits_and_teardowns_setups[0],
+                INITS_AND_TEARDOWNS_VERIFIER_PTR,
+            ),
+            BASE_LAYER_DELEGATION_CIRCUITS_VERIFICATION_PARAMETERS,
+        )
+    }
+}
+
+pub fn verify_unrolled_recursion_layer() -> [u32; 16] {
+    unsafe {
+        let circuits_setups = read_setups::<
+            DefaultNonDeterminismSource,
+            RECURSION_WORD_ONLY_UNSIGNED_MACHINE_NUM_UNROLLED_CIRCUITS,
+        >();
+        let circuits_setups_refs = circuits_setups.each_ref();
+        let inits_and_teardowns_setups = read_setups::<DefaultNonDeterminismSource, 1>();
+        verify_full_statement_for_unrolled_circuits::<
+            false,
+            { inits_and_teardowns_verifier::concrete::size_constants::NUM_AUX_BOUNDARY_VALUES },
+        >(
+            &circuits_setups_refs,
+            &RECURSION_WORD_ONLY_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS,
+            (
+                &inits_and_teardowns_setups[0],
+                INITS_AND_TEARDOWNS_VERIFIER_PTR,
+            ),
+            RECURSION_LAYER_CIRCUITS_VERIFICATION_PARAMETERS,
+        )
+    }
 }
