@@ -15,5 +15,7 @@ pub mod replayer;
 pub mod vm;
 pub mod witness;
 
+pub use ::common_constants;
+
 #[cfg(test)]
 mod tests;
