@@ -1,3 +1,5 @@
+use std::alloc::Allocator;
+
 use super::*;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -119,6 +121,35 @@ pub struct PartialSnapshot {
     pub memory_reads_offset: usize,
 }
 
+pub trait ReplayBuffer<T: Sized> {
+    fn new_with_cycle_bound(bound: usize) -> Self;
+    unsafe fn push_within_capacity_unchecked(&mut self, value: T);
+    fn make_range<'a>(&'a self, range: core::ops::Range<usize>) -> Vec<&'a [T]>
+    where
+        T: 'a;
+    fn len(&self) -> usize;
+}
+
+impl<T: Sized, A: Allocator + Default> ReplayBuffer<T> for Vec<T, A> {
+    fn new_with_cycle_bound(bound: usize) -> Self {
+        Vec::<T, A>::with_capacity_in(bound, A::default())
+    }
+    #[inline(always)]
+    unsafe fn push_within_capacity_unchecked(&mut self, value: T) {
+        self.push_within_capacity(value).unwrap_unchecked();
+    }
+    #[inline(always)]
+    fn len(&self) -> usize {
+        Vec::<T, A>::len(self)
+    }
+    fn make_range<'a>(&'a self, range: core::ops::Range<usize>) -> Vec<&'a [T]>
+    where
+        T: 'a,
+    {
+        vec![&self[range]]
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpecBiVec<T: Sized, const I: usize = { 1 << 30 }, const O: usize = 4> {
     current: usize,
@@ -127,7 +158,7 @@ pub struct SpecBiVec<T: Sized, const I: usize = { 1 << 30 }, const O: usize = 4>
 }
 
 impl<T: Sized, const I: usize, const O: usize> SpecBiVec<T, I, O> {
-    pub fn new() -> Self {
+    fn new() -> Self {
         assert!(O > 0);
         assert!(I > 0);
         assert!(O * I <= 1 << 36);
@@ -142,7 +173,7 @@ impl<T: Sized, const I: usize, const O: usize> SpecBiVec<T, I, O> {
     }
 
     #[inline(always)]
-    pub fn push(&mut self, value: T) {
+    fn push_unchecked_impl(&mut self, value: T) {
         unsafe {
             let dst = self.buffers.get_unchecked_mut(self.current);
             if core::hint::unlikely(dst.len() == I) {
@@ -157,12 +188,7 @@ impl<T: Sized, const I: usize, const O: usize> SpecBiVec<T, I, O> {
         }
     }
 
-    #[inline(always)]
-    pub const fn len(&self) -> usize {
-        self.total_len
-    }
-
-    pub fn make_range<'a>(&'a self, range: core::ops::Range<usize>) -> Vec<&'a [T]>
+    pub fn make_range_impl<'a>(&'a self, range: core::ops::Range<usize>) -> Vec<&'a [T]>
     where
         T: 'a,
     {
@@ -187,17 +213,47 @@ impl<T: Sized, const I: usize, const O: usize> SpecBiVec<T, I, O> {
     }
 }
 
-pub struct SimpleSnapshotter<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize> {
+impl<T: Sized, const I: usize, const O: usize> ReplayBuffer<T> for SpecBiVec<T, I, O> {
+    fn new_with_cycle_bound(bound: usize) -> Self {
+        assert!(bound <= I * O);
+        Self::new()
+    }
+    #[inline(always)]
+    unsafe fn push_within_capacity_unchecked(&mut self, value: T) {
+        Self::push_unchecked_impl(self, value);
+    }
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.total_len
+    }
+    fn make_range<'a>(&'a self, range: core::ops::Range<usize>) -> Vec<&'a [T]>
+    where
+        T: 'a,
+    {
+        Self::make_range_impl(self, range)
+    }
+}
+
+pub struct SimpleSnapshotter<
+    C: Counters,
+    const ROM_BOUND_SECOND_WORD_BITS: usize,
+    MB: ReplayBuffer<(u32, (u32, u32))> = Vec<(u32, (u32, u32))>,
+    NDB: ReplayBuffer<u32> = Vec<u32>,
+> {
     pub current_partial_snapshot: PartialSnapshot,
     pub snapshots: Vec<SimpleSnapshot<C>>,
     pub last_zero_address_read_timestamp: TimestampScalar,
-    pub reads_buffer: SpecBiVec<(u32, (u32, u32))>,
-    pub non_determinism_reads_buffer: SpecBiVec<u32>,
+    pub reads_buffer: MB,
+    pub non_determinism_reads_buffer: NDB,
     pub initial_snapshot: SimpleSnapshot<C>,
 }
 
-impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize>
-    SimpleSnapshotter<C, ROM_BOUND_SECOND_WORD_BITS>
+impl<
+        C: Counters,
+        const ROM_BOUND_SECOND_WORD_BITS: usize,
+        MB: ReplayBuffer<(u32, (u32, u32))>,
+        NDB: ReplayBuffer<u32>,
+    > SimpleSnapshotter<C, ROM_BOUND_SECOND_WORD_BITS, MB, NDB>
 {
     pub fn new_with_cycle_limit(limit: usize, period: usize, initial_state: State<C>) -> Self {
         let initial_snapshot = SimpleSnapshot {
@@ -217,15 +273,19 @@ impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize>
             },
             snapshots: Vec::with_capacity(limit.div_ceil(period)),
             last_zero_address_read_timestamp: 0,
-            reads_buffer: SpecBiVec::new(),
-            non_determinism_reads_buffer: SpecBiVec::new(),
+            reads_buffer: MB::new_with_cycle_bound(limit),
+            non_determinism_reads_buffer: NDB::new_with_cycle_bound(limit),
             initial_snapshot,
         }
     }
 }
 
-impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize> Snapshotter<C>
-    for SimpleSnapshotter<C, ROM_BOUND_SECOND_WORD_BITS>
+impl<
+        C: Counters,
+        const ROM_BOUND_SECOND_WORD_BITS: usize,
+        MB: ReplayBuffer<(u32, (u32, u32))>,
+        NDB: ReplayBuffer<u32>,
+    > Snapshotter<C> for SimpleSnapshotter<C, ROM_BOUND_SECOND_WORD_BITS, MB, NDB>
 {
     #[inline(always)]
     fn take_snapshot(&mut self, state: &State<C>) {
@@ -249,7 +309,10 @@ impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize> Snapshotter<C>
 
     #[inline(always)]
     fn append_non_determinism_read(&mut self, value: u32) {
-        self.non_determinism_reads_buffer.push(value);
+        unsafe {
+            self.non_determinism_reads_buffer
+                .push_within_capacity_unchecked(value);
+        }
     }
 
     #[inline(always)]
@@ -263,9 +326,11 @@ impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize> Snapshotter<C>
         if address < (1 << (16 + ROM_BOUND_SECOND_WORD_BITS)) {
             self.last_zero_address_read_timestamp = write_timestamp;
         }
-        self.reads_buffer.push((
-            read_value,
-            (read_timestamp as u32, (read_timestamp >> 32) as u32),
-        ));
+        unsafe {
+            self.reads_buffer.push_within_capacity_unchecked((
+                read_value,
+                (read_timestamp as u32, (read_timestamp >> 32) as u32),
+            ));
+        }
     }
 }

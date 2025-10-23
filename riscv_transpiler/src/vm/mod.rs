@@ -55,7 +55,7 @@ impl<C: Counters> State<C> {
     }
 }
 
-pub trait Snapshotter<C: Counters>: 'static {
+pub trait Snapshotter<C: Counters> {
     fn take_snapshot(&mut self, state: &State<C>);
     fn append_non_determinism_read(&mut self, value: u32);
     fn append_memory_read(

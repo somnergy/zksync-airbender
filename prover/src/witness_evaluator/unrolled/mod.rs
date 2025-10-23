@@ -956,6 +956,7 @@ fn replay_non_mem<
 
             use riscv_transpiler::replayer::*;
             use riscv_transpiler::witness::*;
+            use riscv_transpiler::vm::ReplayBuffer;
 
             let tape_ref = tape;
             let snapshotter_ref = &snapshotter;
@@ -1162,6 +1163,7 @@ fn replay_mem<const FAMILY_IDX: u8, A: GoodAllocator, const ROM_BOUND_SECOND_WOR
 
             use riscv_transpiler::replayer::*;
             use riscv_transpiler::witness::*;
+            use riscv_transpiler::vm::ReplayBuffer;
 
             let tape_ref = tape;
             let snapshotter_ref = &snapshotter;
@@ -1359,6 +1361,7 @@ fn replay_generic_work<
 
             use riscv_transpiler::replayer::*;
             use riscv_transpiler::witness::*;
+            use riscv_transpiler::vm::ReplayBuffer;
 
             let tape_ref = tape;
             let snapshotter_ref = &snapshotter;
