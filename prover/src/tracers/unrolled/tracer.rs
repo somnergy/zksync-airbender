@@ -36,6 +36,13 @@ impl<A: GoodAllocator> NonMemTracingFamilyChunk<A> {
             data: Vec::with_capacity_in(capacity, A::default()),
         }
     }
+
+    pub fn realloc_to_global(&self) -> NonMemTracingFamilyChunk<Global> {
+        NonMemTracingFamilyChunk {
+            num_cycles: self.num_cycles,
+            data: self.data[..].to_vec(),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -52,6 +59,13 @@ impl<A: GoodAllocator> MemTracingFamilyChunk<A> {
         Self {
             num_cycles,
             data: Vec::with_capacity_in(capacity, A::default()),
+        }
+    }
+
+    pub fn realloc_to_global(&self) -> MemTracingFamilyChunk<Global> {
+        MemTracingFamilyChunk {
+            num_cycles: self.num_cycles,
+            data: self.data[..].to_vec(),
         }
     }
 }

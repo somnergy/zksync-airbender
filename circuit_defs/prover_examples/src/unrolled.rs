@@ -625,10 +625,6 @@ pub fn prove_unrolled_execution<
             continue;
         }
 
-        if should_dump_witness {
-            // TODO
-        }
-
         let mut family_caps = vec![];
         let mut family_proofs = vec![];
 
@@ -645,7 +641,23 @@ pub fn prove_unrolled_execution<
             unreachable!()
         };
 
-        for chunk in witness_chunks.into_iter() {
+        for (idx, chunk) in witness_chunks.into_iter().enumerate() {
+            if should_dump_witness {
+                println!(
+                    "Will serialize witness for family {} circuit {}",
+                    family_idx,
+                    idx
+                );
+                bincode_serialize_to_file(
+                    &chunk.realloc_to_global(),
+                    &format!(
+                        "family_{}_circuit_{}_oracle_witness.bin",
+                        family_idx, idx
+                    ),
+                );
+                println!("Serialization is done");
+            }
+
             let oracle = NonMemoryCircuitOracle {
                 inner: &chunk.data,
                 decoder_table,
@@ -738,10 +750,6 @@ pub fn prove_unrolled_execution<
             continue;
         }
 
-        if should_dump_witness {
-            // TODO
-        }
-
         let mut family_caps = vec![];
         let mut family_proofs = vec![];
 
@@ -757,7 +765,23 @@ pub fn prove_unrolled_execution<
             unreachable!()
         };
 
-        for chunk in witness_chunks.into_iter() {
+        for (idx, chunk) in witness_chunks.into_iter().enumerate() {
+            if should_dump_witness {
+                println!(
+                    "Will serialize witness for family {} circuit {}",
+                    family_idx,
+                    idx
+                );
+                bincode_serialize_to_file(
+                    &chunk.realloc_to_global(),
+                    &format!(
+                        "family_{}_circuit_{}_oracle_witness.bin",
+                        family_idx, idx
+                    ),
+                );
+                println!("Serialization is done");
+            }
+
             let oracle = MemoryCircuitOracle {
                 inner: &chunk.data[..],
                 decoder_table,
@@ -1516,10 +1540,6 @@ pub fn prove_unrolled_execution_with_replayer<
             continue;
         }
 
-        if should_dump_witness {
-            // TODO
-        }
-
         let mut family_caps = vec![];
         let mut family_proofs = vec![];
 
@@ -1536,7 +1556,23 @@ pub fn prove_unrolled_execution_with_replayer<
             unreachable!()
         };
 
-        for chunk in witness_chunks.into_iter() {
+        for (idx, chunk) in witness_chunks.into_iter().enumerate() {
+            if should_dump_witness {
+                println!(
+                    "Will serialize witness for family {} circuit {}",
+                    family_idx,
+                    idx
+                );
+                bincode_serialize_to_file(
+                    &chunk.realloc_to_global(),
+                    &format!(
+                        "family_{}_circuit_{}_oracle_witness.bin",
+                        family_idx, idx
+                    ),
+                );
+                println!("Serialization is done");
+            }
+
             let oracle = NonMemoryCircuitOracle {
                 inner: &chunk.data,
                 decoder_table,
@@ -1631,10 +1667,6 @@ pub fn prove_unrolled_execution_with_replayer<
             continue;
         }
 
-        if should_dump_witness {
-            // TODO
-        }
-
         let mut family_caps = vec![];
         let mut family_proofs = vec![];
 
@@ -1650,7 +1682,23 @@ pub fn prove_unrolled_execution_with_replayer<
             unreachable!()
         };
 
-        for chunk in witness_chunks.into_iter() {
+        for (idx, chunk) in witness_chunks.into_iter().enumerate() {
+            if should_dump_witness {
+                println!(
+                    "Will serialize witness for family {} circuit {}",
+                    family_idx,
+                    idx
+                );
+                bincode_serialize_to_file(
+                    &chunk.realloc_to_global(),
+                    &format!(
+                        "family_{}_circuit_{}_oracle_witness.bin",
+                        family_idx, idx
+                    ),
+                );
+                println!("Serialization is done");
+            }
+
             let oracle = MemoryCircuitOracle {
                 inner: &chunk.data[..],
                 decoder_table,

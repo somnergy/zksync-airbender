@@ -372,11 +372,12 @@ pub(crate) unsafe fn process_shuffle_ram_accesses_in_executor_family<
                 timestamp_sub(read_ts_split, write_ts_split);
             assert!(
                 final_borrow,
-                "failed to compare memory access timestamps at row {} for access {}: read is {}, write is {}",
+                "failed to compare memory access timestamps at row {} for access {}: read is {}, write is {}. Cycle timestamp is {}",
                 absolute_row_idx,
                 access_idx,
                 read_ts,
                 write_ts,
+                cycle_ts,
             );
 
             write_boolean_value_into_columns(
