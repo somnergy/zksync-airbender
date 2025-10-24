@@ -964,7 +964,8 @@ fn replay_non_mem<
             let snapshotter_ref = &snapshotter;
 
             println!("Thread {} will need RAM logs in range {:?} and non-determinisms in range {:?}", _i, &ram_range, &nd_range);
-                println!("Thread {} starts with snapshot {:?}", _i, &current_snapshot);
+            println!("Thread {} starts with snapshot {:?}", _i, &starting_snapshot);
+            println!("Thread {} ends with snapshot {:?}", _i, &current_snapshot);
             println!("Thread {}: total of {} chunks", _i, chunks.len());
             for dst in chunks.iter() {
                 println!("Chunk size {}", dst.len());
