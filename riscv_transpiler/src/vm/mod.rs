@@ -251,6 +251,17 @@ impl<C: Counters> VM<C> {
                         InstructionName::Remu => {
                             mul_div::remu::<C, S, R>(state, ram, snapshotter, instr)
                         }
+
+                        InstructionName::ZimopAdd => {
+                            mop::mop_addmod::<C, S, R>(state, ram, snapshotter, instr)
+                        }
+                        InstructionName::ZimopSub => {
+                            mop::mop_submod::<C, S, R>(state, ram, snapshotter, instr)
+                        }
+                        InstructionName::ZimopMul => {
+                            mop::mop_mulmod::<C, S, R>(state, ram, snapshotter, instr)
+                        }
+
                         InstructionName::ZicsrNonDeterminismRead => {
                             zicsr::nd_read::<C, S, R, ND>(state, ram, snapshotter, instr, nd)
                         }
@@ -259,6 +270,9 @@ impl<C: Counters> VM<C> {
                         }
                         InstructionName::ZicsrDelegation => {
                             zicsr::call_delegation::<C, S, R>(state, ram, snapshotter, instr)
+                        }
+                        a @ _ => {
+                            panic!("Unknown instruction {:?}", a);
                         }
                         _ => core::hint::unreachable_unchecked(),
                     }

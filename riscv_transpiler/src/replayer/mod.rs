@@ -223,6 +223,17 @@ impl<C: Counters> ReplayerVM<C> {
                         InstructionName::Mulhu => mul_div::mulhu::<C, R>(state, ram, instr, tracer),
                         InstructionName::Divu => mul_div::divu::<C, R>(state, ram, instr, tracer),
                         InstructionName::Remu => mul_div::remu::<C, R>(state, ram, instr, tracer),
+
+                        InstructionName::ZimopAdd => {
+                            mop::mop_addmod::<C, R>(state, ram, instr, tracer)
+                        }
+                        InstructionName::ZimopSub => {
+                            mop::mop_submod::<C, R>(state, ram, instr, tracer)
+                        }
+                        InstructionName::ZimopMul => {
+                            mop::mop_mulmod::<C, R>(state, ram, instr, tracer)
+                        }
+
                         InstructionName::ZicsrNonDeterminismRead => {
                             zicsr::nd_read::<C, R, ND>(state, ram, instr, tracer, nd)
                         }
@@ -231,6 +242,9 @@ impl<C: Counters> ReplayerVM<C> {
                         }
                         InstructionName::ZicsrDelegation => {
                             zicsr::call_delegation::<C, R>(state, ram, instr, tracer)
+                        }
+                        a @ _ => {
+                            panic!("Unknown instruction {:?}", a);
                         }
                         _ => core::hint::unreachable_unchecked(),
                     }
