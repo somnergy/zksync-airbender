@@ -14,7 +14,6 @@ pub fn shift_binop_csrrw_tables() -> Vec<TableType> {
         TableType::SrlWith16BitInputLow,
         TableType::SrlWith16BitInputHigh,
         TableType::Sra16BitInputSignFill,
-        TableType::U16GetSignAndHighByte,
         TableType::Xor,
         TableType::And,
         TableType::Or,
@@ -255,7 +254,7 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
                 LookupInput::Variable(low_word_fill),
                 LookupInput::Variable(high_word_fill),
             ],
-            TableType::U16GetSignAndHighByte.to_num(),
+            TableType::Sra16BitInputSignFill.to_num(),
         );
 
         let low_from_low = s4;
