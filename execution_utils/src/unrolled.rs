@@ -1,7 +1,10 @@
+use riscv_transpiler::common_constants;
+use sha3::Digest;
 use std::collections::BTreeMap;
 use trace_and_split::prover;
 use trace_and_split::setups;
 
+use super::*;
 use prover::common_constants::TimestampScalar;
 use prover::cs::one_row_compiler::CompiledCircuitArtifact;
 use prover::cs::utils::split_timestamp;
@@ -10,6 +13,47 @@ use prover::prover_stages::unrolled_prover::UnrolledModeProof;
 use prover::prover_stages::Proof;
 use prover::risc_v_simulator;
 use trace_and_split::FinalRegisterValue;
+
+#[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
+pub struct UnrolledProgramSetup {
+    pub expected_final_pc: u32,
+    pub binary_hash: [u8; 32],
+    pub circuit_families_setups: BTreeMap<u8, [MerkleTreeCap<CAP_SIZE>; NUM_COSETS]>,
+    pub inits_and_teardowns_setup: [MerkleTreeCap<CAP_SIZE>; NUM_COSETS],
+    pub end_params: [u32; 8],
+}
+
+impl UnrolledProgramSetup {
+    pub fn new_from_setups_and_binary(
+        binary: &[u8],
+        circuit_families_setups: &[(u8, [MerkleTreeCap<CAP_SIZE>; NUM_COSETS])],
+        inits_and_teardowns_setup: &[MerkleTreeCap<CAP_SIZE>; NUM_COSETS],
+    ) -> Self {
+        assert!(circuit_families_setups.is_sorted_by(|a, b| a.0 < b.0));
+        let final_pc = find_binary_exit_point(binary);
+
+        let setups: Vec<_> = circuit_families_setups.iter().map(|el| &el.1).collect();
+
+        let end_params = compute_end_parameters_for_unrolled_circuits(
+            final_pc,
+            &setups,
+            inits_and_teardowns_setup,
+        );
+
+        // binary hash can be anything - it's just for bookkeeping
+        let binary_hash = sha3::Keccak256::digest(binary).into();
+
+        Self {
+            expected_final_pc: final_pc,
+            binary_hash,
+            circuit_families_setups: BTreeMap::from_iter(
+                circuit_families_setups.iter().map(|el| (el.0, el.1)),
+            ),
+            inits_and_teardowns_setup: *inits_and_teardowns_setup,
+            end_params,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub struct UnrolledProgramProof {
@@ -90,6 +134,212 @@ impl UnrolledProgramProof {
 
         responses
     }
+}
+
+pub fn compute_setup_for_machine_configuration<C: MachineConfig>(
+    binary_image: &[u8],
+    text_section: &[u8],
+) -> UnrolledProgramSetup {
+    assert_eq!(binary_image.len() % 4, 0);
+    assert_eq!(text_section.len() % 4, 0);
+
+    let binary_image_u32: Vec<_> = binary_image
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|el| u32::from_le_bytes(*el))
+        .collect();
+    let text_section_u32: Vec<_> = text_section
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|el| u32::from_le_bytes(*el))
+        .collect();
+
+    let families_setups = setups::compute_unrolled_circuits_params_for_machine_configuration::<C>(
+        &binary_image_u32,
+        &text_section_u32,
+    );
+    let inits_and_teardowns_setup =
+        setups::compute_inits_and_teardowns_params(&binary_image_u32, &text_section_u32);
+
+    UnrolledProgramSetup::new_from_setups_and_binary(
+        binary_image,
+        &families_setups
+            .into_iter()
+            .map(|el| (el.family_idx as u8, el.setup_caps))
+            .collect::<Vec<_>>(),
+        &inits_and_teardowns_setup,
+    )
+}
+
+#[cfg(any(feature = "verifier_80", feature = "verifier_100"))]
+pub fn verify_unrolled_for_machine_configuration<C: MachineConfig>(
+    proof: &UnrolledProgramProof,
+    setup: &UnrolledProgramSetup,
+) -> Result<[u32; 16], ()> {
+    for (k, v) in proof.circuit_families_proofs.iter() {
+        println!("{} proofs for family {}", v.len(), k);
+    }
+
+    let responses = proof.flatten_into_responses(C::ALLOWED_DELEGATION_CSRS);
+
+    let params = if setups::is_default_machine_configuration::<C>() {
+        full_statement_verifier::unrolled_proof_statement::FULL_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS
+    } else if setups::is_machine_without_signed_mul_div_configuration::<C>() {
+        full_statement_verifier::unrolled_proof_statement::FULL_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS
+    } else if setups::is_reduced_machine_configuration::<C>() {
+        full_statement_verifier::unrolled_proof_statement::RECURSION_WORD_ONLY_UNSIGNED_MACHINE_UNROLLED_CIRCUITS_VERIFICATION_PARAMETERS
+    } else {
+        panic!("Unknown configuration {:?}", std::any::type_name::<C>());
+    };
+
+    println!("Running the verifier");
+
+    let families_setups: Vec<_> = setup
+        .circuit_families_setups
+        .iter()
+        .map(|el| *el.1)
+        .collect();
+    let inits_and_teardowns_setup = setup.inits_and_teardowns_setup;
+
+    let result = std::thread::Builder::new()
+            .name("verifier thread".to_string())
+            .stack_size(1 << 27)
+            .spawn(move || {
+
+        let families_setups_refs: Vec<_> = families_setups.iter().map(|el| el).collect();
+        let it = responses.into_iter();
+        prover::nd_source_std::set_iterator(it);
+
+        #[allow(invalid_value)]
+        let regs = unsafe {
+            full_statement_verifier::unrolled_proof_statement::verify_full_statement_for_unrolled_circuits::<true, { setups::inits_and_teardowns::NUM_INIT_AND_TEARDOWN_SETS }>(
+                &families_setups_refs,
+                params,
+                (&inits_and_teardowns_setup, full_statement_verifier::unrolled_proof_statement::INITS_AND_TEARDOWNS_VERIFIER_PTR),
+                full_statement_verifier::BASE_LAYER_DELEGATION_CIRCUITS_VERIFICATION_PARAMETERS,
+            )
+        };
+
+        regs
+    })
+    .expect("must spawn verifier thread").join();
+
+    result.map_err(|_| ())
+}
+
+#[cfg(feature = "prover")]
+pub fn prove_unrolled_for_machine_configuration_into_program_proof<C: MachineConfig>(
+    binary_image: &[u32],
+    text_section: &[u32],
+    cycles_bound: usize,
+    non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource<
+        riscv_transpiler::vm::RamWithRomRegion<{ common_constants::rom::ROM_SECOND_WORD_BITS }>,
+    >,
+    ram_bound: usize,
+    worker: &prover::worker::Worker,
+) -> UnrolledProgramProof {
+    let proofs = prove_unrolled_with_replayer_for_machine_configuration::<C>(
+        &binary_image,
+        &text_section,
+        cycles_bound,
+        non_determinism,
+        ram_bound,
+        &worker,
+    );
+
+    let (families, inits_and_teardowns) =
+        setups::unrolled_circuits::get_unrolled_circuits_artifacts_for_machine_type::<C>(
+            &binary_image,
+        );
+
+    let (
+        main_proofs,
+        inits_and_teardowns_proofs,
+        delegation_proofs,
+        register_final_state,
+        (final_pc, final_timestamp),
+    ) = proofs;
+
+    let program_proofs = UnrolledProgramProof {
+        final_pc,
+        final_timestamp,
+        compiled_circuit_families: families,
+        circuit_families_proofs: main_proofs,
+        compiled_inits_and_teardowns: inits_and_teardowns,
+        inits_and_teardowns_proofs,
+        delegation_proofs: BTreeMap::from_iter(delegation_proofs.into_iter()),
+        register_final_values: register_final_state,
+        end_params: [0u32; 8], // TODO
+        recursion_chain_hash: None,
+        recursion_chain_preimage: None,
+    };
+
+    program_proofs
+}
+
+#[cfg(feature = "prover")]
+pub fn prove_unrolled_with_replayer_for_machine_configuration<C: MachineConfig>(
+    binary_image: &[u32],
+    text_section: &[u32],
+    cycles_bound: usize,
+    non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource<
+        riscv_transpiler::vm::RamWithRomRegion<{ common_constants::rom::ROM_SECOND_WORD_BITS }>,
+    >,
+    ram_bound: usize,
+    worker: &prover::worker::Worker,
+) -> (
+    BTreeMap<u8, Vec<UnrolledModeProof>>,
+    Vec<UnrolledModeProof>,
+    Vec<(u32, Vec<Proof>)>,
+    [FinalRegisterValue; 32],
+    (u32, TimestampScalar),
+) {
+    use std::alloc::Global;
+    println!("Performing precomputations for circuit families");
+    let families_precomps =
+        setups::unrolled_circuits::get_unrolled_circuits_setups_for_machine_type::<C, Global, Global>(
+            binary_image,
+            &text_section,
+            &worker,
+        );
+
+    println!("Performing precomputations for inits and teardowns");
+    let inits_and_teardowns_precomps = setups::unrolled_circuits::inits_and_teardowns_circuit_setup(
+        &binary_image,
+        &text_section,
+        worker,
+    );
+
+    println!("Performing precomputations for delegation circuits");
+    let delegation_precomputations = setups::all_delegation_circuits_precomputations(worker);
+
+    let (
+        main_proofs,
+        inits_and_teardowns_proofs,
+        delegation_proofs,
+        register_final_state,
+        (final_pc, final_timestamp),
+    ) = prover_examples::unrolled::prove_unrolled_execution_with_replayer::<C, Global, { common_constants::rom::ROM_SECOND_WORD_BITS }>(
+        cycles_bound,
+        &binary_image,
+        &text_section,
+        non_determinism,
+        &families_precomps,
+        &inits_and_teardowns_precomps,
+        &delegation_precomputations,
+        ram_bound,
+        worker,
+    );
+
+    (
+        main_proofs,
+        inits_and_teardowns_proofs,
+        delegation_proofs,
+        register_final_state,
+        (final_pc, final_timestamp),
+    )
 }
 
 #[cfg(test)]
@@ -209,68 +459,6 @@ mod test {
             register_final_state,
             (final_pc, final_timestamp),
         ) = prover_examples::unrolled::prove_unrolled_execution::<_, C, Global, 5>(
-            cycles_bound,
-            &binary_image,
-            &text_section,
-            non_determinism,
-            &families_precomps,
-            &inits_and_teardowns_precomps,
-            &delegation_precomputations,
-            ram_bound,
-            worker,
-        );
-
-        (
-            main_proofs,
-            inits_and_teardowns_proofs,
-            delegation_proofs,
-            register_final_state,
-            (final_pc, final_timestamp),
-        )
-    }
-
-    pub fn prove_unrolled_with_replayer_for_machine_configuration<C: MachineConfig>(
-        binary_image: &[u32],
-        text_section: &[u32],
-        cycles_bound: usize,
-        non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource<
-            riscv_transpiler::vm::RamWithRomRegion<5>,
-        >,
-        ram_bound: usize,
-        worker: &prover::worker::Worker,
-    ) -> (
-        BTreeMap<u8, Vec<UnrolledModeProof>>,
-        Vec<UnrolledModeProof>,
-        Vec<(u32, Vec<Proof>)>,
-        [FinalRegisterValue; 32],
-        (u32, TimestampScalar),
-    ) {
-        println!("Performing precomputations for circuit families");
-        let families_precomps =
-            setups::unrolled_circuits::get_unrolled_circuits_setups_for_machine_type::<
-                C,
-                Global,
-                Global,
-            >(binary_image, &text_section, &worker);
-
-        println!("Performing precomputations for inits and teardowns");
-        let inits_and_teardowns_precomps =
-            setups::unrolled_circuits::inits_and_teardowns_circuit_setup(
-                &binary_image,
-                &text_section,
-                worker,
-            );
-
-        println!("Performing precomputations for delegation circuits");
-        let delegation_precomputations = setups::all_delegation_circuits_precomputations(worker);
-
-        let (
-            main_proofs,
-            inits_and_teardowns_proofs,
-            delegation_proofs,
-            register_final_state,
-            (final_pc, final_timestamp),
-        ) = prover_examples::unrolled::prove_unrolled_execution_with_replayer::<C, Global, 5>(
             cycles_bound,
             &binary_image,
             &text_section,

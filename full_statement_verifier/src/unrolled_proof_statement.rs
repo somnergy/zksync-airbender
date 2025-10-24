@@ -226,13 +226,17 @@ pub unsafe fn verify_full_statement_for_unrolled_circuits<
 
     transcript.absorb(&registers_buffer);
 
+    const FINAL_PC_BUFFER_PC_IDX: usize = 0;
+    const FINAL_PC_BUFFER_TS_LOW_IDX: usize = 1;
+    const FINAL_PC_BUFFER_TS_HIGH_IDX: usize = 2;
+
     let mut final_pc_buffer = [0u32; BLAKE2S_BLOCK_SIZE_U32_WORDS];
     let final_pc = verifier_common::DefaultNonDeterminismSource::read_word();
     let final_ts_low = verifier_common::DefaultNonDeterminismSource::read_word();
     let final_ts_high = verifier_common::DefaultNonDeterminismSource::read_word();
-    final_pc_buffer[0] = final_pc;
-    final_pc_buffer[1] = final_ts_low;
-    final_pc_buffer[2] = final_ts_high;
+    final_pc_buffer[FINAL_PC_BUFFER_PC_IDX] = final_pc;
+    final_pc_buffer[FINAL_PC_BUFFER_TS_LOW_IDX] = final_ts_low;
+    final_pc_buffer[FINAL_PC_BUFFER_TS_HIGH_IDX] = final_ts_high;
 
     transcript.absorb(&final_pc_buffer);
 
@@ -580,6 +584,11 @@ pub unsafe fn verify_full_statement_for_unrolled_circuits<
     // so the program ended logical execution and we can conclude that the set of register values is meaningful
 
     let mut result_hasher = Blake2sBufferingTranscript::new();
+    // NOTE: for parameters we are no longer interested in the timestamp when we ended execution,
+    // just on PC
+    final_pc_buffer[FINAL_PC_BUFFER_TS_LOW_IDX] = 0;
+    final_pc_buffer[FINAL_PC_BUFFER_TS_HIGH_IDX] = 0;
+
     result_hasher.absorb(&final_pc_buffer);
     for setup in circuits_families_setups.iter() {
         result_hasher.absorb(caps_flattened(*setup));
