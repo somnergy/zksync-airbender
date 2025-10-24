@@ -1311,9 +1311,11 @@ fn replay_generic_work<
         num_circuits, work_type_idx
     );
 
-    // allocate ALL of them
+    // allocate ALL of them - not that we can not use macro as it DOES NOT preserve capacity
     let mut total_witness: Vec<Vec<D::Element, A>> =
-        vec![Vec::with_capacity_in(cycles_per_circuit, A::default()); num_circuits];
+        core::iter::repeat_with(|| Vec::with_capacity_in(cycles_per_circuit, A::default()))
+            .take(num_circuits)
+            .collect();
 
     // now there is no concrete solution what is the most optimal strategy here, but let's assume that frequency of particular opcodes
     // is well spread over the cycles
