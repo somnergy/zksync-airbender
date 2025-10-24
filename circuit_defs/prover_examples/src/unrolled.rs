@@ -1437,7 +1437,10 @@ pub fn prove_unrolled_execution_with_replayer<
     #[cfg(feature = "timing_logs")]
     println!(
         "=== Commitment for {} delegation circuits memory trees took {:?}",
-        delegation_memory_trees.iter().map(|el| el.1.len()).sum::<usize>(),
+        delegation_memory_trees
+            .iter()
+            .map(|el| el.1.len())
+            .sum::<usize>(),
         now.elapsed()
     );
 
