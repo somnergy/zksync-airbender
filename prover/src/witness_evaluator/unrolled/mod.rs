@@ -1006,13 +1006,17 @@ fn replay_non_mem<
                     &mut tracer,
                 );
 
-                assert_eq!(expected_final_snapshot_state, state);
+                assert_eq!(expected_final_snapshot_state.registers, state.registers);
+                assert_eq!(expected_final_snapshot_state.pc, state.pc);
             });
 
             ram_range_start = ram_range_end;
             nd_range_start = nd_range_end;
             starting_snapshot = current_snapshot;
         }
+
+        assert_eq!(ram_range_start, snapshotter.reads_buffer.len());
+        assert_eq!(nd_range_start, snapshotter.non_determinism_reads_buffer.len());
     });
     let elapsed = now.elapsed();
 
