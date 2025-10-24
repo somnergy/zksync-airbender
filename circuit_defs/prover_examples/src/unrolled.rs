@@ -1532,6 +1532,10 @@ pub fn prove_unrolled_execution_with_replayer<
             continue;
         }
 
+        if family_idx != 4 {
+            continue;
+        }
+
         let mut family_caps = vec![];
         let mut family_proofs = vec![];
 
