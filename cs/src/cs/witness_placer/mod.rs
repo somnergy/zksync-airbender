@@ -930,15 +930,27 @@ impl WitnessComputationalI32 for i32 {
     }
     #[inline(always)]
     fn div_rem_assume_nonzero_divisor_no_overflow(divident: &Self, divisor: &Self) -> (Self, Self) {
-        if divident.checked_div(*divisor).is_none() {
-            panic!("Dividing {} by {} with overflow", divident, divisor);
+        // we should follow RISC-V convention
+        if *divident == i32::MIN && *divisor == - 1 {
+            let q = i32::MIN;
+            let r = 0;
+
+            (q, r)
+        } else {
+            let q = divident / divisor;
+            let r = divident % divisor;
+
+            (q, r)
         }
 
-        let q = divident / divisor;
-        let r = divident % divisor;
+        // if divident.checked_div(*divisor).is_none() {
+        //     panic!("Dividing {} by {} with overflow", divident, divisor);
+        // }
 
-        (q, r)
-        // divident.div_rem(*divisor)
+        // let q = divident / divisor;
+        // let r = divident % divisor;
+
+        // (q, r)
     }
 }
 
