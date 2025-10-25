@@ -14,6 +14,7 @@ use cs::machine::ops::unrolled::*;
 use cs::machine::NON_DETERMINISM_CSR;
 use risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
 use risc_v_simulator::{cycle::*, delegations::DelegationsCSRProcessor};
+use riscv_transpiler::witness::delegation::bigint::BigintDelegationWitness;
 
 use crate::prover_stages::unrolled_prover::prove_configured_for_unrolled_circuits;
 use crate::witness_evaluator::unrolled::evaluate_memory_witness_for_executor_family;
@@ -1267,5 +1268,60 @@ fn test_single_non_mem_circuit() {
         shift_binop_csrrw_circuit_with_preprocessed_bytecode(&mut cs);
 
         assert!(cs.is_satisfied());
+    }
+}
+
+#[test]
+fn test_bigint_with_replayer_oracle() {
+    use crate::cs::cs::cs_reference::BasicAssembly;
+    use crate::cs::delegation::bigint_with_control::*;
+    use crate::tracers::oracles::transpiler_oracles::delegation::*;
+    use cs::cs::circuit::Circuit;
+    println!("Deserializing witness");
+    let oracle_input = fast_deserialize_from_file::<Vec<BigintDelegationWitness>>(
+        "../../zksync-os/tests/instances/eth_runner/delegation_1994_circuit_0_oracle_witness.bin",
+    );
+
+    let round = 0;
+
+    // for round in 0..oracle_input.len() {
+    {
+        println!("Round = {}", round);
+
+        let oracle = BigintDelegationOracle {
+            cycle_data: &oracle_input[round..][..1],
+            marker: core::marker::PhantomData,
+        };
+
+        dbg!(oracle.cycle_data[0]);
+
+        let oracle: BigintDelegationOracle<'static> = unsafe { core::mem::transmute(oracle) };
+        let mut cs = BasicAssembly::<Mersenne31Field>::new_with_oracle(oracle);
+        let (output_state_vars, output_extended_state_vars) =
+            define_u256_ops_extended_control_delegation_circuit(&mut cs);
+
+        assert!(cs.is_satisfied());
+
+        let mut produced_state_outputs = vec![];
+
+        use cs::types::Num;
+        use cs::types::Register;
+
+        for (_, input) in output_state_vars.iter().enumerate() {
+            let register = Register(input.map(|el| Num::Var(el)));
+            let value = register.get_value_unsigned(&cs).unwrap();
+            produced_state_outputs.push(value);
+        }
+
+        let register = Register(output_extended_state_vars.map(|el| Num::Var(el)));
+        let result_x12 = register.get_value_unsigned(&cs).unwrap();
+
+        // assert_eq!(expected_x12, result_x12, "x12 diverged for round {}", round);
+
+        // assert_eq!(
+        //     expected_state, produced_state_outputs,
+        //     "state diverged for round {}",
+        //     round
+        // );
     }
 }
