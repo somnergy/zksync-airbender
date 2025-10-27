@@ -53,6 +53,17 @@ impl UnrolledProgramSetup {
             end_params,
         }
     }
+
+    pub fn flatten_for_recursion(&self) -> Vec<u32> {
+        // we just need to dump merkle caps, without any circuit IDs
+        let mut result = vec![];
+        for (_, caps) in self.circuit_families_setups.iter() {
+            result.extend_from_slice(MerkleTreeCap::flatten(caps));
+        }
+        result.extend_from_slice(MerkleTreeCap::flatten(&self.inits_and_teardowns_setup));
+
+        result
+    }
 }
 
 #[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]

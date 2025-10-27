@@ -11,7 +11,11 @@
 # rm verifier_test.bin
 
 rm unrolled_base_layer.bin
+rm unrolled_base_layer.elf
+rm unrolled_base_layer.text
 rm unrolled_recursion_layer.bin
+rm unrolled_recursion_layer.elf
+rm unrolled_recursion_layer.text
 
 # Build something simple to check for errors
 # cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unrolled_base_layer,security_80 --no-default-features
