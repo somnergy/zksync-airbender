@@ -44,12 +44,8 @@ pub fn preprocess_bytecode<F: PrimeField, A: GoodAllocator>(
     use crate::definitions::*;
     let mut table = Vec::with_capacity_in(bytecode_size_words, A::default());
     table.resize(bytecode_size_words, None);
-    let mut witness_eval_decoder_data =
-        Vec::with_capacity_in(bytecode_size_words, A::default());
-    witness_eval_decoder_data.resize(
-        bytecode_size_words,
-        ExecutorFamilyDecoderData::default(),
-    );
+    let mut witness_eval_decoder_data = Vec::with_capacity_in(bytecode_size_words, A::default());
+    witness_eval_decoder_data.resize(bytecode_size_words, ExecutorFamilyDecoderData::default());
 
     assert!(binary.len() <= table.len());
 

@@ -323,10 +323,7 @@ pub fn process_binary_into_separate_tables_ext<
         Vec<ExecutorFamilyDecoderData, A>,
     ),
 > {
-    assert!(
-        binary.len() <= bytecode_size_words,
-        "bytecode is too long"
-    );
+    assert!(binary.len() <= bytecode_size_words, "bytecode is too long");
     let mut pc_set = BTreeSet::new();
     let mut result = HashMap::with_capacity(families.len());
     for family in families.iter() {
