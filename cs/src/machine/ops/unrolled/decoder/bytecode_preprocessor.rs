@@ -61,7 +61,13 @@ pub fn preprocess_bytecode<F: PrimeField, A: GoodAllocator>(
         let (is_valid, instr_type, mask, (avoid_i_type_sign_extend, validate_csr)) =
             family.define_decoder_subspace_ext(op, funct3, funct7);
         if avoid_i_type_sign_extend {
-            assert!(instr_type == InstructionType::IType);
+            assert_eq!(
+                instr_type,
+                InstructionType::IType,
+                "avoiding I-type sign extend flag is set for opcode 0x:{:08x} by family {:?}",
+                opcode,
+                &*family
+            );
         }
         if is_valid == false {
             // not supported
