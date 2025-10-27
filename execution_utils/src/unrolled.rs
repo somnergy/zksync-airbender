@@ -244,6 +244,44 @@ pub fn verify_unrolled_base_layer_for_machine_configuration<C: MachineConfig>(
 }
 
 #[cfg(any(feature = "verifier_80", feature = "verifier_100"))]
+pub fn verify_unrolled_base_layer_via_full_statement_verifier(
+    proof: &UnrolledProgramProof,
+    setup: &UnrolledProgramSetup,
+) -> Result<[u32; 16], ()> {
+    for (k, v) in proof.circuit_families_proofs.iter() {
+        println!("{} proofs for family {}", v.len(), k);
+    }
+
+    let mut responses = setup.flatten_for_recursion();
+    responses.extend(proof.flatten_into_responses(&[
+        common_constants::delegation_types::blake2s_with_control::BLAKE2S_DELEGATION_CSR_REGISTER,
+        common_constants::delegation_types::bigint_with_control::BIGINT_OPS_WITH_CONTROL_CSR_REGISTER,
+        common_constants::delegation_types::keccak_special5::KECCAK_SPECIAL5_CSR_REGISTER,
+    ]));
+
+    println!("Running the verifier");
+
+    let result = std::thread::Builder::new()
+        .name("verifier thread".to_string())
+        .stack_size(1 << 27)
+        .spawn(move || {
+            let it = responses.into_iter();
+            prover::nd_source_std::set_iterator(it);
+
+            #[allow(invalid_value)]
+            let regs = unsafe {
+                full_statement_verifier::unrolled_proof_statement::verify_unrolled_base_layer()
+            };
+
+            regs
+        })
+        .expect("must spawn verifier thread")
+        .join();
+
+    result.map_err(|_| ())
+}
+
+#[cfg(any(feature = "verifier_80", feature = "verifier_100"))]
 pub fn verify_unrolled_recursion_layer_for_machine_configuration<C: MachineConfig>(
     proof: &UnrolledProgramProof,
     setup: &UnrolledProgramSetup,
@@ -301,6 +339,42 @@ pub fn verify_unrolled_recursion_layer_for_machine_configuration<C: MachineConfi
         regs
     })
     .expect("must spawn verifier thread").join();
+
+    result.map_err(|_| ())
+}
+
+#[cfg(any(feature = "verifier_80", feature = "verifier_100"))]
+pub fn verify_unrolled_recursion_layer_via_full_statement_verifier(
+    proof: &UnrolledProgramProof,
+    setup: &UnrolledProgramSetup,
+) -> Result<[u32; 16], ()> {
+    for (k, v) in proof.circuit_families_proofs.iter() {
+        println!("{} proofs for family {}", v.len(), k);
+    }
+
+    let mut responses = setup.flatten_for_recursion();
+    responses.extend(proof.flatten_into_responses(&[
+        common_constants::delegation_types::blake2s_with_control::BLAKE2S_DELEGATION_CSR_REGISTER,
+    ]));
+
+    println!("Running the verifier");
+
+    let result = std::thread::Builder::new()
+        .name("verifier thread".to_string())
+        .stack_size(1 << 27)
+        .spawn(move || {
+            let it = responses.into_iter();
+            prover::nd_source_std::set_iterator(it);
+
+            #[allow(invalid_value)]
+            let regs = unsafe {
+                full_statement_verifier::unrolled_proof_statement::verify_unrolled_recursion_layer()
+            };
+
+            regs
+        })
+        .expect("must spawn verifier thread")
+        .join();
 
     result.map_err(|_| ())
 }
