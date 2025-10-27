@@ -203,8 +203,9 @@ pub(crate) unsafe fn process_machine_state_assuming_preprocessed_decoder<
             // and count multiplicity right away
             if execute {
                 assert!(initial_pc % 4 == 0);
-                let idx = initial_pc / 4;
-                decoder_multiplicieties[idx as usize] += 1;
+                let idx = (initial_pc / 4) as usize;
+                assert!(idx < compiled_circuit.executor_family_decoder_table_size);
+                decoder_multiplicieties[idx] += 1;
             }
         }
     }

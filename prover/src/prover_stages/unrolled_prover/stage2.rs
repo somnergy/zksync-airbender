@@ -1259,6 +1259,9 @@ pub fn prover_stage_2_for_unrolled_circuit<
                         if last_row {
                             assert_eq!(multiplicity_aux, Mersenne31Quartic::ZERO);
                         }
+                        if row_idx >= compiled_circuit.executor_family_decoder_table_size {
+                            assert_eq!(multiplicity_aux, Mersenne31Quartic::ZERO);
+                        }
                         term_contribution.add_assign(&multiplicity_aux);
                     }
                     // also single one
