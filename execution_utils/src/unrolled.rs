@@ -430,6 +430,11 @@ pub fn prove_unrolled_for_machine_configuration_into_program_proof<C: MachineCon
     ram_bound: usize,
     worker: &prover::worker::Worker,
 ) -> UnrolledProgramProof {
+    use riscv_transpiler::common_constants::ROM_WORD_SIZE;
+
+    assert_eq!(binary_image.len(), ROM_WORD_SIZE);
+    assert_eq!(text_section.len(), ROM_WORD_SIZE);
+
     let proofs = prove_unrolled_with_replayer_for_machine_configuration::<C>(
         &binary_image,
         &text_section,

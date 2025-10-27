@@ -48,7 +48,7 @@ pub use self::circuits::*;
 pub use self::unrolled_circuits::*;
 
 pub fn pad_bytecode_for_proving(bytecode: &mut Vec<u32>) {
-    pad_bytecode::<{ risc_v_cycles::MAX_ROM_SIZE as u32 }>(bytecode);
+    pad_bytecode::<{ common_constants::rom::ROM_BYTE_SIZE as u32 }>(bytecode);
 }
 
 pub fn is_default_machine_configuration<C: MachineConfig>() -> bool {
