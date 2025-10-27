@@ -206,11 +206,11 @@ pub fn compute_setup_for_machine_configuration<C: MachineConfig>(
         .collect();
 
     assert_eq!(
-        binary_image_u32,
+        binary_image_u32.len(),
         riscv_transpiler::common_constants::ROM_WORD_SIZE
     );
     assert_eq!(
-        text_section_u32,
+        text_section_u32.len(),
         riscv_transpiler::common_constants::ROM_WORD_SIZE
     );
 
@@ -562,9 +562,9 @@ mod test {
     #[test]
     fn test_prove_unrolled_fibonacci() {
         let (_, binary_image) =
-            setups::read_binary(&Path::new("../examples/basic_fibonacci/app.bin"));
+            setups::read_and_pad_binary(&Path::new("../examples/basic_fibonacci/app.bin"));
         let (_, text_section) =
-            setups::read_binary(&Path::new("../examples/basic_fibonacci/app.text"));
+            setups::read_and_pad_binary(&Path::new("../examples/basic_fibonacci/app.text"));
 
         let worker = prover::worker::Worker::new_with_num_threads(8);
 
@@ -594,9 +594,9 @@ mod test {
     #[test]
     fn test_prove_unrolled_hashed_fibonacci() {
         let (_, binary_image) =
-            setups::read_binary(&Path::new("../examples/hashed_fibonacci/app.bin"));
+            setups::read_and_pad_binary(&Path::new("../examples/hashed_fibonacci/app.bin"));
         let (_, text_section) =
-            setups::read_binary(&Path::new("../examples/hashed_fibonacci/app.text"));
+            setups::read_and_pad_binary(&Path::new("../examples/hashed_fibonacci/app.text"));
 
         let worker = prover::worker::Worker::new_with_num_threads(8);
 

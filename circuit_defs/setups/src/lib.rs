@@ -634,8 +634,8 @@ pub fn compute_and_save_params(
     gen_fn: fn(&[u32], &[u32]) -> Vec<UnrolledCircuitSetupParams>,
 ) {
     use sha3::Digest;
-    let (raw_binary_image, binary_image) = read_binary(binary_image_path);
-    let (raw_bytecode, bytecode) = read_binary(bytecode_path);
+    let (raw_binary_image, binary_image) = read_and_pad_binary(binary_image_path);
+    let (raw_bytecode, bytecode) = read_and_pad_binary(bytecode_path);
     let setups = (gen_fn)(&binary_image, &bytecode);
     let inits_setup = compute_inits_and_teardowns_params(&binary_image, &bytecode);
     let binary_image_hash = sha3::Keccak256::digest(&raw_binary_image);

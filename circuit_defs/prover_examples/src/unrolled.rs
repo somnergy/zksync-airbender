@@ -2244,9 +2244,9 @@ mod test {
     #[test]
     fn test_prove_unrolled_fibonacci() {
         let (_, binary_image) =
-            setups::read_binary(&Path::new("../../examples/basic_fibonacci/app.bin"));
+            setups::read_and_pad_binary(&Path::new("../../examples/basic_fibonacci/app.bin"));
         let (_, text_section) =
-            setups::read_binary(&Path::new("../../examples/basic_fibonacci/app.text"));
+            setups::read_and_pad_binary(&Path::new("../../examples/basic_fibonacci/app.text"));
 
         // setups::pad_bytecode_for_proving(&mut binary);
 
@@ -2322,7 +2322,7 @@ mod test {
         ) = t;
 
         let (_, binary_image) =
-            setups::read_binary(&Path::new("../../examples/basic_fibonacci/app.bin"));
+            setups::read_and_pad_binary(&Path::new("../../examples/basic_fibonacci/app.bin"));
         let (families, inits_and_teardowns) =
             setups::unrolled_circuits::get_unrolled_circuits_artifacts_for_machine_type::<
                 IMWithoutSignedMulDivIsaConfig,
