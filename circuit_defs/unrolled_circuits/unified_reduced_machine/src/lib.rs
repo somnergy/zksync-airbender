@@ -38,7 +38,7 @@ pub fn get_circuit_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usize
     bytecode: &[u32],
 ) -> one_row_compiler::CompiledCircuitArtifact<field::Mersenne31Field> {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
     use prover::cs::machine::ops::unrolled::reduced_machine_ops::*;
 
     compile_unrolled_circuit_state_transition(
@@ -79,7 +79,7 @@ pub fn dump_ssa_form_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usi
     bytecode: &[u32],
 ) -> Vec<Vec<prover::cs::cs::witness_placer::graph_description::RawExpression<Mersenne31Field>>> {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
     use crate::machine::ops::unrolled::dump_ssa_witness_eval_form_for_unrolled_circuit;
     use crate::machine::ops::unrolled::reduced_machine_ops::create_reduced_machine_special_tables;
     use prover::cs::machine::ops::unrolled::reduced_machine_ops::*;
@@ -121,7 +121,7 @@ pub fn get_table_driver_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: 
     use prover::cs::machine::ops::unrolled::reduced_machine_ops::*;
 
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
 
     let mut table_driver = TableDriver::<Mersenne31Field>::new();
     reduced_machine_table_driver_fn(&mut table_driver);
@@ -166,7 +166,7 @@ pub fn get_decoder_table_for_rom_bound<
     Vec<ExecutorFamilyDecoderData, A>,
 ) {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
 
     use crate::machine::ops::unrolled::process_binary_into_separate_tables_ext;
     let mut t = process_binary_into_separate_tables_ext::<Mersenne31Field, true, A>(

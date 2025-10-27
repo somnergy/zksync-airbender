@@ -40,7 +40,7 @@ pub fn get_circuit_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usize
     bytecode: &[u32],
 ) -> one_row_compiler::CompiledCircuitArtifact<field::Mersenne31Field> {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
     use crate::machine::ops::unrolled::load_store::create_load_store_special_tables;
     use prover::cs::machine::ops::unrolled::load_store_subword_only::*;
 
@@ -76,7 +76,7 @@ pub fn dump_ssa_form_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usi
     bytecode: &[u32],
 ) -> Vec<Vec<prover::cs::cs::witness_placer::graph_description::RawExpression<Mersenne31Field>>> {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
     use crate::machine::ops::unrolled::dump_ssa_witness_eval_form_for_unrolled_circuit;
     use crate::machine::ops::unrolled::load_store::create_load_store_special_tables;
     use prover::cs::machine::ops::unrolled::load_store_subword_only::*;
@@ -113,7 +113,7 @@ pub fn get_table_driver_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: 
     use prover::cs::machine::ops::unrolled::load_store_subword_only::*;
 
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
 
     let mut table_driver = TableDriver::<Mersenne31Field>::new();
     subword_only_load_store_table_driver_fn(&mut table_driver);
@@ -156,7 +156,7 @@ pub fn get_decoder_table_for_rom_bound<
     Vec<ExecutorFamilyDecoderData, A>,
 ) {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
 
     use crate::machine::ops::unrolled::process_binary_into_separate_tables_ext;
     let mut t = process_binary_into_separate_tables_ext::<Mersenne31Field, true, A>(

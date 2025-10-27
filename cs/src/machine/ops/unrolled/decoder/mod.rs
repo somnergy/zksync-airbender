@@ -314,7 +314,7 @@ pub fn process_binary_into_separate_tables_ext<
 >(
     binary: &[u32],
     families: &[Box<dyn OpcodeFamilyDecoder>],
-    max_bytecode_size_words: usize,
+    bytecode_size_words: usize,
     supported_csrs: &[u16],
 ) -> HashMap<
     u8,
@@ -324,7 +324,7 @@ pub fn process_binary_into_separate_tables_ext<
     ),
 > {
     assert!(
-        binary.len() <= max_bytecode_size_words,
+        binary.len() <= bytecode_size_words,
         "bytecode is too long"
     );
     let mut pc_set = BTreeSet::new();
@@ -332,7 +332,9 @@ pub fn process_binary_into_separate_tables_ext<
     for family in families.iter() {
         let family_type = family.instruction_family_index();
         let (table, witness_eval_data) =
-            preprocess_bytecode::<F, A>(&binary, max_bytecode_size_words, &family, supported_csrs);
+            preprocess_bytecode::<F, A>(&binary, bytecode_size_words, &family, supported_csrs);
+        assert_eq!(table.len(), bytecode_size_words);
+        assert_eq!(witness_eval_data.len(), bytecode_size_words);
         for (idx, entry) in table.iter().enumerate() {
             if entry.is_some() {
                 let is_unique = pc_set.insert(idx);

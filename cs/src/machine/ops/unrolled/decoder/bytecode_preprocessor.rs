@@ -34,7 +34,7 @@ impl<F: PrimeField> DecoderTableEntry<F> {
 
 pub fn preprocess_bytecode<F: PrimeField, A: GoodAllocator>(
     binary: &[u32],
-    max_bytecode_size_words: usize,
+    bytecode_size_words: usize,
     family: &Box<dyn OpcodeFamilyDecoder>,
     supported_csrs: &[u16],
 ) -> (
@@ -42,16 +42,16 @@ pub fn preprocess_bytecode<F: PrimeField, A: GoodAllocator>(
     Vec<ExecutorFamilyDecoderData, A>,
 ) {
     use crate::definitions::*;
-    let mut table = Vec::with_capacity_in(max_bytecode_size_words, A::default());
-    table.resize(max_bytecode_size_words, None);
+    let mut table = Vec::with_capacity_in(bytecode_size_words, A::default());
+    table.resize(bytecode_size_words, None);
     let mut witness_eval_decoder_data =
-        Vec::with_capacity_in(max_bytecode_size_words, A::default());
+        Vec::with_capacity_in(bytecode_size_words, A::default());
     witness_eval_decoder_data.resize(
-        max_bytecode_size_words,
+        bytecode_size_words,
         ExecutorFamilyDecoderData::default(),
     );
 
-    assert!(binary.len() < table.len());
+    assert!(binary.len() <= table.len());
 
     for (i, opcode) in binary.iter().copied().enumerate() {
         let pc = i * 4;
@@ -118,6 +118,9 @@ pub fn preprocess_bytecode<F: PrimeField, A: GoodAllocator>(
 
         table[i] = Some(entry);
     }
+
+    assert_eq!(table.len(), bytecode_size_words);
+    assert_eq!(witness_eval_decoder_data.len(), bytecode_size_words);
 
     (table, witness_eval_decoder_data)
 }

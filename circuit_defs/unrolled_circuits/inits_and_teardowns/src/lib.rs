@@ -32,7 +32,7 @@ pub fn get_circuit_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usize
     bytecode: &[u32],
 ) -> one_row_compiler::CompiledCircuitArtifact<field::Mersenne31Field> {
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
     use crate::one_row_compiler::OneRowCompiler;
 
     let compiler = OneRowCompiler::<Mersenne31Field>::default();
@@ -61,7 +61,7 @@ pub fn get_table_driver_for_rom_bound<const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: 
     use crate::tables::TableDriver;
 
     let num_bytecode_words = (1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)) / 4;
-    assert!(bytecode.len() <= num_bytecode_words);
+    assert_eq!(bytecode.len(), num_bytecode_words);
 
     TableDriver::new()
 }
