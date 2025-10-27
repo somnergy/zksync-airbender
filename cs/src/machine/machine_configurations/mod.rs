@@ -122,6 +122,12 @@ impl<F: PrimeField> DecoderOutputSource<F, RegisterDecompositionWithSign<F>>
     }
 }
 
+pub fn pad_bytecode_bytes<const ROM_ADDRESS_SPACE_BOUND: u32>(bytecode: &mut Vec<u8>) {
+    assert!(ROM_ADDRESS_SPACE_BOUND.is_power_of_two());
+    assert!(bytecode.len() as u32 <= ROM_ADDRESS_SPACE_BOUND);
+    bytecode.resize(ROM_ADDRESS_SPACE_BOUND as usize, 0);
+}
+
 pub fn pad_bytecode<const ROM_ADDRESS_SPACE_BOUND: u32>(bytecode: &mut Vec<u32>) {
     assert!(ROM_ADDRESS_SPACE_BOUND.is_power_of_two());
     assert!(bytecode.len() as u32 <= ROM_ADDRESS_SPACE_BOUND / 4);

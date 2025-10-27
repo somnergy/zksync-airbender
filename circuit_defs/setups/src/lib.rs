@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use cs::cs::oracle::ExecutorFamilyDecoderData;
-use cs::machine::machine_configurations::pad_bytecode;
+use cs::machine::machine_configurations::{pad_bytecode, pad_bytecode_bytes};
 use cs::tables::TableDriver;
 use definitions::MerkleTreeCap;
 use merkle_trees::DefaultTreeConstructor;
@@ -46,6 +46,10 @@ pub mod circuits;
 pub mod unrolled_circuits;
 pub use self::circuits::*;
 pub use self::unrolled_circuits::*;
+
+pub fn pad_bytecode_bytes_for_proving(bytecode: &mut Vec<u8>) {
+    pad_bytecode_bytes::<{ common_constants::rom::ROM_BYTE_SIZE as u32 }>(bytecode);
+}
 
 pub fn pad_bytecode_for_proving(bytecode: &mut Vec<u32>) {
     pad_bytecode::<{ common_constants::rom::ROM_BYTE_SIZE as u32 }>(bytecode);
@@ -622,6 +626,7 @@ pub fn read_and_pad_binary(path: &Path) -> (Vec<u8>, Vec<u32>) {
         binary.push(u32::from_le_bytes(*el));
     }
 
+    pad_bytecode_bytes_for_proving(&mut buffer);
     pad_bytecode_for_proving(&mut binary);
 
     (buffer, binary)
