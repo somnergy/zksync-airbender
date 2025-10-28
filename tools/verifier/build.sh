@@ -16,6 +16,9 @@ rm unrolled_base_layer.text
 rm unrolled_recursion_layer.bin
 rm unrolled_recursion_layer.elf
 rm unrolled_recursion_layer.text
+rm unified_recursion_layer.bin
+rm unified_recursion_layer.elf
+rm unified_recursion_layer.text
 
 # Build something simple to check for errors
 # cargo build --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unrolled_base_layer,security_80 --no-default-features
@@ -73,6 +76,11 @@ CARGO_TARGET_DIR=target/thirteen cargo objcopy --release -Z build-std=core,panic
 (CARGO_TARGET_DIR=target/fourteen cargo objcopy --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unrolled_recursion_layer,security_80 --no-default-features -- -O binary unrolled_recursion_layer.bin;
 CARGO_TARGET_DIR=target/fourteen cargo objcopy --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unrolled_recursion_layer,security_80 --no-default-features -- -R .text unrolled_recursion_layer.elf;
 CARGO_TARGET_DIR=target/fourteen cargo objcopy --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unrolled_recursion_layer,security_80 --no-default-features -- -O binary --only-section=.text unrolled_recursion_layer.text) &
+
+#cargo build -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort --release --no-default-features --features=unrolled_recursion_layer,security_80
+(CARGO_TARGET_DIR=target/fifteen cargo objcopy --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unified_reduced_machine,security_80 --no-default-features -- -O binary unified_recursion_layer.bin;
+CARGO_TARGET_DIR=target/fifteen cargo objcopy --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unified_reduced_machine,security_80 --no-default-features -- -R .text unified_recursion_layer.elf;
+CARGO_TARGET_DIR=target/fifteen cargo objcopy --release -Z build-std=core,panic_abort,alloc -Z build-std-features=panic_immediate_abort  --features unified_reduced_machine,security_80 --no-default-features -- -O binary --only-section=.text unified_recursion_layer.text) &
 
 wait
 

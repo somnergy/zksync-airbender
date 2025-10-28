@@ -39,6 +39,7 @@ security_100 = ["full_statement_verifier/security_100"]
 
 unrolled_base_layer = ["full_statement_verifier/verifier_program", "full_statement_verifier/blake2_with_compression"]
 unrolled_recursion_layer = ["full_statement_verifier/verifier_program", "full_statement_verifier/blake2_with_compression"]
+unified_reduced_machine = ["full_statement_verifier/verifier_program", "full_statement_verifier/blake2_with_compression"]
 
 verifier_tests = ["verifier"]
 # default = ["universal_circuit"]

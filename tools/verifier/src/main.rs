@@ -217,6 +217,13 @@ unsafe fn workload() -> ! {
     riscv_common::zksync_os_finish_success_extended(&output);
 }
 
+#[cfg(feature = "unified_reduced_machine")]
+unsafe fn workload() -> ! {
+    let output =
+        full_statement_verifier::unified_circuit_statement::verify_unified_circuit_recursion_layer();
+    riscv_common::zksync_os_finish_success_extended(&output);
+}
+
 #[inline(never)]
 fn main() -> ! {
     riscv_common::boot_sequence::init();
