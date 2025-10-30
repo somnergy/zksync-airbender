@@ -1426,7 +1426,6 @@ pub(crate) unsafe fn evaluate_memory_queries_accumulation(
         t.mul_assign_by_base(&read_timestamp_high);
         read_timestamp_contibution.add_assign(&t);
 
-
         // NOTE on write timestamp: it has literal constants in contribution, so we add it AFTER
         // scaling by tau^H/2
         let mut write_timestamp_contibution = memory_argument_challenges

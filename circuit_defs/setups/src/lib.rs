@@ -459,9 +459,15 @@ pub fn compute_unified_circuit_params_for_machine_configuration<C: MachineConfig
     bytecode: &[u32],
 ) -> Vec<UnrolledCircuitSetupParams> {
     if is_default_machine_configuration::<C>() {
-        panic!("Configuration {:?} is not supported", std::any::type_name::<C>());
+        panic!(
+            "Configuration {:?} is not supported",
+            std::any::type_name::<C>()
+        );
     } else if is_machine_without_signed_mul_div_configuration::<C>() {
-        panic!("Configuration {:?} is not supported", std::any::type_name::<C>());
+        panic!(
+            "Configuration {:?} is not supported",
+            std::any::type_name::<C>()
+        );
     } else if is_reduced_machine_configuration::<C>() {
         compute_unified_circuit_params_recursion_layer(binary_image, bytecode)
     } else {
@@ -516,9 +522,8 @@ pub fn compute_unified_circuit_params_recursion_layer(
     binary_image: &[u32],
     bytecode: &[u32],
 ) -> Vec<UnrolledCircuitSetupParams> {
-    let eval_fns: Vec<fn(&[u32], &[u32], &Worker) -> UnrolledCircuitPrecomputations<Global>> = vec![
-        unified_reduced_machine_circuit_setup::<Global, Global>
-    ];
+    let eval_fns: Vec<fn(&[u32], &[u32], &Worker) -> UnrolledCircuitPrecomputations<Global>> =
+        vec![unified_reduced_machine_circuit_setup::<Global, Global>];
     compute_unrolled_circuits_params_impl(binary_image, bytecode, &eval_fns)
 }
 

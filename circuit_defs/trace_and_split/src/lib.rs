@@ -4,6 +4,7 @@
 use crate::cs::cs::oracle::ExecutorFamilyDecoderData;
 use crate::risc_v_simulator::machine_mode_only_unrolled::MemoryOpcodeTracingDataWithTimestamp;
 use crate::risc_v_simulator::machine_mode_only_unrolled::NonMemoryOpcodeTracingDataWithTimestamp;
+use common_constants::INITIAL_PC;
 use merkle_trees::MerkleTreeCapVarLength;
 use prover::cs::definitions::TimestampScalar;
 use prover::cs::utils::split_timestamp;
@@ -26,7 +27,6 @@ use setups::prover::transcript::Seed;
 use setups::prover::*;
 use std::collections::HashMap;
 use worker::Worker;
-use common_constants::INITIAL_PC;
 
 pub const ENTRY_POINT: u32 = INITIAL_PC;
 

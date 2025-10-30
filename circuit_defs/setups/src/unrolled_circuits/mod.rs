@@ -10,9 +10,9 @@ pub use ::load_store_subword_only;
 pub use ::load_store_word_only;
 pub use ::mul_div;
 pub use ::mul_div_unsigned;
-use prover::common_constants::REDUCED_MACHINE_CIRCUIT_FAMILY_IDX;
 pub use ::shift_binary_csr;
 pub use ::unified_reduced_machine;
+use prover::common_constants::REDUCED_MACHINE_CIRCUIT_FAMILY_IDX;
 
 mod add_sub_lui_auipc_mop_circuit;
 mod inits_and_teardowns_circuit;
@@ -132,19 +132,19 @@ pub fn get_unified_circuit_artifact_for_machine_type<C: MachineConfig>(
         } else if is_machine_without_signed_mul_div_configuration::<C>() {
             panic!("Unknown configuration {:?}", std::any::type_name::<C>());
         } else if is_reduced_machine_configuration::<C>() {
-            vec![
-                (
-                    ::unified_reduced_machine::FAMILY_IDX,
-                    ::unified_reduced_machine::get_circuit,
-                ),
-            ]
+            vec![(
+                ::unified_reduced_machine::FAMILY_IDX,
+                ::unified_reduced_machine::get_circuit,
+            )]
         } else {
             panic!("Unknown configuration {:?}", std::any::type_name::<C>());
         };
 
     let mut families = artifacts_for_unrolled_circuits_params_impl(binary_image, &t);
 
-    families.remove(&::unified_reduced_machine::FAMILY_IDX).expect("must have setup")
+    families
+        .remove(&::unified_reduced_machine::FAMILY_IDX)
+        .expect("must have setup")
 }
 
 fn artifacts_for_unrolled_circuits_params_impl(
@@ -217,17 +217,22 @@ pub fn get_unified_circuit_setup_for_machine_type<
     text_section: &[u32],
     worker: &Worker,
 ) -> UnrolledCircuitPrecomputations<A, B> {
-    let t: Vec<fn(&[u32], &[u32], &Worker) -> UnrolledCircuitPrecomputations<A, B>> = if is_default_machine_configuration::<C>() {
-        panic!("Unsupported machine configuration {}", std::any::type_name::<C>());
-    } else if is_machine_without_signed_mul_div_configuration::<C>() {
-        panic!("Unsupported machine configuration {}", std::any::type_name::<C>());
-    } else if is_reduced_machine_configuration::<C>() {
-        vec![
-            unified_reduced_machine_circuit_setup::<A, B>
-        ]
-    } else {
-        panic!("Unknown configuration {:?}", std::any::type_name::<C>());
-    };
+    let t: Vec<fn(&[u32], &[u32], &Worker) -> UnrolledCircuitPrecomputations<A, B>> =
+        if is_default_machine_configuration::<C>() {
+            panic!(
+                "Unsupported machine configuration {}",
+                std::any::type_name::<C>()
+            );
+        } else if is_machine_without_signed_mul_div_configuration::<C>() {
+            panic!(
+                "Unsupported machine configuration {}",
+                std::any::type_name::<C>()
+            );
+        } else if is_reduced_machine_configuration::<C>() {
+            vec![unified_reduced_machine_circuit_setup::<A, B>]
+        } else {
+            panic!("Unknown configuration {:?}", std::any::type_name::<C>());
+        };
 
     let mut t = precomputations_for_unrolled_circuits_params_impl::<A, B>(
         binary_image,
@@ -236,7 +241,8 @@ pub fn get_unified_circuit_setup_for_machine_type<
         worker,
     );
 
-    t.remove(&REDUCED_MACHINE_CIRCUIT_FAMILY_IDX).expect("must compute setup for unified circuit")
+    t.remove(&REDUCED_MACHINE_CIRCUIT_FAMILY_IDX)
+        .expect("must compute setup for unified circuit")
 }
 
 fn precomputations_for_unrolled_circuits_params_impl<A: GoodAllocator, B: GoodAllocator>(

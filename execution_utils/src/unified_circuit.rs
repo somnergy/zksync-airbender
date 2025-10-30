@@ -48,8 +48,6 @@ pub fn compute_unified_setup_for_machine_configuration<C: MachineConfig>(
         &binary_image_u32,
         &text_section_u32,
     );
-    let inits_and_teardowns_setup =
-        setups::compute_inits_and_teardowns_params(&binary_image_u32, &text_section_u32);
 
     UnrolledProgramSetup::new_from_setups_and_binary(
         binary_image,
@@ -57,7 +55,7 @@ pub fn compute_unified_setup_for_machine_configuration<C: MachineConfig>(
             .into_iter()
             .map(|el| (el.family_idx as u8, el.setup_caps))
             .collect::<Vec<_>>(),
-        &inits_and_teardowns_setup,
+        &[MerkleTreeCap::dummy(); NUM_COSETS],
     )
 }
 

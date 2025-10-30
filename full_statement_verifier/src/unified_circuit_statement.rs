@@ -1,10 +1,18 @@
+use super::*;
+use crate::unrolled_proof_statement::read_setups;
 use common_constants::{INITIAL_PC, INITIAL_TIMESTAMP};
 use verifier_common::{cs::definitions::split_timestamp, DefaultNonDeterminismSource};
-use crate::unrolled_proof_statement::read_setups;
-use super::*;
 
-pub const REDUCED_UNIFIED_CIRCUIT_VERIFIER_PTR: VerifierFunctionPointer<CAP_SIZE, NUM_COSETS, 1, 1, 0, 1> = unified_reduced_machine_verifier::verify;
-pub const REDUCED_UNIFIED_CIRCUIT_CAPACITY: u32 = (unified_reduced_machine_verifier::concrete::size_constants::TRACE_LEN - 1) as u32;
+pub const REDUCED_UNIFIED_CIRCUIT_VERIFIER_PTR: VerifierFunctionPointer<
+    CAP_SIZE,
+    NUM_COSETS,
+    1,
+    1,
+    0,
+    1,
+> = unified_reduced_machine_verifier::verify;
+pub const REDUCED_UNIFIED_CIRCUIT_CAPACITY: u32 =
+    (unified_reduced_machine_verifier::concrete::size_constants::TRACE_LEN - 1) as u32;
 
 /// Unified circuit inherits PC + timestamp permutation technique from unrolled ones,
 /// but also keeps inits and teardowns in the one an only circuit
@@ -146,7 +154,10 @@ pub unsafe fn verify_unified_circuit_statement<const BASE_LAYER: bool>(
                 );
             }
         } else {
-            assert!(MerkleTreeCap::compare(unified_circuit_setup, &current.setup_caps));
+            assert!(MerkleTreeCap::compare(
+                unified_circuit_setup,
+                &current.setup_caps
+            ));
         }
 
         // update accumulators

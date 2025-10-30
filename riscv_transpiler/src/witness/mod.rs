@@ -555,7 +555,10 @@ impl<'a> WitnessTracer for UninitUnifiedDestinationHolder<'a> {
         unsafe {
             if self.buffers.len() > 0 {
                 let first = self.buffers.get_unchecked_mut(0);
-                first.as_mut_ptr().as_mut_unchecked().write(UnifiedOpcodeTracingDataWithTimestamp::NonMem(data));
+                first
+                    .as_mut_ptr()
+                    .as_mut_unchecked()
+                    .write(UnifiedOpcodeTracingDataWithTimestamp::NonMem(data));
                 // For some reason truncating the buffer doesn't work - livetime analysis complains
                 *first = core::mem::transmute(first.get_unchecked_mut(1..));
                 if first.is_empty() {
@@ -575,7 +578,10 @@ impl<'a> WitnessTracer for UninitUnifiedDestinationHolder<'a> {
         unsafe {
             if self.buffers.len() > 0 {
                 let first = self.buffers.get_unchecked_mut(0);
-                first.as_mut_ptr().as_mut_unchecked().write(UnifiedOpcodeTracingDataWithTimestamp::Mem(data));
+                first
+                    .as_mut_ptr()
+                    .as_mut_unchecked()
+                    .write(UnifiedOpcodeTracingDataWithTimestamp::Mem(data));
                 // For some reason truncating the buffer doesn't work - livetime analysis complains
                 *first = core::mem::transmute(first.get_unchecked_mut(1..));
                 if first.is_empty() {
@@ -737,16 +743,10 @@ pub type KeccakDelegationDestinationHolderConstructor<'a> = DelegationDestinatio
 #[derive(Clone, Copy, Debug)]
 pub struct UnifiedCircuitDestinationHolderConstructor;
 
-impl DestinationHolderConstructor
-    for UnifiedCircuitDestinationHolderConstructor
-{
+impl DestinationHolderConstructor for UnifiedCircuitDestinationHolderConstructor {
     type Element = UnifiedOpcodeTracingDataWithTimestamp;
-    type Tracer<'a> = UnifiedDestinationHolder<
-        'a,
-    >;
-    type UninitTracer<'a> = UninitUnifiedDestinationHolder<
-        'a,
-    >;
+    type Tracer<'a> = UnifiedDestinationHolder<'a>;
+    type UninitTracer<'a> = UninitUnifiedDestinationHolder<'a>;
 
     fn make_tracer<'a>(buffers: &'a mut [&'a mut [Self::Element]]) -> Self::Tracer<'a> {
         UnifiedDestinationHolder { buffers }

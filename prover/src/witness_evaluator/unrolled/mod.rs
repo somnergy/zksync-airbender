@@ -7,8 +7,8 @@ use crate::tracers::unrolled::word_specialized_tracer::WordSpecializedTracer;
 use cs::machine::machine_configurations::full_isa_with_delegation_no_exceptions::FullIsaMachineWithDelegationNoExceptionHandling;
 use cs::machine::machine_configurations::full_isa_with_delegation_no_exceptions_no_signed_mul_div::FullIsaMachineWithDelegationNoExceptionHandlingNoSignedMulDiv;
 use cs::machine::machine_configurations::minimal_no_exceptions_with_delegation::MinimalMachineNoExceptionHandlingWithDelegation;
-use risc_v_simulator::machine_mode_only_unrolled::UnifiedOpcodeTracingDataWithTimestamp;
 use risc_v_simulator::cycle::MachineConfig;
+use risc_v_simulator::machine_mode_only_unrolled::UnifiedOpcodeTracingDataWithTimestamp;
 use risc_v_simulator::machine_mode_only_unrolled::{
     DelegationCSRProcessor, RiscV32StateForUnrolledProver,
 };
@@ -832,13 +832,19 @@ pub fn run_unified_machine<
             if core::any::TypeId::of::<C>()
                 == core::any::TypeId::of::<risc_v_simulator::cycle::IMStandardIsaConfig>()
             {
-                panic!("Unsupported machine config {} for unified circuit", core::any::type_name::<C>());
+                panic!(
+                    "Unsupported machine config {} for unified circuit",
+                    core::any::type_name::<C>()
+                );
             } else if core::any::TypeId::of::<C>()
                 == core::any::TypeId::of::<
                     risc_v_simulator::cycle::IMStandardIsaConfigWithUnsignedMulDiv,
                 >()
             {
-                panic!("Unsupported machine config {} for unified circuit", core::any::type_name::<C>());
+                panic!(
+                    "Unsupported machine config {} for unified circuit",
+                    core::any::type_name::<C>()
+                );
             } else if core::any::TypeId::of::<C>()
                 == core::any::TypeId::of::<
                     risc_v_simulator::cycle::IWithoutByteAccessIsaConfigWithDelegation,
@@ -1517,10 +1523,7 @@ fn replay_generic_work<
     FN: Fn(&C) -> usize,
 >(
     tape: &impl riscv_transpiler::vm::InstructionTape,
-    snapshotter: &riscv_transpiler::vm::SimpleSnapshotter<
-        C,
-        ROM_BOUND_SECOND_WORD_BITS,
-    >,
+    snapshotter: &riscv_transpiler::vm::SimpleSnapshotter<C, ROM_BOUND_SECOND_WORD_BITS>,
     replayer_snapshot_period: usize,
     cycles_per_circuit: usize,
     cycles_fn: FN,
@@ -1584,11 +1587,9 @@ fn replay_generic_work<
             }
 
             let mut num_snapshots = 0;
-            'inner: while cycles_fn(&current_snapshot
-                .state
-                .counters) - cycles_fn(&starting_snapshot
-                .state
-                .counters) < average_calls_per_worker
+            'inner: while cycles_fn(&current_snapshot.state.counters)
+                - cycles_fn(&starting_snapshot.state.counters)
+                < average_calls_per_worker
             {
                 if let Some(next_snapshot) = snapshots_iter.next() {
                     num_snapshots += 1;
@@ -1635,13 +1636,12 @@ fn replay_generic_work<
             let ram_range_end = current_snapshot.memory_reads_end;
             let nd_range_end = current_snapshot.non_determinism_reads_end;
 
-            let ram_range =
-                ram_range_start..ram_range_end;
+            let ram_range = ram_range_start..ram_range_end;
             let nd_range = nd_range_start..nd_range_end;
 
             use riscv_transpiler::replayer::*;
-            use riscv_transpiler::witness::*;
             use riscv_transpiler::vm::ReplayBuffer;
+            use riscv_transpiler::witness::*;
 
             let tape_ref = tape;
             let snapshotter_ref = &snapshotter;

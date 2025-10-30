@@ -27,7 +27,7 @@ pub const INITS_AND_TEARDOWNS_CAPACITY_PER_SET: u32 =
     (inits_and_teardowns_verifier::concrete::size_constants::TRACE_LEN - 1) as u32;
 pub const MAX_MEMORY_CELLS_TO_INIT: u32 = const {
     let mut max_cells = 1u32 << 30;
-    max_cells -= common_constants::rom::ROM_WORD_SIZE as u32 ;
+    max_cells -= common_constants::rom::ROM_WORD_SIZE as u32;
 
     max_cells
 };
