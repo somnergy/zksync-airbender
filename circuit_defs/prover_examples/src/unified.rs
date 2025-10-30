@@ -13,6 +13,7 @@ use prover::cs::utils::split_timestamp;
 use prover::definitions::*;
 use prover::fft::*;
 use prover::field::*;
+use prover::get_aux_boundary_data;
 use prover::merkle_trees::DefaultTreeConstructor;
 use prover::prover_stages::unrolled_prover::UnrolledModeProof;
 use prover::prover_stages::Proof;
@@ -472,6 +473,12 @@ pub fn prove_unified_execution_with_replayer<
                 ));
             }
 
+            let aux_boundary_values = get_aux_boundary_data(
+                &precomputation.compiled_circuit,
+                precomputation.trace_len - 1,
+                inits_and_teardowns,
+            );
+
             let now = std::time::Instant::now();
             let (prover_data, proof) =
                 prover::prover_stages::unrolled_prover::prove_configured_for_unrolled_circuits::<
@@ -483,7 +490,7 @@ pub fn prove_unified_execution_with_replayer<
                     &[],
                     &external_challenges,
                     witness_trace,
-                    &[],
+                    &aux_boundary_values,
                     &precomputation.setup,
                     &precomputation.twiddles,
                     &precomputation.lde_precomputations,
