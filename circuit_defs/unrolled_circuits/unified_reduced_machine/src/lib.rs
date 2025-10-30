@@ -171,7 +171,7 @@ pub fn get_decoder_table_for_rom_bound<
     use crate::machine::ops::unrolled::process_binary_into_separate_tables_ext;
     let mut t = process_binary_into_separate_tables_ext::<Mersenne31Field, true, A>(
         bytecode,
-        &[Box::new(ReducedMachineDecoder)],
+        &[Box::new(ReducedMachineDecoder::new())],
         num_bytecode_words,
         &[
             common_constants::NON_DETERMINISM_CSR as u16,

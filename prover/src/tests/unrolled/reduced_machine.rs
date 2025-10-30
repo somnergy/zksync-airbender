@@ -163,7 +163,7 @@ pub fn run_unrolled_reduced_test_impl(
         process_binary_into_separate_tables_ext::<Mersenne31Field, true, Global>(
             &text_section,
             // &binary, // text_section,
-            &[Box::new(ReducedMachineDecoder)],
+            &[Box::new(ReducedMachineDecoder::new())],
             1 << 20,
             &[NON_DETERMINISM_CSR, BLAKE2S_DELEGATION_CSR_REGISTER as u16],
         )
