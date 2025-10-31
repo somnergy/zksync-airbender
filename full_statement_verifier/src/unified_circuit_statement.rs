@@ -98,7 +98,8 @@ pub unsafe fn verify_unified_circuit_statement<const BASE_LAYER: bool>(
         // and so we will only need to save the result at the very end
         (unified_circuit_verifier)(current, &mut state_variables);
 
-        assert_eq!(current.circuit_sequence, circuit_sequence);
+        // Circuit sequence is legacy and unused
+        assert_eq!(current.circuit_sequence, 0);
         assert_eq!(current.delegation_type, 0);
 
         // and commit memory caps
