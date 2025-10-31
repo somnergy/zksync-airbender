@@ -1068,6 +1068,8 @@ pub fn fs_transform_for_memory_and_delegation_arguments_for_unrolled_circuits(
         }
     }
 
+    dbg!(&memory_trace_transcript);
+
     // inits and teardowns
     {
         if inits_and_teardowns_memory_caps.len() > 0 {
