@@ -247,8 +247,6 @@ pub unsafe fn verify_unified_circuit_statement<const BASE_LAYER: bool>(
         assert!(total_delegation_requests < Mersenne31Field::CHARACTERISTICS as u64);
     }
 
-    panic!("{:?}", &transcript);
-
     // finish with the transcript, compare memory values from transcript with ones used in proofs
     let memory_seed = transcript.finalize_reset();
 
