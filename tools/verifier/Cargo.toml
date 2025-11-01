@@ -56,3 +56,4 @@ lto = "thin"
 [profile.release_with_symbols]
 inherits = "release"
 debug = true
+strip = false

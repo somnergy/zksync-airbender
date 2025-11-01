@@ -167,10 +167,10 @@ unsafe fn count_special_range_check_multiplicities(
         };
         assert!(
             value.to_reduced_u32() <= u16::MAX as u32,
-            "invalid value {:?} in range check 16 expression {:?} at row {}",
-            absolute_row_idx,
+            "invalid value {} in range check 16 expression {:?} at row {:?}",
+            value,
             range_check_expression,
-            value
+            absolute_row_idx,
         );
         let index = value.to_reduced_u32() as usize;
         *range_check_16_multiplicieties.get_unchecked_mut(index) += 1;
