@@ -54,26 +54,76 @@ impl Counters for () {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(C, align(16))]
+// #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+// #[repr(C, align(16))]
+// pub struct Register {
+//     pub timestamp: TimestampScalar,
+//     pub value: u32,
+// }
+
+// impl Register {
+//     #[inline(always)]
+//     pub fn timestamp(&self) -> TimestampScalar {
+//         self.timestamp
+//     }
+
+//     #[inline(always)]
+//     pub fn set_timestamp(&mut self, new_ts: TimestampScalar) {
+//         self.timestamp = new_ts;
+//     }
+// }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Register {
-    pub timestamp: TimestampScalar,
     pub value: u32,
+    pub timestamp: (u32, u32),
 }
 
 impl Register {
     #[inline(always)]
-    pub fn from_value_and_timestamp(value: u32, timestamp: TimestampScalar) -> Self {
-        Self {
-            timestamp,
-            value,
+    pub fn timestamp(&self) -> TimestampScalar {
+        unsafe {
+            core::ptr::read_unaligned(&self.timestamp as * const _ as *const TimestampScalar)
         }
     }
 
     #[inline(always)]
-    pub fn set_value_and_timestamp(&mut self, value: u32, timestamp: TimestampScalar) {
-        self.value = value;
-        self.timestamp = timestamp;
+    pub fn set_timestamp(&mut self, new_ts: TimestampScalar) {
+        unsafe {
+            core::ptr::write_unaligned(&mut self.timestamp as * mut _ as *mut TimestampScalar, new_ts)
+        }
+    }
+}
+
+impl Register {
+    #[inline(always)]
+    pub fn value(&self) -> u32 {
+        self.value
+    }
+
+    #[inline(always)]
+    pub fn set_value(&mut self, new_value: u32) {
+        self.value = new_value;
+    }
+
+    #[inline(always)]
+    pub fn touch<const TIMESTAMP_OFFSET: TimestampScalar>(&mut self, ts: TimestampScalar) {
+        debug_assert!(self.timestamp() < (ts | TIMESTAMP_OFFSET));
+        self.set_timestamp(ts | TIMESTAMP_OFFSET);
+    }
+
+    #[inline(always)]
+    pub fn read<const TIMESTAMP_OFFSET: TimestampScalar>(&mut self, ts: TimestampScalar) -> u32 {
+        debug_assert!(self.timestamp() < (ts | TIMESTAMP_OFFSET));
+        self.set_timestamp(ts | TIMESTAMP_OFFSET);
+        self.value()
+    }
+
+    #[inline(always)]
+    pub fn write<const TIMESTAMP_OFFSET: TimestampScalar>(&mut self, new_value: u32, ts: TimestampScalar) {
+        debug_assert!(self.timestamp() < (ts | TIMESTAMP_OFFSET));
+        self.set_value(new_value);
+        self.set_timestamp(ts | TIMESTAMP_OFFSET);
     }
 }
 
@@ -89,13 +139,19 @@ pub struct State<C: Counters> {
 impl<C: Counters> State<C> {
     pub fn initial_with_counters(counters: C) -> Self {
         Self {
-            registers: [Register {
-                value: 0,
-                timestamp: 0,
-            }; 32],
+            registers: [Register::default(); 32],
             counters,
             timestamp: INITIAL_TIMESTAMP,
             pc: 0,
+        }
+    }
+
+    #[inline(always)]
+    pub fn prefetch_reg_read(&self, idx: u8) {
+        debug_assert!(idx < 32);
+        unsafe {
+            use crate::PREFETCH_REGISTER_LOCALITY;
+            core::intrinsics::prefetch_read_data::<_, PREFETCH_REGISTER_LOCALITY>(self.registers.get_unchecked(idx as usize) as *const Register);
         }
     }
 }
@@ -128,6 +184,11 @@ impl<C: Counters> Snapshotter<C> for () {
 }
 
 pub trait RAM {
+    #[inline(always)]
+    fn prefetch_read(&self, _address: u32) {}
+    #[inline(always)]
+    fn prefetch_write(&self, _address: u32) {}
+
     fn peek_word(&self, address: u32) -> u32;
     fn peek_u64(&self, address: u32) -> u64;
     fn read_word(&mut self, address: u32, timestamp: TimestampScalar) -> (TimestampScalar, u32);
@@ -194,12 +255,16 @@ impl<C: Counters> VM<C> {
     ) -> bool {
         use crate::vm::instructions::*;
 
-        for _ in 0..num_snapshots {
-            for _ in 0..snapshot_period {
+        let mut snapshot = 0;
+        while snapshot < num_snapshots {
+            let mut i = 0;
+            while i < snapshot_period {
                 unsafe {
                     core::hint::assert_unchecked(state.pc % 4 == 0);
                     let pc = state.pc;
                     let instr = instruction_tape.read_instruction(pc);
+                    // state.prefetch_reg_read(instr.rs1);
+                    // state.prefetch_reg_read(instr.rs2);
                     match instr.name {
                         InstructionName::Illegal => illegal(state, ram, snapshotter, instr),
                         InstructionName::Lui => {
@@ -344,14 +409,17 @@ impl<C: Counters> VM<C> {
                         _ => core::hint::unreachable_unchecked(),
                     }
                     state.timestamp += TIMESTAMP_STEP;
-                    if state.pc == pc {
+                    if core::hint::unlikely(state.pc == pc) {
                         snapshotter.take_snapshot(&*state);
                         return true;
                     }
                 }
+
+                i += 1;
             }
 
             snapshotter.take_snapshot(&*state);
+            snapshot += 1;
         }
 
         false

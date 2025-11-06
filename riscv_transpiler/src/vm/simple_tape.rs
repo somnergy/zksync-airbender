@@ -19,7 +19,8 @@ impl InstructionTape for SimpleTape {
         let word = (pc >> 2) as usize;
         debug_assert!(word < self.instructions.len());
         unsafe {
-            core::intrinsics::prefetch_read_data::<_, 2>(self.instructions.get_unchecked(word) as *const Instruction);
+            use crate::PREFETCH_LOCALITY_INSRT;
+            core::intrinsics::prefetch_read_data::<_, PREFETCH_LOCALITY_INSRT>(self.instructions.get_unchecked(word) as *const Instruction);
         }
     }
 

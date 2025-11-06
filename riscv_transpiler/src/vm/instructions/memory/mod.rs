@@ -8,9 +8,10 @@ pub(crate) fn sw<C: Counters, S: Snapshotter<C>, R: RAM>(
     instr: Instruction,
 ) {
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
-    let rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
     let address = rs1_value.wrapping_add(instr.imm);
-    if address % 4 != 0 {
+    ram.prefetch_write(address);
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
+    if core::hint::unlikely(address % 4 != 0) {
         panic!("Unaligned memory access at PC = 0x{:08x}", state.pc);
     }
     let (read_timestamp, old_value) = ram.write_word(address, rs2_value, state.timestamp | 2);
@@ -29,7 +30,8 @@ pub(crate) fn lw<C: Counters, S: Snapshotter<C>, R: RAM>(
 ) {
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
     let address = rs1_value.wrapping_add(instr.imm);
-    if address % 4 != 0 {
+    ram.prefetch_read(address);
+    if core::hint::unlikely(address % 4 != 0) {
         panic!("Unaligned memory access at PC = 0x{:08x}", state.pc);
     }
     let (read_timestamp, old_value) = ram.read_word(address, state.timestamp | 1);
@@ -48,12 +50,13 @@ pub(crate) fn sh<C: Counters, S: Snapshotter<C>, R: RAM>(
     instr: Instruction,
 ) {
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
-    let rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
     let address = rs1_value.wrapping_add(instr.imm);
-    if address % 2 != 0 {
+    let aligned_address = address & !3;
+    ram.prefetch_write(aligned_address);
+    if core::hint::unlikely(address % 2 != 0) {
         panic!("Unaligned memory access at PC = 0x{:08x}", state.pc);
     }
-    let aligned_address = address & !3;
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
     let value = rs2_value & 0x0000_ffff;
     let existing_value = ram.peek_word(aligned_address);
     let mask = match address % 4 {
@@ -83,9 +86,10 @@ pub(crate) fn sb<C: Counters, S: Snapshotter<C>, R: RAM>(
     instr: Instruction,
 ) {
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
-    let rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
     let address = rs1_value.wrapping_add(instr.imm);
     let aligned_address = address & !3;
+    ram.prefetch_write(aligned_address);
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
     let value = rs2_value & 0x0000_00ff;
     let existing_value = ram.peek_word(aligned_address);
     let mask = match address % 4 {
@@ -118,10 +122,11 @@ pub(crate) fn lh<C: Counters, S: Snapshotter<C>, R: RAM, const SIGN_EXTEND: bool
 ) {
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
     let address = rs1_value.wrapping_add(instr.imm);
-    if address % 2 != 0 {
+    let aligned_address = address & !3;
+    ram.prefetch_read(aligned_address);
+    if core::hint::unlikely(address % 2 != 0) {
         panic!("Unaligned memory access at PC = 0x{:08x}", state.pc);
     }
-    let aligned_address = address & !3;
     let (read_timestamp, old_value) = ram.read_word(aligned_address, state.timestamp | 1);
     let mut value = old_value >> ((address % 4) * 8);
     if SIGN_EXTEND {
@@ -151,6 +156,7 @@ pub(crate) fn lb<C: Counters, S: Snapshotter<C>, R: RAM, const SIGN_EXTEND: bool
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
     let address = rs1_value.wrapping_add(instr.imm);
     let aligned_address = address & !3;
+    ram.prefetch_read(aligned_address);
     let (read_timestamp, old_value) = ram.read_word(aligned_address, state.timestamp | 1);
     let mut value = old_value >> ((address % 4) * 8);
     if SIGN_EXTEND {

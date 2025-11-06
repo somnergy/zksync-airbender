@@ -19,10 +19,7 @@ impl<const ROM_BOUND_SECOND_WORD_BITS: usize> RamWithRomRegion<ROM_BOUND_SECOND_
         let ram_words = total_size_bytes / core::mem::size_of::<u32>();
 
         let mut backing = vec![
-            Register {
-                value: 0,
-                timestamp: 0
-            };
+            Register::default();
             ram_words
         ];
         for (dst, src) in backing.iter_mut().zip(content.iter()) {
@@ -83,13 +80,12 @@ impl<const ROM_BOUND_SECOND_WORD_BITS: usize> RAM for RamWithRomRegion<ROM_BOUND
                 value = self.backing.get_unchecked(word_idx).value;
                 // Track access as reading 0 slot
                 let zero_slot = self.backing.get_unchecked_mut(0);
-                read_timestamp = zero_slot.timestamp;
-                zero_slot.timestamp = timestamp | 1;
+                read_timestamp = zero_slot.timestamp();
+                zero_slot.touch::<1>(timestamp);
             } else {
                 let slot = self.backing.get_unchecked_mut(word_idx);
-                value = slot.value;
-                read_timestamp = slot.timestamp;
-                slot.timestamp = timestamp | 1;
+                read_timestamp = slot.timestamp();
+                value = slot.read::<1>(timestamp);
             }
 
             debug_assert!(read_timestamp < timestamp | 1);
@@ -119,11 +115,9 @@ impl<const ROM_BOUND_SECOND_WORD_BITS: usize> RAM for RamWithRomRegion<ROM_BOUND
                 panic!();
             }
             let slot = self.backing.get_unchecked_mut(word_idx);
-            let old_value = slot.value;
-            let read_timestamp = slot.timestamp;
-            debug_assert!(read_timestamp < timestamp | 2);
-            slot.value = word;
-            slot.timestamp = timestamp | 2;
+            let old_value = slot.value();
+            let read_timestamp = slot.timestamp();
+            slot.write::<2>(word, timestamp);
 
             // println!("Write at address 0x{:08x} at timestamp {} of value {} into value {} and read timestamp {}", address, timestamp, word, old_value, read_timestamp);
 
@@ -159,20 +153,20 @@ impl<const ROM_BOUND_SECOND_WORD_BITS: usize> RamWithRomRegion<ROM_BOUND_SECOND_
                         if address < (1 + (16 + ROM_BOUND_SECOND_WORD_BITS)) {
                             if address != 0 {
                                 assert_eq!(
-                                    word.timestamp, 0,
+                                    word.timestamp(), 0,
                                     "non-zero access timestamp in ROM region at address 0x{:08x}",
                                     address
                                 );
                             }
                         }
 
-                        if word.timestamp != 0 {
-                            let mut word_value = word.value;
+                        if word.timestamp() != 0 {
+                            let mut word_value = word.value();
                             // we mask ROM region to be zero-valued
                             if address < (1 + (16 + ROM_BOUND_SECOND_WORD_BITS)) {
                                 word_value = 0;
                             }
-                            let last_timestamp: TimestampScalar = word.timestamp;
+                            let last_timestamp: TimestampScalar = word.timestamp();
                             el.push((address as u32, (last_timestamp, word_value)));
                         }
 
@@ -206,6 +200,28 @@ impl BenchmarkingRAM {
 }
 
 impl RAM for BenchmarkingRAM {
+    // #[inline(always)]
+    // fn prefetch_read(&self, address: u32) {
+    //     debug_assert_eq!(address % 4, 0);
+    //     unsafe {
+    //         let word_idx = (address / 4) as usize;
+    //         debug_assert!(word_idx < self.backing.len());
+    //         use crate::PREFETCH_LOCALITY;
+    //         core::intrinsics::prefetch_read_data::<_, PREFETCH_LOCALITY>(self.backing.get_unchecked(word_idx) as *const u32);
+    //     }
+    // }
+
+    // #[inline(always)]
+    // fn prefetch_write(&self, address: u32) {
+    //     debug_assert_eq!(address % 4, 0);
+    //     unsafe {
+    //         let word_idx = (address / 4) as usize;
+    //         debug_assert!(word_idx < self.backing.len());
+    //         use crate::PREFETCH_LOCALITY;
+    //         core::intrinsics::prefetch_write_data::<_, PREFETCH_LOCALITY>(self.backing.get_unchecked(word_idx) as *const u32);
+    //     }
+    // }
+
     #[inline(always)]
     fn peek_word(&self, address: u32) -> u32 {
         debug_assert_eq!(address % 4, 0);

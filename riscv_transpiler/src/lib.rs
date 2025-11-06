@@ -8,6 +8,10 @@
 #![feature(likely_unlikely)]
 #![feature(core_intrinsics)]
 
+const PREFETCH_RAM_LOCALITY: i32 = 1;
+const PREFETCH_REGISTER_LOCALITY: i32 = 3;
+const PREFETCH_LOCALITY_INSRT: i32 = 3;
+
 // In the first take over the compiler and the corresponding simulator we will first
 // preprocess the bytecode into fixed-width format, and then will do very simple and execution loop
 // that just dispatches a function pointer

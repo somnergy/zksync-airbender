@@ -19,9 +19,7 @@ pub(crate) fn read_register<C: Counters, const TIMESTAMP_OFFSET: TimestampScalar
 ) -> u32 {
     unsafe {
         let reg = state.registers.get_unchecked_mut(reg_idx as usize);
-        debug_assert!(reg.timestamp < (state.timestamp | TIMESTAMP_OFFSET));
-        reg.timestamp = state.timestamp | TIMESTAMP_OFFSET;
-        reg.value
+        reg.read::<TIMESTAMP_OFFSET>(state.timestamp)
     }
 }
 
@@ -31,8 +29,7 @@ pub(crate) fn touch_x0<C: Counters, const TIMESTAMP_OFFSET: TimestampScalar>(
 ) {
     unsafe {
         let reg = state.registers.get_unchecked_mut(0);
-        debug_assert!(reg.timestamp < (state.timestamp | TIMESTAMP_OFFSET));
-        reg.timestamp = state.timestamp | TIMESTAMP_OFFSET;
+        reg.touch::<TIMESTAMP_OFFSET>(state.timestamp);
     }
 }
 
@@ -47,9 +44,7 @@ pub(crate) fn write_register<C: Counters, const TIMESTAMP_OFFSET: TimestampScala
             *value = 0;
         }
         let reg = state.registers.get_unchecked_mut(reg_idx as usize);
-        debug_assert!(reg.timestamp < (state.timestamp | TIMESTAMP_OFFSET));
-        reg.timestamp = state.timestamp | TIMESTAMP_OFFSET;
-        reg.value = *value;
+        reg.write::<TIMESTAMP_OFFSET>(*value, state.timestamp);
     }
 }
 

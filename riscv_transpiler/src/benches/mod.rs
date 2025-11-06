@@ -22,8 +22,8 @@ pub fn read_binary(path: &Path) -> (Vec<u8>, Vec<u32>) {
     (buffer, binary)
 }
 
-// #[inline(never)]
-#[inline(always)]
+#[inline(never)]
+// #[inline(always)]
 pub fn run_baseline_bench(
     state: &mut State<()>,
     num_snapshots: usize,
