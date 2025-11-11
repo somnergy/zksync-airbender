@@ -15,6 +15,7 @@ pub mod ir;
 pub mod replayer;
 pub mod vm;
 pub mod witness;
+pub mod jit;
 
 pub use ::common_constants;
 

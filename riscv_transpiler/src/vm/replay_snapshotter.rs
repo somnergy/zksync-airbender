@@ -2,6 +2,7 @@ use std::alloc::Allocator;
 
 use super::*;
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DelegationsCounters {
     pub non_determinism_reads: usize,
@@ -35,18 +36,19 @@ impl Counters for DelegationsCounters {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DelegationsAndFamiliesCounters {
-    pub non_determinism_reads: usize,
-    pub blake_calls: usize,
-    pub bigint_calls: usize,
-    pub keccak_calls: usize,
     pub add_sub_family: usize,
     pub binary_shift_csr_family: usize,
     pub slt_branch_family: usize,
     pub mul_div_family: usize,
     pub word_size_mem_family: usize,
     pub subword_size_mem_family: usize,
+    pub blake_calls: usize,
+    pub bigint_calls: usize,
+    pub keccak_calls: usize,
+    pub non_determinism_reads: usize,
 }
 
 impl Counters for DelegationsAndFamiliesCounters {
@@ -104,6 +106,7 @@ impl Counters for DelegationsAndFamiliesCounters {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DelegationsAndUnifiedCounters {
     pub non_determinism_reads: usize,

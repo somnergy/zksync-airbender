@@ -5,7 +5,7 @@ use common_constants::TimestampScalar;
 use crate::vm::{Register, RAM};
 
 pub struct RamWithRomRegion<const ROM_BOUND_SECOND_WORD_BITS: usize> {
-    backing: Vec<Register>,
+    pub(crate) backing: Vec<Register>,
 }
 
 impl<const ROM_BOUND_SECOND_WORD_BITS: usize> RamWithRomRegion<ROM_BOUND_SECOND_WORD_BITS> {

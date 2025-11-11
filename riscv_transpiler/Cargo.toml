@@ -19,5 +19,9 @@ worker = { workspace = true }
 serde = { workspace = true }
 serde-big-array = "*"
 
+dynasmrt = "4"
+riscv-decode = "0.2"
+capstone = "0.13"
+
 [dev-dependencies]
 lib-rv32-asm = {git = "https://github.com/shamatar/lib-rv32.git" }

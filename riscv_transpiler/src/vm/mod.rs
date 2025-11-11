@@ -25,7 +25,7 @@ pub trait Counters: 'static + Clone + Copy + Debug + PartialEq + Eq + Send + Syn
     fn get_calls_to_circuit_family<const FAMILY: u8>(&self) -> usize;
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[repr(C, align(16))]
 pub struct Register {
     pub timestamp: TimestampScalar,
@@ -369,6 +369,8 @@ pub(crate) mod test {
             &mut (),
         );
         let elapsed = now.elapsed();
+
+        dbg!((state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP);
 
         let total_snapshots = snapshotter.snapshots.len();
         let cycles_upper_bound = total_snapshots * period;
