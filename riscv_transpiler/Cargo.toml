@@ -18,6 +18,7 @@ risc_v_simulator = { workspace = true, features = ["delegation"] }
 worker = { workspace = true }
 serde = { workspace = true }
 serde-big-array = "*"
+keccak = "*"
 
 dynasmrt = "4"
 riscv-decode = "0.2"
