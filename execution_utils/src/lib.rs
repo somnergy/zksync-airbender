@@ -175,38 +175,38 @@ pub mod verifier_binaries {
 
     // TODO: fix binaries and verification keys
     pub const BASE_LAYER_VERIFIER: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_base_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     pub const RECURSION_LAYER_VERIFIER: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/recursion_layer.bin");
     pub const RECURSION_LOG_23_LAYER_VERIFIER: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/recursion_log_23_layer.bin");
     pub const RECURSION_LAYER_NO_DELEGATION_VERIFIER: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/recursion_layer_no_delegation.bin");
     pub const FINAL_RECURSION_LAYER_VERIFIER: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/final_recursion_layer.bin");
 
     pub const BASE_LAYER_VERIFIER_WITH_OUTPUT: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/base_layer_with_output.bin");
     pub const RECURSION_LAYER_VERIFIER_WITH_OUTPUT: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/recursion_layer_with_output.bin");
     pub const RECURSION_LOG_23_LAYER_VERIFIER_WITH_OUTPUT: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/recursion_log_23_layer_with_output.bin");
     pub const RECURSION_LAYER_NO_DELEGATION_VERIFIER_WITH_OUTPUT: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/recursion_layer_no_delegation_with_output.bin");
     pub const FINAL_RECURSION_LAYER_VERIFIER_WITH_OUTPUT: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/final_recursion_layer_with_output.bin");
 
     pub const UNIVERSAL_CIRCUIT_VERIFIER: &[u8] =
-        include_bytes!("../../tools/verifier/unrolled_recursion_layer.bin");
+        include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
     // include_bytes!("../../tools/verifier/universal.bin");
 
     // Methods to fetch the verification keys for the binaries above.
