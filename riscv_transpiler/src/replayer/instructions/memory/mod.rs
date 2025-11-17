@@ -15,9 +15,6 @@ pub(crate) fn sw<C: Counters, R: RAM>(
     let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2);
     let address = rs1_value.wrapping_add(instr.imm);
     debug_assert!(address % 4 == 0);
-    // if address == 0x041eff8c {
-    //     panic!("{:?}", state);
-    // }
     let (ram_timestamp, ram_old_value) = ram.write_word(address, rs2_value, state.timestamp | 2);
 
     let traced_data = MemoryOpcodeTracingDataWithTimestamp {

@@ -10,8 +10,9 @@ pub(crate) fn nd_read<C: Counters, R: RAM, ND: NonDeterminismCSRSource>(
     tracer: &mut impl WitnessTracer,
     nd: &mut ND,
 ) {
-    let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
+    let rs1_ts = touch_x0_with_ts::<C, 0>(state);
+    let rs2_ts = touch_x0_with_ts::<C, 1>(state);
+
     let mut rd = if R::REPLAY_NON_DETERMINISM_VIA_RAM_STUB {
         // we snapshot all non-determinism reads. Address and timestamp are not important here
         let (ts, value) = ram.read_word(
@@ -32,8 +33,8 @@ pub(crate) fn nd_read<C: Counters, R: RAM, ND: NonDeterminismCSRSource>(
     let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
         opcode_data: NonMemoryOpcodeTracingData {
             initial_pc: state.pc,
-            rs1_value,
-            rs2_value,
+            rs1_value: 0,
+            rs2_value: 0,
             rd_old_value,
             rd_value: rd,
             new_pc: state.pc.wrapping_add(4),
@@ -56,15 +57,15 @@ pub(crate) fn nd_write<C: Counters, R: RAM>(
     tracer: &mut impl WitnessTracer,
 ) {
     let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
-    let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut 0);
+    let rs2_ts = touch_x0_with_ts::<C, 1>(state);
+    let rd_ts = touch_x0_with_ts::<C, 2>(state);
 
     let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
         opcode_data: NonMemoryOpcodeTracingData {
             initial_pc: state.pc,
             rs1_value,
-            rs2_value,
-            rd_old_value,
+            rs2_value: 0,
+            rd_old_value: 0,
             rd_value: 0,
             new_pc: state.pc.wrapping_add(4),
             delegation_type: NON_DETERMINISM_CSR as u16,

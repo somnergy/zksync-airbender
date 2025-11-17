@@ -7,8 +7,8 @@ pub(crate) fn jal<C: Counters, R: RAM>(
     instr: Instruction,
     tracer: &mut impl WitnessTracer,
 ) {
-    let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
+    let rs1_ts = touch_x0_with_ts::<C, 0>(state);
+    let rs2_ts = touch_x0_with_ts::<C, 1>(state);
     let mut rd = state.pc.wrapping_add(core::mem::size_of::<u32>() as u32); // address of next opcode
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut rd);
 
@@ -17,8 +17,8 @@ pub(crate) fn jal<C: Counters, R: RAM>(
     let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
         opcode_data: NonMemoryOpcodeTracingData {
             initial_pc: state.pc,
-            rs1_value,
-            rs2_value,
+            rs1_value: 0,
+            rs2_value: 0,
             rd_old_value,
             rd_value: rd,
             new_pc: jump_address,
@@ -41,7 +41,7 @@ pub(crate) fn jalr<C: Counters, R: RAM>(
     tracer: &mut impl WitnessTracer,
 ) {
     let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
+    let rs2_ts = touch_x0_with_ts::<C, 1>(state);
     let mut rd = state.pc.wrapping_add(core::mem::size_of::<u32>() as u32); // address of next opcode
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut rd);
 
@@ -51,7 +51,7 @@ pub(crate) fn jalr<C: Counters, R: RAM>(
         opcode_data: NonMemoryOpcodeTracingData {
             initial_pc: state.pc,
             rs1_value,
-            rs2_value,
+            rs2_value: 0,
             rd_old_value,
             rd_value: rd,
             new_pc: jump_address,

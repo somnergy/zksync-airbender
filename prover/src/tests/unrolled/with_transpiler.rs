@@ -50,8 +50,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
     const TRACE_LEN_LOG2: usize = 24;
     const NUM_CYCLES_PER_CHUNK: usize = (1 << TRACE_LEN_LOG2) - 1;
 
-    const SECOND_WORD_BITS: usize = 4;
-
     let trace_len: usize = 1 << TRACE_LEN_LOG2;
     let lde_factor = 2;
     let tree_cap_size = 32;
@@ -94,19 +92,19 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
     // first run to capture minimal information
     let instructions: Vec<Instruction> =
         preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(&text_section);
+
     let tape = SimpleTape::new(&instructions);
-    let mut ram = RamWithRomRegion::<SECOND_WORD_BITS>::from_rom_content(&binary, 1 << 30);
+    let mut ram = RamWithRomRegion::<{ common_constants::ROM_SECOND_WORD_BITS }>::from_rom_content(
+        &binary,
+        1 << 30,
+    );
     let cycles_bound = 1 << 20;
 
     let mut state = State::initial_with_counters(CountersT::default());
-    let mut snapshotter = SimpleSnapshotter::new_with_cycle_limit(cycles_bound, state);
+    let mut snapshotter = SimpleSnapshotter::<CountersT, {common_constants::ROM_SECOND_WORD_BITS}>::new_with_cycle_limit(cycles_bound, state);
     let mut non_determinism = QuasiUARTSource::new_with_reads(vec![15, 1]);
 
-    let is_program_finished = VM::<CountersT>::run_basic_unrolled::<
-        SimpleSnapshotter<CountersT, SECOND_WORD_BITS>,
-        RamWithRomRegion<SECOND_WORD_BITS>,
-        _,
-    >(
+    let is_program_finished = VM::<CountersT>::run_basic_unrolled::<_, _, _>(
         &mut state,
         &mut ram,
         &mut snapshotter,
@@ -115,6 +113,8 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         &mut non_determinism,
     );
     assert!(is_program_finished); // check that we reached looping state (ie. end state for our vm)
+
+    dbg!(state.counters);
 
     let total_snapshots = snapshotter.snapshots.len();
 
@@ -384,7 +384,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
 
@@ -405,6 +405,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
 
         let (decoder_table_data, witness_gen_data) =
             &preprocessing_data[&ADD_SUB_LUI_AUIPC_MOP_CIRCUIT_FAMILY_IDX];
+
         let decoder_table_data = materialize_flattened_decoder_table(decoder_table_data);
 
         let oracle = NonMemoryCircuitOracle {
@@ -414,12 +415,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         };
 
         let is_empty = oracle.inner.is_empty();
-
-        // println!(
-        //     "Opcode = 0x{:08x}",
-        //     family_data[0].data[9].opcode_data.opcode
-        // );
-        // dbg!(family_data[0].data[9]);
 
         let memory_trace = evaluate_memory_witness_for_executor_family::<_, Global>(
             &add_sub_circuit,
@@ -438,14 +433,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             &worker,
             Global,
         );
-
-        // let mut trace = full_trace.exec_trace.row_view(0..family_data[0].data.len());
-        // for _ in 0..family_data[0].data.len() {
-        //     unsafe {
-        //         let (_, memory) = trace.current_row_split(full_trace.num_witness_columns);
-        //         dbg!(&*memory);
-        //     }
-        // }
 
         parse_state_permutation_elements_from_full_trace(
             &add_sub_circuit,
@@ -578,7 +565,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
 
@@ -608,11 +595,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         };
 
         let is_empty = oracle.inner.is_empty();
-
-        // println!(
-        //     "Opcode = 0x{:08x}",
-        //     family_data[0].data[4].opcode_data.opcode
-        // );
 
         let memory_trace = evaluate_memory_witness_for_executor_family::<_, Global>(
             &jump_branch_circuit,
@@ -774,7 +756,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
         let mut buffer = vec![NonMemoryOpcodeTracingDataWithTimestamp::default(); num_calls];
@@ -803,11 +785,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         };
 
         let is_empty = oracle.inner.is_empty();
-
-        // println!(
-        //     "Opcode = 0x{:08x}",
-        //     family_data[0].data[2].opcode_data.opcode
-        // );
 
         let memory_trace = evaluate_memory_witness_for_executor_family::<_, Global>(
             &shift_binop_csrrw_circuit,
@@ -963,7 +940,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
 
@@ -993,11 +970,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         };
 
         let is_empty = oracle.inner.is_empty();
-
-        // println!(
-        //     "Opcode = 0x{:08x}",
-        //     family_data[0].data[26].opcode_data.opcode
-        // );
 
         let memory_trace = evaluate_memory_witness_for_executor_family::<_, Global>(
             &mul_div_circuit,
@@ -1121,8 +1093,10 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
     if true {
         println!("Will try to prove word LOAD/STORE circuit");
 
-        let extra_tables =
-            create_word_only_load_store_special_tables::<_, SECOND_WORD_BITS>(&binary);
+        let extra_tables = create_word_only_load_store_special_tables::<
+            _,
+            { common_constants::ROM_SECOND_WORD_BITS },
+        >(&binary);
         let word_load_store_circuit = {
             compile_unrolled_circuit_state_transition::<Mersenne31Field>(
                 &|cs| {
@@ -1132,9 +1106,11 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
                     }
                 },
                 &|cs| {
-                    word_only_load_store_circuit_with_preprocessed_bytecode::<_, _, SECOND_WORD_BITS>(
-                        cs,
-                    )
+                    word_only_load_store_circuit_with_preprocessed_bytecode::<
+                        _,
+                        _,
+                        { common_constants::ROM_SECOND_WORD_BITS },
+                    >(cs)
                 },
                 1 << 20,
                 TRACE_LEN_LOG2,
@@ -1156,7 +1132,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
 
@@ -1185,12 +1161,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         };
 
         let is_empty = oracle.inner.is_empty();
-
-        // println!(
-        //     "Opcode = 0x{:08x}",
-        //     family_data[0].data[203].opcode_data.opcode
-        // );
-        // dbg!(family_data[0].data[203].as_load_data());
 
         let memory_trace = evaluate_memory_witness_for_executor_family::<_, Global>(
             &word_load_store_circuit,
@@ -1311,9 +1281,11 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         println!("Will try to prove subword LOAD/STORE circuit");
 
         use cs::machine::ops::unrolled::load_store::*;
-        const SECOND_WORD_BITS: usize = 4;
 
-        let extra_tables = create_load_store_special_tables::<_, SECOND_WORD_BITS>(&binary);
+        let extra_tables = create_load_store_special_tables::<
+            _,
+            { common_constants::ROM_SECOND_WORD_BITS },
+        >(&binary);
         let subword_load_store_circuit = {
             compile_unrolled_circuit_state_transition::<Mersenne31Field>(
                 &|cs| {
@@ -1326,7 +1298,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
                     subword_only_load_store_circuit_with_preprocessed_bytecode::<
                         _,
                         _,
-                        SECOND_WORD_BITS,
+                        { common_constants::ROM_SECOND_WORD_BITS },
                     >(cs)
                 },
                 1 << 20,
@@ -1349,7 +1321,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
 
@@ -1382,11 +1354,6 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         };
 
         let is_empty = oracle.inner.is_empty();
-
-        // println!(
-        //     "Opcode = 0x{:08x}",
-        //     family_data[0].data[29].opcode_data.opcode
-        // );
 
         let memory_trace = evaluate_memory_witness_for_executor_family::<_, Global>(
             &subword_load_store_circuit,
@@ -1671,7 +1638,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
 
@@ -1848,7 +1815,7 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
             .reads_buffer
             .make_range(0..snapshotter.reads_buffer.len());
 
-        let mut ram = ReplayerRam::<SECOND_WORD_BITS> {
+        let mut ram = ReplayerRam::<{ common_constants::ROM_SECOND_WORD_BITS }> {
             ram_log: &mut ram_log_buffers,
         };
         let mut buffer = vec![DelegationWitness::empty(); num_calls];
@@ -2001,7 +1968,13 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
         assert_eq!(expected_init_set.len(), expected_teardown_set.len());
 
         for (is_register, addr, ts, init_value) in expected_init_set.iter() {
-            assert!(*is_register == false);
+            assert!(
+                *is_register == false,
+                "found an unexpected init for register {} with value {} at timestamp {}",
+                *addr,
+                *init_value,
+                *ts
+            );
             assert_eq!(
                 *ts, 0,
                 "init timestamp is invalid for memory address {}",
@@ -2013,8 +1986,14 @@ pub fn run_basic_unrolled_test_in_transpiler_with_word_specialization_impl(
                 addr
             );
         }
-        for (is_register, addr, ts, _) in expected_teardown_set.iter() {
-            assert!(*is_register == false);
+        for (is_register, addr, ts, _value) in expected_teardown_set.iter() {
+            assert!(
+                *is_register == false,
+                "found an unexpected teardown for register {} with value {} at timestamp {}",
+                *addr,
+                *_value,
+                *ts
+            );
             assert!(
                 *ts > INITIAL_TIMESTAMP,
                 "teardown timestamp is invalid for memory address {}",

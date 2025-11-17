@@ -48,7 +48,6 @@ pub struct DelegationsAndFamiliesCounters {
     pub blake_calls: usize,
     pub bigint_calls: usize,
     pub keccak_calls: usize,
-    pub non_determinism_reads: usize,
 }
 
 impl Counters for DelegationsAndFamiliesCounters {

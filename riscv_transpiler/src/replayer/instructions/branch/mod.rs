@@ -8,7 +8,7 @@ pub(crate) fn branch<C: Counters, R: RAM>(
     tracer: &mut impl WitnessTracer,
 ) {
     let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
+    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2);
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, 0, &mut 0);
 
     let jump_address = state.pc.wrapping_add(instr.imm);

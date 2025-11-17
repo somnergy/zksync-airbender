@@ -7,16 +7,19 @@ pub(crate) fn lui<C: Counters, R: RAM>(
     instr: Instruction,
     tracer: &mut impl WitnessTracer,
 ) {
-    let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2);
+    debug_assert_eq!(instr.rs1, 0);
+    debug_assert_eq!(instr.rs2, 0);
+
+    let (rs1_ts) = touch_x0_with_ts::<C, 0>(state);
+    let (rs2_ts) = touch_x0_with_ts::<C, 1>(state);
     let mut rd = instr.imm;
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut rd);
 
     let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
         opcode_data: NonMemoryOpcodeTracingData {
             initial_pc: state.pc,
-            rs1_value,
-            rs2_value,
+            rs1_value: 0,
+            rs2_value: 0,
             rd_old_value,
             rd_value: rd,
             new_pc: state.pc.wrapping_add(4),
@@ -38,16 +41,19 @@ pub(crate) fn auipc<C: Counters, R: RAM>(
     instr: Instruction,
     tracer: &mut impl WitnessTracer,
 ) {
-    let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
+    debug_assert_eq!(instr.rs1, 0);
+    debug_assert_eq!(instr.rs2, 0);
+
+    let (rs1_ts) = touch_x0_with_ts::<C, 0>(state);
+    let (rs2_ts) = touch_x0_with_ts::<C, 1>(state);
     let mut rd = state.pc.wrapping_add(instr.imm);
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut rd);
 
     let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
         opcode_data: NonMemoryOpcodeTracingData {
             initial_pc: state.pc,
-            rs1_value,
-            rs2_value,
+            rs1_value: 0,
+            rs2_value: 0,
             rd_old_value,
             rd_value: rd,
             new_pc: state.pc.wrapping_add(4),

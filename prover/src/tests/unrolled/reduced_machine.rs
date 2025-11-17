@@ -89,9 +89,14 @@ pub fn run_unrolled_reduced_test_impl(
         .map(|el| u32::from_le_bytes(*el))
         .collect();
 
+    println!("Opcode = 0x{:08x}", text_section[8 / 4]);
+
     // first run to capture minimal information
     let instructions: Vec<Instruction> =
         preprocess_bytecode::<ReducedMachineDecoderConfig>(&text_section);
+
+    println!("Opcode = {:?}", instructions[8 / 4]);
+
     let tape = SimpleTape::new(&instructions);
     let mut ram = RamWithRomRegion::<SECOND_WORD_BITS>::from_rom_content(&binary, 1 << 30);
 
@@ -113,6 +118,8 @@ pub fn run_unrolled_reduced_test_impl(
         cycles_bound,
         &mut non_determinism,
     );
+
+    dbg!(state.counters);
 
     let total_snapshots = snapshotter.snapshots.len();
     let cycles_upper_bound = cycles_bound;

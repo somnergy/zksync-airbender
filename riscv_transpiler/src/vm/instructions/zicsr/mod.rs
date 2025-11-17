@@ -8,8 +8,10 @@ pub(crate) fn nd_read<C: Counters, S: Snapshotter<C>, R: RAM, ND: NonDeterminism
     instr: Instruction,
     nd: &mut ND,
 ) {
-    let _rs1_value = read_register::<C, 0>(state, instr.rs1);
-    let _rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
+    debug_assert_eq!(instr.rs1, 0);
+    debug_assert_eq!(instr.rs2, 0);
+
+    touch_x0::<C, 1>(state);
     let mut rd = nd.read();
     snapshotter.append_non_determinism_read(rd);
     write_register::<C, 2>(state, instr.rd, &mut rd);
@@ -26,7 +28,7 @@ pub(crate) fn nd_write<C: Counters, S: Snapshotter<C>, R: RAM, ND: NonDeterminis
     nd: &mut ND,
 ) {
     let rs1_value = read_register::<C, 0>(state, instr.rs1);
-    let _rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
+    touch_x0::<C, 1>(state);
     nd.write_with_memory_access(&*ram, rs1_value);
     write_register::<C, 2>(state, instr.rd, &mut 0);
     default_increase_pc::<C>(state);

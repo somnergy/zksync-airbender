@@ -63,9 +63,6 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
     while i < bytecode.len() {
         let opcode = bytecode[i];
 
-        // NOTE: this is about to change as we will handle instructions that do not have rs1/rs2 in more
-        // consistent manner
-
         let rd = get_rd_bits(opcode);
         let formal_rs1 = get_formal_rs1_bits(opcode);
         let formal_rs2 = get_formal_rs2_bits(opcode);
@@ -78,27 +75,27 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                 // U format
                 let imm = UTypeOpcode::imm(opcode);
 
-                Instruction::from_imm(InstructionName::Lui, formal_rs1, formal_rs2, rd, imm)
+                Instruction::from_imm(InstructionName::Lui, 0, 0, rd, imm)
             }
             OPCODE_AUIPC => {
                 // U format
                 let imm = UTypeOpcode::imm(opcode);
 
-                Instruction::from_imm(InstructionName::Auipc, formal_rs1, formal_rs2, rd, imm)
+                Instruction::from_imm(InstructionName::Auipc, 0, 0, rd, imm)
             }
             OPCODE_JAL => {
                 // J format
                 let mut imm: u32 = JTypeOpcode::imm(opcode);
                 sign_extend(&mut imm, 21);
 
-                Instruction::from_imm(InstructionName::Jal, formal_rs1, formal_rs2, rd, imm)
+                Instruction::from_imm(InstructionName::Jal, 0, 0, rd, imm)
             }
             OPCODE_JALR => {
                 // I format
                 let mut imm: u32 = ITypeOpcode::imm(opcode);
                 // quasi sign extend
                 sign_extend(&mut imm, 12);
-                Instruction::from_imm(InstructionName::Jalr, formal_rs1, formal_rs2, rd, imm)
+                Instruction::from_imm(InstructionName::Jalr, formal_rs1, 0, rd, imm)
             }
             OPCODE_BRANCH => {
                 // B format
@@ -106,7 +103,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                 sign_extend(&mut imm, 13);
 
                 // NOTE: branch instructions do not write, and we always model it as RD = 0 and write of 0 for tracing purposes.
-                // And we will put funct3 into rd here to reduce code size
+                // And we will put funct3 into rd here to reduce struct size
                 match funct3 {
                     0 | 1 | 4 | 5 | 6 | 7 => {}
                     _ => {
@@ -121,42 +118,20 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                 sign_extend(&mut imm, 12);
 
                 let instr = match funct3 {
-                    GROUP_IMM_ADD => Instruction::from_imm(
-                        InstructionName::Addi,
-                        formal_rs1,
-                        formal_rs2,
-                        rd,
-                        imm,
-                    ),
+                    GROUP_IMM_ADD => {
+                        Instruction::from_imm(InstructionName::Addi, formal_rs1, 0, rd, imm)
+                    }
                     GROUP_IMM_SLL if funct7 == SLL_FUNCT7 => {
                         // Shift is encoded in the lowest 5 bits
-                        Instruction::from_imm(
-                            InstructionName::Slli,
-                            formal_rs1,
-                            formal_rs2,
-                            rd,
-                            imm & 0x1f,
-                        )
+                        Instruction::from_imm(InstructionName::Slli, formal_rs1, 0, rd, imm & 0x1f)
                     }
                     GROUP_IMM_SRL if funct7 == SRL_FUNCT7 => {
                         // Shift is encoded in the lowest 5 bits
-                        Instruction::from_imm(
-                            InstructionName::Srli,
-                            formal_rs1,
-                            formal_rs2,
-                            rd,
-                            imm & 0x1f,
-                        )
+                        Instruction::from_imm(InstructionName::Srli, formal_rs1, 0, rd, imm & 0x1f)
                     }
                     GROUP_IMM_SRA if funct7 == SRA_FUNCT7 => {
                         // Shift is encoded in the lowest 5 bits
-                        Instruction::from_imm(
-                            InstructionName::Srai,
-                            formal_rs1,
-                            formal_rs2,
-                            rd,
-                            imm & 0x1f,
-                        )
+                        Instruction::from_imm(InstructionName::Srai, formal_rs1, 0, rd, imm & 0x1f)
                     }
                     0b101 if funct7 == ROT_FUNCT7 => {
                         panic!("not supporting rotate family")
@@ -169,37 +144,21 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                         //     panic!("Unknown opcode 0x{:08x}", opcode);
                         // }
                     }
-                    GROUP_IMM_SLT => Instruction::from_imm(
-                        InstructionName::Slti,
-                        formal_rs1,
-                        formal_rs2,
-                        rd,
-                        imm,
-                    ),
-                    GROUP_IMM_SLTU => Instruction::from_imm(
-                        InstructionName::Sltiu,
-                        formal_rs1,
-                        formal_rs2,
-                        rd,
-                        imm,
-                    ),
-                    GROUP_IMM_XOR => Instruction::from_imm(
-                        InstructionName::Xori,
-                        formal_rs1,
-                        formal_rs2,
-                        rd,
-                        imm,
-                    ),
-                    GROUP_IMM_OR => {
-                        Instruction::from_imm(InstructionName::Ori, formal_rs1, formal_rs2, rd, imm)
+                    GROUP_IMM_SLT => {
+                        Instruction::from_imm(InstructionName::Slti, formal_rs1, 0, rd, imm)
                     }
-                    GROUP_IMM_AND => Instruction::from_imm(
-                        InstructionName::Andi,
-                        formal_rs1,
-                        formal_rs2,
-                        rd,
-                        imm,
-                    ),
+                    GROUP_IMM_SLTU => {
+                        Instruction::from_imm(InstructionName::Sltiu, formal_rs1, 0, rd, imm)
+                    }
+                    GROUP_IMM_XOR => {
+                        Instruction::from_imm(InstructionName::Xori, formal_rs1, 0, rd, imm)
+                    }
+                    GROUP_IMM_OR => {
+                        Instruction::from_imm(InstructionName::Ori, formal_rs1, 0, rd, imm)
+                    }
+                    GROUP_IMM_AND => {
+                        Instruction::from_imm(InstructionName::Andi, formal_rs1, 0, rd, imm)
+                    }
                     _ => {
                         panic!("Unknown opcode 0x{:08x}", opcode);
                     }
@@ -417,7 +376,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                     Instruction::from_imm(
                                         InstructionName::Lb,
                                         formal_rs1,
-                                        formal_rs2,
+                                        0,
                                         rd,
                                         imm,
                                     )
@@ -430,7 +389,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                     Instruction::from_imm(
                                         InstructionName::Lh,
                                         formal_rs1,
-                                        formal_rs2,
+                                        0,
                                         rd,
                                         imm,
                                     )
@@ -438,19 +397,13 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                     illegal_instr
                                 }
                             }
-                            2 => Instruction::from_imm(
-                                InstructionName::Lw,
-                                formal_rs1,
-                                formal_rs2,
-                                rd,
-                                imm,
-                            ),
+                            2 => Instruction::from_imm(InstructionName::Lw, formal_rs1, 0, rd, imm),
                             4 => {
                                 if OPT::SUPPORT_SUBWORD_MEM_ACCESS {
                                     Instruction::from_imm(
                                         InstructionName::Lbu,
                                         formal_rs1,
-                                        formal_rs2,
+                                        0,
                                         rd,
                                         imm,
                                     )
@@ -463,7 +416,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                     Instruction::from_imm(
                                         InstructionName::Lhu,
                                         formal_rs1,
-                                        formal_rs2,
+                                        0,
                                         rd,
                                         imm,
                                     )
@@ -486,6 +439,8 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                 let mut imm = STypeOpcode::imm(opcode);
                 sign_extend(&mut imm, 12);
 
+                // NOTE: we model stored as they write to x0
+
                 // access memory
                 match funct3 {
                     a @ 0 | a @ 1 | a @ 2 => {
@@ -498,7 +453,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                         InstructionName::Sb,
                                         formal_rs1,
                                         formal_rs2,
-                                        rd,
+                                        0,
                                         imm,
                                     )
                                 } else {
@@ -511,7 +466,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                         InstructionName::Sh,
                                         formal_rs1,
                                         formal_rs2,
-                                        rd,
+                                        0,
                                         imm,
                                     )
                                 } else {
@@ -522,7 +477,7 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                 InstructionName::Sw,
                                 formal_rs1,
                                 formal_rs2,
-                                rd,
+                                0,
                                 imm,
                             ),
                             _ => unsafe { core::hint::unreachable_unchecked() },
@@ -602,17 +557,18 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                                 // we have rd != 0, so we read from source and write to rd
                                 Instruction::from_imm(
                                     InstructionName::ZicsrNonDeterminismRead,
-                                    formal_rs1,
+                                    0,
                                     0,
                                     rd,
                                     0,
                                 )
                             } else {
+                                assert!(rd == 0);
                                 Instruction::from_imm(
                                     InstructionName::ZicsrNonDeterminismWrite,
                                     formal_rs1,
                                     0,
-                                    rd,
+                                    0,
                                     0,
                                 )
                             }

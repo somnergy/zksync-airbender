@@ -94,11 +94,12 @@ impl<
             VARIABLE_OFFSETS_T,
         >,
     ) {
-        debug_assert_eq!(REG_ACCESSES, REG_ACCESSES_T);
-        debug_assert_eq!(INDIRECT_READS, INDIRECT_READS_T);
-        debug_assert_eq!(INDIRECT_WRITES, INDIRECT_WRITES);
-        debug_assert_eq!(VARIABLE_OFFSETS, VARIABLE_OFFSETS_T);
         if DELEGATION_TYPE == DELEGATION_TYPE_T {
+            debug_assert_eq!(REG_ACCESSES, REG_ACCESSES_T);
+            debug_assert_eq!(INDIRECT_READS, INDIRECT_READS_T);
+            debug_assert_eq!(INDIRECT_WRITES, INDIRECT_WRITES);
+            debug_assert_eq!(VARIABLE_OFFSETS, VARIABLE_OFFSETS_T);
+
             unsafe {
                 if self.buffers.len() > 0 {
                     let first = self.buffers.get_unchecked_mut(0);
@@ -207,11 +208,12 @@ impl<
             VARIABLE_OFFSETS_T,
         >,
     ) {
-        debug_assert_eq!(REG_ACCESSES, REG_ACCESSES_T);
-        debug_assert_eq!(INDIRECT_READS, INDIRECT_READS_T);
-        debug_assert_eq!(INDIRECT_WRITES, INDIRECT_WRITES);
-        debug_assert_eq!(VARIABLE_OFFSETS, VARIABLE_OFFSETS_T);
         if DELEGATION_TYPE == DELEGATION_TYPE_T {
+            debug_assert_eq!(REG_ACCESSES, REG_ACCESSES_T);
+            debug_assert_eq!(INDIRECT_READS, INDIRECT_READS_T);
+            debug_assert_eq!(INDIRECT_WRITES, INDIRECT_WRITES);
+            debug_assert_eq!(VARIABLE_OFFSETS, VARIABLE_OFFSETS_T);
+
             unsafe {
                 if self.buffers.len() > 0 {
                     let first = self.buffers.get_unchecked_mut(0);

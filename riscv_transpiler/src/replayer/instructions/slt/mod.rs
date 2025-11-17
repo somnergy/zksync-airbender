@@ -8,10 +8,16 @@ pub(crate) fn slt<C: Counters, R: RAM, const USE_IMM: bool>(
     tracer: &mut impl WitnessTracer,
 ) {
     let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
-    let mut rs2_value_to_use = rs2_value;
+    let rs2_value;
+    let rs2_ts;
+    let rs2_value_to_use;
     if USE_IMM {
+        rs2_ts = touch_x0_with_ts::<C, 1>(state);
+        rs2_value = 0;
         rs2_value_to_use = instr.imm;
+    } else {
+        (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2);
+        rs2_value_to_use = rs2_value;
     }
     let mut rd = ((rs1_value as i32) < (rs2_value_to_use as i32)) as u32;
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut rd);
@@ -43,10 +49,16 @@ pub(crate) fn sltu<C: Counters, R: RAM, const USE_IMM: bool>(
     tracer: &mut impl WitnessTracer,
 ) {
     let (rs1_value, rs1_ts) = read_register_with_ts::<C, 0>(state, instr.rs1);
-    let (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2); // formal
-    let mut rs2_value_to_use = rs2_value;
+    let rs2_value;
+    let rs2_ts;
+    let rs2_value_to_use;
     if USE_IMM {
+        rs2_ts = touch_x0_with_ts::<C, 1>(state);
+        rs2_value = 0;
         rs2_value_to_use = instr.imm;
+    } else {
+        (rs2_value, rs2_ts) = read_register_with_ts::<C, 1>(state, instr.rs2);
+        rs2_value_to_use = rs2_value;
     }
     let mut rd = (rs1_value < rs2_value_to_use) as u32;
     let (rd_old_value, rd_ts) = write_register_with_ts::<C, 2>(state, instr.rd, &mut rd);

@@ -70,10 +70,11 @@ impl<'a, const ROM_BOUND_SECOND_WORD_BITS: usize> RAM
 
     #[inline(always)]
     fn mask_read_for_witness(&self, address: &mut u32, value: &mut u32) {
-        // we do not do anything here
         debug_assert_eq!(*address % 4, 0);
         if *address < 1 << (16 + ROM_BOUND_SECOND_WORD_BITS) {
-            *address = 0u32;
+            // NOTE: we no longer mask an address, just a value as it's only initialized to
+            // 0 via inits, and can not be writen over by circuits
+            // *address = 0u32;
             *value = 0u32;
         }
     }

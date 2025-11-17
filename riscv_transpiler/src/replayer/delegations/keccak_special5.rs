@@ -98,7 +98,7 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
                 let next_control_reg =
                     keccak_special5_impl_bump_control(precompile, iteration, round);
                 witness.reg_accesses[0] = RegisterOrIndirectReadWriteData {
-                    read_value: x10,
+                    read_value: state.registers[10].value,
                     write_value: next_control_reg,
                     timestamp: TimestampData::from_scalar(state.registers[10].timestamp),
                 };
@@ -130,7 +130,7 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
                     // read timestamps
                     witness.indirect_writes[2 * i].timestamp =
                         TimestampData::from_scalar(local_state_timestamps[2 * state_index]);
-                    witness.indirect_writes[2 * i].timestamp =
+                    witness.indirect_writes[2 * i + 1].timestamp =
                         TimestampData::from_scalar(local_state_timestamps[2 * state_index + 1]);
                 }
                 let state_inputs = state_indexes.map(|i| local_state[i]);

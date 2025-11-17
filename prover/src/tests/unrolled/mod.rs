@@ -289,11 +289,13 @@ pub(crate) unsafe fn parse_state_permutation_elements(
     }
 }
 
+#[track_caller]
 pub(crate) unsafe fn parse_shuffle_ram_accesses(
     compiled_circuit: &CompiledCircuitArtifact<Mersenne31Field>,
     trace_row: &[Mersenne31Field],
     write_set: &mut BTreeSet<(bool, u32, TimestampScalar, u32)>,
     read_set: &mut BTreeSet<(bool, u32, TimestampScalar, u32)>,
+    _row: usize,
 ) {
     let intermediate_state_layout = compiled_circuit
         .memory_layout
@@ -330,10 +332,12 @@ pub(crate) unsafe fn parse_shuffle_ram_accesses(
                 }
             }
 
-            // if is_register == false && address == 0 {
-            //     // special padding value to make ROM read via RAM read at 0
-            //     assert_eq!(read_value, 0);
-            //     continue;
+            // if _row < 4 {
+            //     println!("Row {}, index {}: read reg = {}, address = {} at ts = {} into value {}", _row, access_idx, is_register, address, read_ts, read_value);
+            // }
+
+            // if _row < 4 {
+            //     println!("Row {}, index {}: write reg = {}, address = {} at ts = {} into value {}", _row, access_idx, is_register, address, write_ts, write_value);
             // }
 
             let to_write = (is_register, address, write_ts, write_value);
@@ -521,7 +525,8 @@ pub(crate) fn parse_state_permutation_elements_from_full_trace<const N: usize>(
     let mut trace = witness
         .exec_trace
         .row_view(0..(witness.exec_trace.len() - 1));
-    for _ in 0..(witness.exec_trace.len() - 1) {
+    for _row in 0..(witness.exec_trace.len() - 1) {
+        // dbg!(_row);
         unsafe {
             let (_, memory) = trace.current_row_split(witness.num_witness_columns);
             parse_state_permutation_elements(compiled_circuit, &*memory, write_set, read_set);
@@ -539,10 +544,10 @@ pub(crate) fn parse_shuffle_ram_accesses_from_full_trace<const N: usize>(
     let mut trace = witness
         .exec_trace
         .row_view(0..(witness.exec_trace.len() - 1));
-    for _ in 0..(witness.exec_trace.len() - 1) {
+    for row in 0..(witness.exec_trace.len() - 1) {
         unsafe {
             let (_, memory) = trace.current_row_split(witness.num_witness_columns);
-            parse_shuffle_ram_accesses(compiled_circuit, &*memory, write_set, read_set);
+            parse_shuffle_ram_accesses(compiled_circuit, &*memory, write_set, read_set, row);
             trace.advance_row();
         }
     }

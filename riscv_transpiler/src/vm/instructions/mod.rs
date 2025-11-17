@@ -13,6 +13,15 @@ pub mod slt;
 pub mod zicsr;
 
 #[inline(always)]
+pub(crate) fn touch_x0<C: Counters, const TIMESTAMP_OFFSET: TimestampScalar>(state: &mut State<C>) {
+    unsafe {
+        let reg = state.registers.get_unchecked_mut(0 as usize);
+        debug_assert!(reg.timestamp < (state.timestamp | TIMESTAMP_OFFSET));
+        reg.timestamp = state.timestamp | TIMESTAMP_OFFSET;
+    }
+}
+
+#[inline(always)]
 pub(crate) fn read_register<C: Counters, const TIMESTAMP_OFFSET: TimestampScalar>(
     state: &mut State<C>,
     reg_idx: u8,
