@@ -2,6 +2,7 @@ use crate::witness::delegation::bigint::BigintDelegationWitness;
 
 use super::*;
 use crate::vm::delegations::bigint::bigint_impl;
+use common_constants::BIGINT_OPS_WITH_CONTROL_CSR_REGISTER;
 use ruint::aliases::U256;
 
 // NOTE: in forward execution we read through x11 and dump witness, and then dump writes via x10,
@@ -77,6 +78,36 @@ pub(crate) fn bigint_call<C: Counters, R: RAM>(
     ram: &mut R,
     tracer: &mut impl WitnessTracer,
 ) {
+    {
+        // calling cycle witness cycle
+        let next_pc = state.pc.wrapping_add(4);
+        // touch x0
+        let x0_timestamp = state.registers[0].timestamp;
+        state.registers[0].timestamp = state.timestamp | 2;
+        let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
+            opcode_data: NonMemoryOpcodeTracingData {
+                initial_pc: state.pc,
+                opcode: 0u32,
+                rs1_value: 0,
+                rs2_value: 0,
+                rd_old_value: 0,
+                rd_value: 0,
+                new_pc: next_pc,
+                delegation_type: BIGINT_OPS_WITH_CONTROL_CSR_REGISTER as u16,
+            },
+            rs1_read_timestamp: TimestampData::from_scalar(x0_timestamp),
+            rs2_read_timestamp: TimestampData::from_scalar(state.timestamp),
+            rd_read_timestamp: TimestampData::from_scalar(state.timestamp | 1),
+            cycle_timestamp: TimestampData::from_scalar(state.timestamp),
+        };
+        tracer.write_non_memory_family_data::<SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>(
+            traced_data,
+        );
+        state.pc = next_pc;
+    }
+
+    // and bigint is only called one by one, so it is simple
+
     let mut witness = BigintDelegationWitness::empty();
     let write_ts = state.timestamp | 3;
     witness.write_timestamp = write_ts;
@@ -123,6 +154,4 @@ pub(crate) fn bigint_call<C: Counters, R: RAM>(
     }
 
     tracer.write_delegation::<{common_constants::bigint_with_control::BIGINT_OPS_WITH_CONTROL_CSR_REGISTER as u16}, _, _, _, _>(witness);
-
-    // state.counters.bump_bigint();
 }

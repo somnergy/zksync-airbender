@@ -11,7 +11,10 @@ pub fn keccak_unrolled_implementation(
     // Implementer here is responsible for ALL the bookkeeping, and eventually MUST update trace piece chunk via context, and and update machine state to reflect filled part of trace chunk
     assert!((trace_piece.len as usize) < TRACE_CHUNK_LEN);
     debug_assert_eq!(machine_state.timestamp % 4, 3);
-    assert_eq!(machine_state.registers[10], INITIAL_CONTROL_VALUE); // initial control flow is expected to be zero
+    assert_eq!(
+        machine_state.registers[10],
+        INITIAL_KECCAK_F1600_CONTROL_VALUE
+    ); // initial control flow is expected to be zero
     let state_ptr = machine_state.registers[11];
     assert!(state_ptr as usize >= common_constants::rom::ROM_BYTE_SIZE);
     assert_eq!(state_ptr % 256, 0, "state pointer is unaligned");
@@ -20,7 +23,7 @@ pub fn keccak_unrolled_implementation(
 
     // Register accesses are easy - we just need to write final control flow value, and update timestamps
 
-    machine_state.registers[10] = FINAL_CONTROL_VALUE;
+    machine_state.registers[10] = FINAL_KECCAK_F1600_CONTROL_VALUE;
     machine_state.register_timestamps[10] +=
         ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP;
 

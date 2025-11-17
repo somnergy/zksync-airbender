@@ -71,6 +71,9 @@ pub(crate) fn bigint_call<C: Counters, S: Snapshotter<C>, R: RAM>(
     ram: &mut R,
     snapshotter: &mut S,
 ) {
+    // touch X0
+    state.registers[0].timestamp = state.timestamp | 2;
+
     let x10 = read_register::<C, 3>(state, 10);
     let x11 = read_register::<C, 3>(state, 11);
     let x12 = state.registers[12].value;
@@ -94,7 +97,9 @@ pub(crate) fn bigint_call<C: Counters, S: Snapshotter<C>, R: RAM>(
     write_register::<C, 3>(state, 12, &mut (of as u32));
     write_back_u256::<C, S, R>(x10, ram, snapshotter, write_ts, &result);
 
-    state.counters.bump_bigint();
+    state.counters.bump_bigint(1);
+    default_increase_pc::<C>(state);
+    increment_family_counter::<C, SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>(state);
 }
 
 #[inline(always)]

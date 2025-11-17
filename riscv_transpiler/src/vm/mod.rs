@@ -17,11 +17,14 @@ pub use self::replay_snapshotter::*;
 pub use self::simple_tape::SimpleTape;
 
 pub trait Counters: 'static + Clone + Copy + Debug + PartialEq + Eq + Send + Sync {
-    fn bump_bigint(&mut self);
-    fn bump_blake2_round_function(&mut self);
-    fn bump_keccak_special5(&mut self);
-    fn bump_non_determinism(&mut self);
-    fn log_circuit_family<const FAMILY: u8>(&mut self);
+    fn bump_bigint(&mut self, by: usize);
+    fn bump_blake2_round_function(&mut self, by: usize);
+    fn bump_keccak_special5(&mut self, by: usize);
+    #[inline(always)]
+    fn log_circuit_family<const FAMILY: u8>(&mut self) {
+        self.log_multiple_circuit_family_calls::<FAMILY>(1)
+    }
+    fn log_multiple_circuit_family_calls<const FAMILY: u8>(&mut self, num_calls: usize);
     fn get_calls_to_circuit_family<const FAMILY: u8>(&self) -> usize;
 }
 
@@ -56,7 +59,8 @@ impl<C: Counters> State<C> {
 }
 
 pub trait Snapshotter<C: Counters> {
-    fn take_snapshot(&mut self, state: &State<C>);
+    fn take_snapshot_if_needed(&mut self, state: &State<C>);
+    fn take_final_snapshot(&mut self, state: &State<C>);
     fn append_non_determinism_read(&mut self, value: u32);
     fn append_memory_read(
         &mut self,
@@ -69,7 +73,9 @@ pub trait Snapshotter<C: Counters> {
 
 impl<C: Counters> Snapshotter<C> for () {
     #[inline(always)]
-    fn take_snapshot(&mut self, _state: &State<C>) {}
+    fn take_snapshot_if_needed(&mut self, _state: &State<C>) {}
+    #[inline(always)]
+    fn take_final_snapshot(&mut self, state: &State<C>) {}
     #[inline(always)]
     fn append_non_determinism_read(&mut self, _value: u32) {}
     #[inline(always)]
@@ -108,6 +114,8 @@ impl RamPeek for [u32] {
 }
 
 pub trait RAM: RamPeek {
+    const REPLAY_NON_DETERMINISM_VIA_RAM_STUB: bool = false;
+
     fn read_word(&mut self, address: u32, timestamp: TimestampScalar) -> (TimestampScalar, u32);
     fn mask_read_for_witness(&self, address: &mut u32, value: &mut u32);
     fn write_word(
@@ -157,205 +165,192 @@ pub struct VM<C: Counters> {
 impl<C: Counters> VM<C> {
     pub fn run_basic_unrolled<S: Snapshotter<C>, R: RAM, ND: NonDeterminismCSRSource>(
         state: &mut State<C>,
-        num_snapshots: usize,
         ram: &mut R,
         snapshotter: &mut S,
         instruction_tape: &impl InstructionTape,
-        snapshot_period: usize,
+        cycle_bound: usize,
         nd: &mut ND,
     ) -> bool {
         use crate::vm::instructions::*;
 
-        for _ in 0..num_snapshots {
-            for _ in 0..snapshot_period {
-                unsafe {
-                    let pc = state.pc;
-                    let instr = instruction_tape.read_instruction(pc);
-                    match instr.name {
-                        InstructionName::Illegal => illegal(state, ram, snapshotter, instr),
-                        InstructionName::Lui => {
-                            lui_auipc::lui::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Auipc => {
-                            lui_auipc::auipc::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Jal => {
-                            jal_jalr::jal::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Jalr => {
-                            jal_jalr::jalr::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Slt => {
-                            slt::slt::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Slti => {
-                            slt::slt::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Sltu => {
-                            slt::sltu::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Sltiu => {
-                            slt::sltu::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Branch => {
-                            branch::branch::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Sw => {
-                            memory::sw::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Lw => {
-                            memory::lw::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Sh => {
-                            memory::sh::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Lhu => {
-                            memory::lh::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Lh => {
-                            memory::lh::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Sb => {
-                            memory::sb::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Lbu => {
-                            memory::lb::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Lb => {
-                            memory::lb::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::Add => {
-                            add_sub::add_op::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Addi => {
-                            add_sub::add_op::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Sub => {
-                            add_sub::sub_op::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Xor => {
-                            binary::xor::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Xori => {
-                            binary::xor::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::And => {
-                            binary::and::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Andi => {
-                            binary::and::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Or => {
-                            binary::or::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Ori => {
-                            binary::or::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Sll => {
-                            shifts::sll::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Slli => {
-                            shifts::sll::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Srl => {
-                            shifts::srl::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Srli => {
-                            shifts::srl::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Sra => {
-                            shifts::sra::<C, S, R, false>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Srai => {
-                            shifts::sra::<C, S, R, true>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Mul => {
-                            mul_div::mul::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Mulhu => {
-                            mul_div::mulhu::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Divu => {
-                            mul_div::divu::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::Remu => {
-                            mul_div::remu::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::ZimopAdd => {
-                            mop::mop_addmod::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::ZimopSub => {
-                            mop::mop_submod::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        InstructionName::ZimopMul => {
-                            mop::mop_mulmod::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-
-                        InstructionName::ZicsrNonDeterminismRead => {
-                            zicsr::nd_read::<C, S, R, ND>(state, ram, snapshotter, instr, nd)
-                        }
-                        InstructionName::ZicsrNonDeterminismWrite => {
-                            zicsr::nd_write::<C, S, R, ND>(state, ram, snapshotter, instr, nd)
-                        }
-                        InstructionName::ZicsrDelegation => {
-                            zicsr::call_delegation::<C, S, R>(state, ram, snapshotter, instr)
-                        }
-                        a @ _ => {
-                            panic!("Unknown instruction {:?}", a);
-                        }
-                        _ => core::hint::unreachable_unchecked(),
+        for _cycle in 0..cycle_bound {
+            unsafe {
+                let pc = state.pc;
+                let instr = instruction_tape.read_instruction(pc);
+                debug_assert_eq!(state.timestamp % TIMESTAMP_STEP, 0);
+                match instr.name {
+                    InstructionName::Illegal => illegal(state, ram, snapshotter, instr),
+                    InstructionName::Lui => {
+                        lui_auipc::lui::<C, S, R>(state, ram, snapshotter, instr)
                     }
-                    state.timestamp += TIMESTAMP_STEP;
-                    if state.pc == pc {
-                        snapshotter.take_snapshot(&*state);
-                        return true;
+                    InstructionName::Auipc => {
+                        lui_auipc::auipc::<C, S, R>(state, ram, snapshotter, instr)
                     }
+
+                    InstructionName::Jal => {
+                        jal_jalr::jal::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Jalr => {
+                        jal_jalr::jalr::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::Slt => {
+                        slt::slt::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Slti => {
+                        slt::slt::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::Sltu => {
+                        slt::sltu::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Sltiu => {
+                        slt::sltu::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::Branch => {
+                        branch::branch::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::Sw => memory::sw::<C, S, R>(state, ram, snapshotter, instr),
+                    InstructionName::Lw => memory::lw::<C, S, R>(state, ram, snapshotter, instr),
+
+                    InstructionName::Sh => memory::sh::<C, S, R>(state, ram, snapshotter, instr),
+                    InstructionName::Lhu => {
+                        memory::lh::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Lh => {
+                        memory::lh::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::Sb => memory::sb::<C, S, R>(state, ram, snapshotter, instr),
+                    InstructionName::Lbu => {
+                        memory::lb::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Lb => {
+                        memory::lb::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::Add => {
+                        add_sub::add_op::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Addi => {
+                        add_sub::add_op::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Sub => {
+                        add_sub::sub_op::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Xor => {
+                        binary::xor::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Xori => {
+                        binary::xor::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::And => {
+                        binary::and::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Andi => {
+                        binary::and::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Or => {
+                        binary::or::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Ori => {
+                        binary::or::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Sll => {
+                        shifts::sll::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Slli => {
+                        shifts::sll::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Srl => {
+                        shifts::srl::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Srli => {
+                        shifts::srl::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Sra => {
+                        shifts::sra::<C, S, R, false>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Srai => {
+                        shifts::sra::<C, S, R, true>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Mul => mul_div::mul::<C, S, R>(state, ram, snapshotter, instr),
+                    InstructionName::Mulhu => {
+                        mul_div::mulhu::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Divu => {
+                        mul_div::divu::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::Remu => {
+                        mul_div::remu::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::ZimopAdd => {
+                        mop::mop_addmod::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::ZimopSub => {
+                        mop::mop_submod::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    InstructionName::ZimopMul => {
+                        mop::mop_mulmod::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+
+                    InstructionName::ZicsrNonDeterminismRead => {
+                        zicsr::nd_read::<C, S, R, ND>(state, ram, snapshotter, instr, nd)
+                    }
+                    InstructionName::ZicsrNonDeterminismWrite => {
+                        zicsr::nd_write::<C, S, R, ND>(state, ram, snapshotter, instr, nd)
+                    }
+                    InstructionName::ZicsrDelegation => {
+                        zicsr::call_delegation::<C, S, R>(state, ram, snapshotter, instr)
+                    }
+                    a @ _ => {
+                        panic!("Unknown instruction {:?}", a);
+                    }
+                    _ => core::hint::unreachable_unchecked(),
+                }
+                state.timestamp += TIMESTAMP_STEP;
+                if state.pc == pc {
+                    snapshotter.take_final_snapshot(&*state);
+                    return true;
                 }
             }
 
-            snapshotter.take_snapshot(&*state);
+            snapshotter.take_snapshot_if_needed(&*state);
         }
 
         false
     }
 }
 
-pub fn run_default(
-    num_snapshots: usize,
-    ram: &mut RamWithRomRegion<5>,
-    snapshotter: &mut SimpleSnapshotter<DelegationsCounters, 5>,
-    instruction_tape: &mut SimpleTape,
-    snapshot_period: usize,
-) -> bool {
-    let mut state = State::initial_with_counters(DelegationsCounters::default());
-    VM::<DelegationsCounters>::run_basic_unrolled::<
-        SimpleSnapshotter<DelegationsCounters, 5>,
-        RamWithRomRegion<5>,
-        _,
-    >(
-        &mut state,
-        num_snapshots,
-        ram,
-        snapshotter,
-        instruction_tape,
-        snapshot_period,
-        &mut (),
-    )
-}
+// pub fn run_default(
+//     num_snapshots: usize,
+//     ram: &mut RamWithRomRegion<5>,
+//     snapshotter: &mut SimpleSnapshotter<DelegationsCounters, 5>,
+//     instruction_tape: &mut SimpleTape,
+//     snapshot_period: usize,
+// ) -> bool {
+//     let mut state = State::initial_with_counters(DelegationsCounters::default());
+//     VM::<DelegationsCounters>::run_basic_unrolled::<
+//         SimpleSnapshotter<DelegationsCounters, 5>,
+//         RamWithRomRegion<5>,
+//         _,
+//     >(
+//         &mut state,
+//         num_snapshots,
+//         ram,
+//         snapshotter,
+//         instruction_tape,
+//         snapshot_period,
+//         &mut (),
+//     )
+// }
 
 #[cfg(test)]
 pub(crate) mod test {
-    use crate::ir::decode;
-    use crate::ir::FullUnsignedMachineDecoderConfig;
+    use crate::ir::{preprocess_bytecode, FullUnsignedMachineDecoderConfig};
 
     use super::*;
     use std::path::Path;
@@ -378,46 +373,44 @@ pub(crate) mod test {
     fn test_simple_fibonacci() {
         let (_, binary) = read_binary(&Path::new("examples/fibonacci/app.bin"));
         let (_, text) = read_binary(&Path::new("examples/fibonacci/app.text"));
-        let instructions: Vec<Instruction> = text
-            .into_iter()
-            .map(|el| decode::<FullUnsignedMachineDecoderConfig>(el))
-            .collect();
+        let instructions: Vec<Instruction> =
+            preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(&text);
         let tape = SimpleTape::new(&instructions);
         let mut ram = RamWithRomRegion::<5>::from_rom_content(&binary, 1 << 30);
-        let period = 1 << 20;
-        let num_snapshots = 1000;
-        let cycles_bound = period * num_snapshots;
+
+        let cycles_bound = 1 << 30;
 
         let mut state = State::initial_with_counters(DelegationsCounters::default());
 
-        let mut snapshotter = SimpleSnapshotter::new_with_cycle_limit(cycles_bound, period, state);
+        let mut snapshotter = SimpleSnapshotter::<
+            _,
+            { common_constants::rom::ROM_SECOND_WORD_BITS },
+            Vec<(u32, (u32, u32))>,
+        >::new_with_cycle_limit(cycles_bound, state);
 
         let now = std::time::Instant::now();
-        VM::<DelegationsCounters>::run_basic_unrolled::<
-            SimpleSnapshotter<DelegationsCounters, 5>,
-            RamWithRomRegion<5>,
-            _,
-        >(
+        VM::<DelegationsCounters>::run_basic_unrolled::<_, _, _>(
             &mut state,
-            num_snapshots,
             &mut ram,
             &mut snapshotter,
             &tape,
-            period,
+            cycles_bound,
             &mut (),
         );
         let elapsed = now.elapsed();
 
-        dbg!((state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP);
-
-        let total_snapshots = snapshotter.snapshots.len();
-        let cycles_upper_bound = total_snapshots * period;
+        let cycles_elapsed = (state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
 
         println!(
-            "Performance is {} MHz ({} total snapshots with period of {} cycles)",
-            (cycles_upper_bound as f64) / (elapsed.as_micros() as f64),
-            total_snapshots,
-            period
+            "Performance is {} MHz ({} cycles)",
+            (cycles_elapsed as f64) / (elapsed.as_micros() as f64),
+            cycles_elapsed,
+        );
+
+        println!(
+            "Captured {} snapshots, in total of {} memory reads",
+            snapshotter.snapshots.len(),
+            snapshotter.reads_buffer.len()
         );
 
         dbg!(&state.registers[10..18]);
@@ -427,46 +420,56 @@ pub(crate) mod test {
     fn test_keccak_f1600() {
         let (_, binary) = read_binary(&Path::new("examples/keccak_f1600/app.bin"));
         let (_, text) = read_binary(&Path::new("examples/keccak_f1600/app.text"));
-        let instructions: Vec<Instruction> = text
-            .into_iter()
-            .map(|el| decode::<FullUnsignedMachineDecoderConfig>(el))
-            .collect();
+        let instructions: Vec<Instruction> =
+            preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(&text);
         let tape = SimpleTape::new(&instructions);
         let mut ram = RamWithRomRegion::<5>::from_rom_content(&binary, 1 << 30);
-        let period = 1 << 20;
-        let num_snapshots = 1000;
-        let cycles_bound = period * num_snapshots;
+
+        let cycles_bound = 1 << 30;
 
         let mut state = State::initial_with_counters(DelegationsCounters::default());
 
-        let mut snapshotter = SimpleSnapshotter::new_with_cycle_limit(cycles_bound, period, state);
+        let mut snapshotter = SimpleSnapshotter::<
+            _,
+            { common_constants::rom::ROM_SECOND_WORD_BITS },
+            Vec<(u32, (u32, u32))>,
+        >::new_with_cycle_limit(cycles_bound, state);
 
         let now = std::time::Instant::now();
-        VM::<DelegationsCounters>::run_basic_unrolled::<
-            SimpleSnapshotter<DelegationsCounters, 5>,
-            RamWithRomRegion<5>,
-            _,
-        >(
+        VM::<DelegationsCounters>::run_basic_unrolled::<_, _, _>(
             &mut state,
-            num_snapshots,
             &mut ram,
             &mut snapshotter,
             &tape,
-            period,
+            cycles_bound,
             &mut (),
         );
         let elapsed = now.elapsed();
 
-        let total_snapshots = snapshotter.snapshots.len();
-        let cycles_upper_bound = total_snapshots * period;
+        let cycles_elapsed = (state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
 
         println!(
-            "Performance is {} MHz ({} total snapshots with period of {} cycles)",
-            (cycles_upper_bound as f64) / (elapsed.as_micros() as f64),
-            total_snapshots,
-            period
+            "Performance is {} MHz ({} cycles)",
+            (cycles_elapsed as f64) / (elapsed.as_micros() as f64),
+            cycles_elapsed,
         );
 
+        println!(
+            "Captured {} snapshots, in total of {} memory reads",
+            snapshotter.snapshots.len(),
+            snapshotter.reads_buffer.len()
+        );
+
+        assert_eq!(
+            state.counters.keccak_calls % common_constants::NUM_DELEGATION_CALLS_FOR_KECCAK_F1600,
+            0
+        );
+
+        dbg!(state.pc);
+        dbg!(state.timestamp);
+
         dbg!(&state.registers[10..18]);
+
+        dbg!(state.registers[0]);
     }
 }

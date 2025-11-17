@@ -12,7 +12,6 @@ pub(crate) fn nd_read<C: Counters, S: Snapshotter<C>, R: RAM, ND: NonDeterminism
     let _rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
     let mut rd = nd.read();
     snapshotter.append_non_determinism_read(rd);
-    state.counters.bump_non_determinism();
     write_register::<C, 2>(state, instr.rd, &mut rd);
     default_increase_pc::<C>(state);
     increment_family_counter::<C, SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>(state);
@@ -41,11 +40,12 @@ pub(crate) fn call_delegation<C: Counters, S: Snapshotter<C>, R: RAM>(
     snapshotter: &mut S,
     instr: Instruction,
 ) {
-    // NOTE: we still need to touch registers
-    let _rs1_value = read_register::<C, 0>(state, instr.rs1);
-    let _rs2_value = read_register::<C, 1>(state, instr.rs2); // formal
-    write_register::<C, 2>(state, instr.rd, &mut 0);
-    // and then trigger delegation
+    debug_assert_eq!(instr.rs1, 0);
+    debug_assert_eq!(instr.rs2, 0);
+    debug_assert_eq!(instr.rd, 0);
+
+    // and then trigger delegation - internals are responsible to move machine state in full,
+    // especially in case of multiple delegation calls batched together
     match instr.imm {
         a if a == DelegationType::BigInt as u32 => {
             delegations::bigint::bigint_call(state, ram, snapshotter)
@@ -58,6 +58,4 @@ pub(crate) fn call_delegation<C: Counters, S: Snapshotter<C>, R: RAM>(
         }
         _ => unsafe { core::hint::unreachable_unchecked() },
     }
-    default_increase_pc::<C>(state);
-    increment_family_counter::<C, SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>(state);
 }

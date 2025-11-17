@@ -66,10 +66,16 @@ pub(crate) fn blake2_round_function_call<C: Counters, S: Snapshotter<C>, R: RAM>
 ) {
     let x10 = read_register::<C, 3>(state, 10);
     let x11 = read_register::<C, 3>(state, 11);
-    let x12 = read_register::<C, 3>(state, 12);
+    let x12 = state.registers[12].value;
 
-    assert!(x10 >= 1 << 21);
-    assert!(x11 >= 1 << 21);
+    assert!(
+        x10 >= common_constants::rom::ROM_BYTE_SIZE as u32,
+        "state pointer is in ROM"
+    );
+    assert!(
+        x11 >= common_constants::rom::ROM_BYTE_SIZE as u32,
+        "input pointer is in ROM"
+    );
 
     assert!(x10 != x11);
 
@@ -77,6 +83,9 @@ pub(crate) fn blake2_round_function_call<C: Counters, S: Snapshotter<C>, R: RAM>
     assert!(x11 % 64 == 0, "input pointer is unaligned");
 
     let write_ts = state.timestamp | 3;
+
+    let reduced_rounds = x12 & TEST_IF_REDUCE_ROUNDS_MASK == TEST_IF_REDUCE_ROUNDS_MASK;
+    let num_round = if reduced_rounds { 7 } else { 10 };
 
     let mut state_accesses: [u32; BLAKE2S_X10_NUM_WRITES] = peek_read_words(x10, ram);
     let input: [u32; BLAKE2S_BLOCK_SIZE_U32_WORDS] = read_words(x11, ram, snapshotter, write_ts);
@@ -87,7 +96,17 @@ pub(crate) fn blake2_round_function_call<C: Counters, S: Snapshotter<C>, R: RAM>
     write_back_words(x10, ram, snapshotter, write_ts, &state_accesses);
     write_register::<C, 3>(state, 12, &mut (updated_x12 as u32));
 
-    state.counters.bump_blake2_round_function();
+    // and full machine state also moves!
+
+    // But timestamp needs 1 less bump
+    state.timestamp += ((num_round - 1) as TimestampScalar) * TIMESTAMP_STEP;
+    state.counters.bump_keccak_special5(num_round);
+    state.pc = state
+        .pc
+        .wrapping_add((core::mem::size_of::<u32>() * num_round) as u32);
+    state
+        .counters
+        .log_multiple_circuit_family_calls::<SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>(num_round);
 }
 
 #[inline(always)]
