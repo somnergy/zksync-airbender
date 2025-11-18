@@ -59,7 +59,7 @@ impl<C: Counters> State<C> {
 }
 
 pub trait Snapshotter<C: Counters> {
-    fn take_snapshot_if_needed(&mut self, state: &State<C>);
+    fn take_snapshot_if_needed(&mut self, state: &State<C>) -> bool;
     fn take_final_snapshot(&mut self, state: &State<C>);
     fn append_arbitrary_value(&mut self, value: u32);
     fn append_memory_read(
@@ -73,7 +73,7 @@ pub trait Snapshotter<C: Counters> {
 
 impl<C: Counters> Snapshotter<C> for () {
     #[inline(always)]
-    fn take_snapshot_if_needed(&mut self, _state: &State<C>) {}
+    fn take_snapshot_if_needed(&mut self, _state: &State<C>) -> bool { false }
     #[inline(always)]
     fn take_final_snapshot(&mut self, state: &State<C>) {}
     #[inline(always)]
@@ -325,8 +325,9 @@ impl<C: Counters> VM<C> {
                     return true;
                 }
             }
-
-            snapshotter.take_snapshot_if_needed(&*state);
+            if snapshotter.take_snapshot_if_needed(&*state) {
+                return false;
+            }
         }
 
         false

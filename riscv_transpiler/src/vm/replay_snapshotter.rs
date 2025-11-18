@@ -360,7 +360,7 @@ impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize, MB: ReplayBuffer<(u32
     Snapshotter<C> for SimpleSnapshotter<C, ROM_BOUND_SECOND_WORD_BITS, MB>
 {
     #[inline(always)]
-    fn take_snapshot_if_needed(&mut self, state: &State<C>) {
+    fn take_snapshot_if_needed(&mut self, state: &State<C>) -> bool {
         use crate::jit::{MAX_TRACE_CHUNK_LEN, TRACE_CHUNK_LEN};
         if self.reads_buffer.len() - self.current_partial_snapshot.reads_offset >= TRACE_CHUNK_LEN {
             debug_assert!(
@@ -369,6 +369,7 @@ impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize, MB: ReplayBuffer<(u32
             );
             self.snapshot_impl(state);
         }
+        false
     }
 
     #[inline(always)]

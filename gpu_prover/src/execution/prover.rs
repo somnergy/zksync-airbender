@@ -8,7 +8,6 @@ use crate::cudart::device::get_device_count;
 use crate::cudart::memory::{CudaHostAllocFlags, HostAllocation};
 use crate::execution::cpu_worker::{
     run_split_replayer, run_split_simulator, run_unified_replayer, run_unified_simulator,
-    NonDeterminism,
 };
 use crate::execution::gpu_worker::{
     GpuWorkRequest, GpuWorkResult, MemoryCommitmentRequest, MemoryCommitmentResult, ProofRequest,
@@ -31,9 +30,10 @@ use prover::prover_stages::Proof;
 use rayon::iter::IntoParallelIterator;
 use rayon::iter::ParallelIterator;
 use riscv_transpiler::ir::{
-    decode, FullMachineDecoderConfig, FullUnsignedMachineDecoderConfig, ReducedMachineDecoderConfig,
+    preprocess_bytecode, FullMachineDecoderConfig, FullUnsignedMachineDecoderConfig,
+    ReducedMachineDecoderConfig,
 };
-use riscv_transpiler::vm::SimpleTape;
+use riscv_transpiler::vm::{NonDeterminismCSRSource, SimpleTape};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
@@ -214,12 +214,12 @@ impl ExecutionProver {
     ) {
         setups::pad_bytecode_for_proving(&mut binary_image);
         let binary_image = Arc::new(binary_image.into_boxed_slice());
-        let decode_fn = match machine_type {
-            MachineType::Full => decode::<FullMachineDecoderConfig>,
-            MachineType::FullUnsigned => decode::<FullUnsignedMachineDecoderConfig>,
-            MachineType::Reduced => decode::<ReducedMachineDecoderConfig>,
+        let preprocess_bytecode_fn = match machine_type {
+            MachineType::Full => preprocess_bytecode::<FullMachineDecoderConfig>,
+            MachineType::FullUnsigned => preprocess_bytecode::<FullUnsignedMachineDecoderConfig>,
+            MachineType::Reduced => preprocess_bytecode::<ReducedMachineDecoderConfig>,
         };
-        let preprocessed_bytecode = text_section.iter().copied().map(decode_fn).collect_vec();
+        let preprocessed_bytecode = preprocess_bytecode_fn(&text_section);
         setups::pad_bytecode_for_proving(&mut text_section);
         let instruction_tape = Arc::new(SimpleTape::new(&preprocessed_bytecode));
         let circuit_types = match execution_kind {
@@ -272,7 +272,7 @@ impl ExecutionProver {
         batch_id: u64,
         binary_key: usize,
         cycles_limit: usize,
-        non_determinism_source: impl NonDeterminism + Send + Sync + 'static,
+        non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
         external_challenges: Option<ExternalChallenges>,
     ) -> ExecutionProverResult {
         assert!(proving ^ external_challenges.is_none());
@@ -730,7 +730,7 @@ impl ExecutionProver {
         batch_id: u64,
         binary_key: usize,
         cycle_limit: usize,
-        non_determinism_source: impl NonDeterminism + Send + Sync + 'static,
+        non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
     ) -> CommitMemoryResult {
         info!("BATCH[{batch_id}] PROVER producing memory commitments for binary with key {binary_key:?}");
         let timer = Instant::now();
@@ -768,7 +768,7 @@ impl ExecutionProver {
         batch_id: u64,
         binary_key: usize,
         cycle_limit: usize,
-        non_determinism_source: impl NonDeterminism + Send + Sync + 'static,
+        non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
     ) -> CommitMemoryResult {
         self.commit_memory_inner(batch_id, binary_key, cycle_limit, non_determinism_source)
     }
@@ -778,7 +778,7 @@ impl ExecutionProver {
         batch_id: u64,
         binary_key: usize,
         cycle_limit: usize,
-        non_determinism_source: impl NonDeterminism + Send + Sync + 'static,
+        non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
         external_challenges: ExternalChallenges,
     ) -> ProveResult {
         info!("BATCH[{batch_id}] PROVER producing proofs for binary with key {binary_key:?}");
@@ -818,7 +818,7 @@ impl ExecutionProver {
         batch_id: u64,
         binary_key: usize,
         cycle_limit: usize,
-        non_determinism_source: impl NonDeterminism + Send + Sync + 'static,
+        non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
         external_challenges: ExternalChallenges,
     ) -> ProveResult {
         self.prove_inner(
@@ -849,7 +849,7 @@ impl ExecutionProver {
         batch_id: u64,
         binary_key: usize,
         cycle_limit: usize,
-        non_determinism_source: impl NonDeterminism + Clone + Send + Sync + 'static,
+        non_determinism_source: impl NonDeterminismCSRSource + Clone + Send + 'static,
     ) -> ProveResult {
         let timer = Instant::now();
         let memory_commitment_result = self.commit_memory_inner(

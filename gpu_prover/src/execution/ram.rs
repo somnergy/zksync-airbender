@@ -1,10 +1,11 @@
 use cs::definitions::{TimestampData, TimestampScalar};
 use prover::common_constants;
 use prover::definitions::LazyInitAndTeardown;
-use riscv_transpiler::vm::RAM;
+use riscv_transpiler::vm::{RamPeek, RAM};
 use std::mem::replace;
 
-pub(crate) const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usize = common_constants::rom::ROM_SECOND_WORD_BITS;
+pub(crate) const ROM_ADDRESS_SPACE_SECOND_WORD_BITS: usize =
+    common_constants::rom::ROM_SECOND_WORD_BITS;
 const ROM_LOG_SIZE: u32 = 16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS as u32;
 const ROM_BOUND: u32 = 1 << ROM_LOG_SIZE;
 const ROM_BOUND_MASK: u32 = ROM_BOUND - 1;
@@ -58,13 +59,11 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool>
     }
 
     pub fn get_touched_words_count(&self) -> u32 {
-        let touched_zero = if self.word_timestamps[0] == 0 { 0 } else { 1 };
         self.touched_words_in_page_counts
             .iter()
             .skip(1)
             .copied()
             .sum::<u32>()
-            + touched_zero
     }
 
     pub fn get_inits_and_teardowns_iterator(
@@ -85,19 +84,7 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool>
                 Some(result)
             }
         };
-        let zero_slot_timestamp = self.word_timestamps[0];
-        let zero_slot_contribution = if zero_slot_timestamp == 0 {
-            vec![]
-        } else {
-            let value = LazyInitAndTeardown {
-                address: 0,
-                teardown_value: 0,
-                teardown_timestamp: TimestampData::from_scalar(zero_slot_timestamp),
-            };
-            vec![value]
-        };
-        let ram_iter = self
-            .touched_words_in_page_counts
+        self.touched_words_in_page_counts
             .iter()
             .copied()
             .enumerate()
@@ -109,12 +96,11 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool>
                     Some(index << ROM_WORDS_LOG_SIZE)
                 }
             })
-            .flat_map(move |index| (index..index + ROM_WORDS_SIZE).filter_map(get_value_fn));
-        zero_slot_contribution.into_iter().chain(ram_iter)
+            .flat_map(move |index| (index..index + ROM_WORDS_SIZE).filter_map(get_value_fn))
     }
 }
 
-impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool> RAM
+impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool> RamPeek
     for RamWithRomRegion<RAM_LOG_SIZE, TRACK_TOUCHED_RAM>
 {
     #[inline(always)]
@@ -124,22 +110,22 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool> RAM
         let word_idx = (address >> 2) as usize;
         unsafe { *self.word_values.get_unchecked(word_idx) }
     }
+}
 
+impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool> RAM
+    for RamWithRomRegion<RAM_LOG_SIZE, TRACK_TOUCHED_RAM>
+{
     #[inline(always)]
     fn read_word(&mut self, address: u32, timestamp: TimestampScalar) -> (TimestampScalar, u32) {
         debug_assert_eq!(address & 3, 0);
         debug_assert_eq!(address >> RAM_LOG_SIZE, 0);
         let word_idx = (address >> 2) as usize;
-        let read_timestamp = if address & !ROM_BOUND_MASK == 0 {
-            let timestamp_ref = unsafe { self.word_timestamps.get_unchecked_mut(0) };
-            replace(timestamp_ref, timestamp | 1)
-        } else {
-            let timestamp_ref = unsafe { self.word_timestamps.get_unchecked_mut(word_idx) };
-            let read_timestamp = replace(timestamp_ref, timestamp | 1);
-            self.touch_word(word_idx, read_timestamp);
-            read_timestamp
-        };
+        let timestamp_ref = unsafe { self.word_timestamps.get_unchecked_mut(word_idx) };
+        let read_timestamp = replace(timestamp_ref, timestamp | 1);
         debug_assert!(read_timestamp < timestamp | 1);
+        if address & !ROM_BOUND_MASK != 0 {
+            self.touch_word(word_idx, read_timestamp);
+        };
         let word = unsafe { *self.word_values.get_unchecked(word_idx) };
         (read_timestamp, word)
     }
@@ -165,5 +151,10 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool> RAM
         let value_ref = unsafe { self.word_values.get_unchecked_mut(word_idx) };
         let read_word = replace(value_ref, word);
         (read_timestamp, read_word)
+    }
+
+    #[inline(always)]
+    fn skip_if_replaying(&mut self, _num_snapshots: usize) {
+        panic!("RamWithRomRegion must not be used in replayer");
     }
 }
