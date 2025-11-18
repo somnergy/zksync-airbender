@@ -59,44 +59,49 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool>
     }
 
     pub fn get_touched_words_count(&self) -> u32 {
-        self.touched_words_in_page_counts
-            .iter()
-            .skip(1)
-            .copied()
-            .sum::<u32>()
+        self.touched_words_in_page_counts.iter().sum::<u32>()
+    }
+
+    unsafe fn get_init_and_teardown_value<const IS_RAM: bool>(
+        &self,
+        index: usize,
+    ) -> Option<LazyInitAndTeardown> {
+        let timestamp = *self.word_timestamps.get_unchecked(index);
+        if timestamp == 0 {
+            None
+        } else {
+            let teardown_value = if IS_RAM {
+                *self.word_values.get_unchecked(index)
+            } else {
+                0
+            };
+            let result = LazyInitAndTeardown {
+                address: (index as u32) << 2,
+                teardown_value,
+                teardown_timestamp: TimestampData::from_scalar(timestamp),
+            };
+            Some(result)
+        }
     }
 
     pub fn get_inits_and_teardowns_iterator(
         &self,
     ) -> impl Iterator<Item = LazyInitAndTeardown> + '_ {
-        let timestamps = &self.word_timestamps;
-        let values = &self.word_values;
-        let get_value_fn = |index| unsafe {
-            let timestamp = *timestamps.get_unchecked(index);
-            if timestamp == 0 {
-                None
-            } else {
-                let result = LazyInitAndTeardown {
-                    address: (index as u32) << 2,
-                    teardown_value: *values.get_unchecked(index),
-                    teardown_timestamp: TimestampData::from_scalar(timestamp),
-                };
-                Some(result)
-            }
-        };
         self.touched_words_in_page_counts
             .iter()
             .copied()
             .enumerate()
-            .skip(1)
-            .filter_map(|(index, count)| {
-                if count == 0 {
-                    None
+            .filter_map(|(page_index, count)| if count == 0 { None } else { Some(page_index) })
+            .flat_map(move |page_index| {
+                let value_index = page_index << ROM_WORDS_LOG_SIZE;
+                let range = value_index..value_index + ROM_WORDS_SIZE;
+                let f = if page_index == 0 {
+                    Self::get_init_and_teardown_value::<false>
                 } else {
-                    Some(index << ROM_WORDS_LOG_SIZE)
-                }
+                    Self::get_init_and_teardown_value::<true>
+                };
+                range.filter_map(move |i| unsafe { f(self, i) })
             })
-            .flat_map(move |index| (index..index + ROM_WORDS_SIZE).filter_map(get_value_fn))
     }
 }
 
@@ -123,9 +128,7 @@ impl<const RAM_LOG_SIZE: u32, const TRACK_TOUCHED_RAM: bool> RAM
         let timestamp_ref = unsafe { self.word_timestamps.get_unchecked_mut(word_idx) };
         let read_timestamp = replace(timestamp_ref, timestamp | 1);
         debug_assert!(read_timestamp < timestamp | 1);
-        if address & !ROM_BOUND_MASK != 0 {
-            self.touch_word(word_idx, read_timestamp);
-        };
+        self.touch_word(word_idx, read_timestamp);
         let word = unsafe { *self.word_values.get_unchecked(word_idx) };
         (read_timestamp, word)
     }
