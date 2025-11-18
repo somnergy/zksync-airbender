@@ -165,7 +165,7 @@ pub fn get_decoder_table_for_rom_bound<
         &[],
     );
 
-    t.remove(&common_constants::circuit_families::LOAD_STORE_CIRCUIT_FAMILY_IDX)
+    t.remove(&common_constants::circuit_families::LOAD_STORE_SUBWORD_ONLY_CIRCUIT_FAMILY_IDX)
         .expect("decoder data")
 }
 
