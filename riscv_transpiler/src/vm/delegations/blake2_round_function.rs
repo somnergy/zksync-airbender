@@ -89,32 +89,34 @@ pub(crate) fn blake2_round_function_call<C: Counters, S: Snapshotter<C>, R: RAM>
     let compression_mode_node_is_right =
         control_bitmask & TEST_IF_INPUT_IS_RIGHT_NODE_MASK == TEST_IF_INPUT_IS_RIGHT_NODE_MASK;
 
-    let permutation_bitmask = x12 >> (16 + BLAKE2S_NUM_CONTROL_BITS);
-    assert!(
-        permutation_bitmask.is_power_of_two(),
-        "permutation bitmask must be a bitmask, but got 0b{:b}",
-        permutation_bitmask
-    );
-    let permutation_index = permutation_bitmask.trailing_zeros() as usize;
-    assert_eq!(permutation_index, 0);
+    {
+        let permutation_bitmask = x12 >> (16 + BLAKE2S_NUM_CONTROL_BITS);
+        assert!(
+            permutation_bitmask.is_power_of_two(),
+            "permutation bitmask must be a bitmask, but got 0b{:b}",
+            permutation_bitmask
+        );
+        let permutation_index = permutation_bitmask.trailing_zeros() as usize;
+        assert_eq!(permutation_index, 0);
+    }
 
-    let shifted_permutation_bitmask = if reduced_rounds {
+    let final_permutation_bitmask = if reduced_rounds {
         (1 << 7) & ((1 << BLAKE2S_MAX_ROUNDS) - 1)
     } else {
         (1 << 10) & ((1 << BLAKE2S_MAX_ROUNDS) - 1)
     };
-    let updated_x12 =
-        (control_bitmask | (shifted_permutation_bitmask << BLAKE2S_NUM_CONTROL_BITS)) << 16;
+    let final_x12 =
+        (control_bitmask | (final_permutation_bitmask << BLAKE2S_NUM_CONTROL_BITS)) << 16;
 
     let num_rounds = if reduced_rounds { 7 } else { 10 };
 
     state.registers[10].timestamp =
-        state.timestamp + (num_rounds as TimestampScalar) * TIMESTAMP_STEP + 3;
+        state.timestamp + ((num_rounds - 1) as TimestampScalar) * TIMESTAMP_STEP + 3;
     state.registers[11].timestamp =
-        state.timestamp + (num_rounds as TimestampScalar) * TIMESTAMP_STEP + 3;
+        state.timestamp + ((num_rounds - 1) as TimestampScalar) * TIMESTAMP_STEP + 3;
     state.registers[12].timestamp =
-        state.timestamp + (num_rounds as TimestampScalar) * TIMESTAMP_STEP + 3;
-    state.registers[12].value = updated_x12;
+        state.timestamp + ((num_rounds - 1) as TimestampScalar) * TIMESTAMP_STEP + 3;
+    state.registers[12].value = final_x12;
 
     // NOTE: we should touch x0 and give it a timestamp that would be at the very end of execution
     state.registers[0].timestamp =

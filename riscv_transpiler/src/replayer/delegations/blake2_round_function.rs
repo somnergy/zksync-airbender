@@ -100,13 +100,13 @@ pub(crate) fn blake2_round_function_call<C: Counters, R: RAM>(
         assert_eq!(permutation_index, 0);
     }
 
-    let shifted_permutation_bitmask = if reduced_rounds {
+    let final_shifter_permutation_bitmask = if reduced_rounds {
         (1 << 7) & ((1 << BLAKE2S_MAX_ROUNDS) - 1)
     } else {
         (1 << 10) & ((1 << BLAKE2S_MAX_ROUNDS) - 1)
     };
-    let updated_x12 =
-        (control_bitmask | (shifted_permutation_bitmask << BLAKE2S_NUM_CONTROL_BITS)) << 16;
+    let final_x12 =
+        (control_bitmask | (final_shifter_permutation_bitmask << BLAKE2S_NUM_CONTROL_BITS)) << 16;
 
     let num_rounds = if reduced_rounds { 7 } else { 10 };
 
@@ -124,7 +124,7 @@ pub(crate) fn blake2_round_function_call<C: Counters, R: RAM>(
         state.registers[11].timestamp = state.timestamp | 3;
         state.registers[12].timestamp = state.timestamp | 3;
 
-        state.registers[12].value = updated_x12;
+        state.registers[12].value = final_x12;
 
         return;
     }
@@ -179,9 +179,8 @@ pub(crate) fn blake2_round_function_call<C: Counters, R: RAM>(
 
     if needs_delegation_data {
         let mut current_timestamp = timestamp_on_entry;
-        let upper_bound_read_timestamp = timestamp_on_entry
-            + (((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP)
-            + 3;
+        let upper_bound_read_timestamp =
+            timestamp_on_entry + (((num_rounds - 1) as TimestampScalar) * TIMESTAMP_STEP) + 3;
         let artificial_read_timestamp = upper_bound_read_timestamp + 1;
 
         unsafe {
@@ -370,7 +369,7 @@ pub(crate) fn blake2_round_function_call<C: Counters, R: RAM>(
         state.registers[11].timestamp = state.timestamp | 3;
         state.registers[12].timestamp = state.timestamp | 3;
 
-        state.registers[12].value = updated_x12;
+        state.registers[12].value = final_x12;
     } else {
         // skip all memory side effects
         ram.skip_if_replaying(24 + 16);
@@ -380,6 +379,6 @@ pub(crate) fn blake2_round_function_call<C: Counters, R: RAM>(
         state.registers[11].timestamp = state.timestamp | 3;
         state.registers[12].timestamp = state.timestamp | 3;
 
-        state.registers[12].value = updated_x12;
+        state.registers[12].value = final_x12;
     }
 }
