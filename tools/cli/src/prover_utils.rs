@@ -4,7 +4,10 @@ pub use execution_utils::{
     get_padded_binary, Machine, ProgramProof, ProofList, ProofMetadata, RecursionStrategy,
 };
 use execution_utils::{
-    unrolled::{UnrolledProgramProof, UnrolledProgramSetup},
+    unrolled::{
+        flatten_proof_into_responses_for_unrolled_recursion, UnrolledProgramProof,
+        UnrolledProgramSetup,
+    },
     verifier_binaries::UNIVERSAL_CIRCUIT_VERIFIER,
 };
 use gpu_prover::{
@@ -954,11 +957,17 @@ impl UnrolledProver {
         let proof = {
             let start_time = std::time::Instant::now();
 
-            let mut witness = self.base_level.setup.flatten_for_recursion();
+            /*let mut witness = self.base_level.setup.flatten_for_recursion();
             witness.extend(base_proof.flatten_into_responses(
                 &[1984, 1991, 1994, 1995],
                 &self.base_level.compiled_layouts,
-            ));
+            ));*/
+            let witness = flatten_proof_into_responses_for_unrolled_recursion(
+                &base_proof,
+                &self.base_level.setup,
+                &self.base_level.compiled_layouts,
+                true,
+            );
             let source = QuasiUARTSource::new_with_reads(witness);
             let result = self
                 .prover
@@ -993,8 +1002,16 @@ impl UnrolledProver {
 
         for round in 0..6 {
             let start_time = std::time::Instant::now();
-            let mut witness = previous_setup.flatten_for_recursion();
-            witness.extend(proof.flatten_into_responses(&[1991], &previous_compiled_layouts));
+            //let mut witness = previous_setup.flatten_for_recursion();
+            //witness.extend(proof.flatten_into_responses(&[1991], &previous_compiled_layouts));
+
+            let witness = flatten_proof_into_responses_for_unrolled_recursion(
+                &proof,
+                &previous_setup,
+                &previous_compiled_layouts,
+                false,
+            );
+
             let source = QuasiUARTSource::new_with_reads(witness);
             let result = self
                 .prover
