@@ -2,12 +2,12 @@
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 
+use crate::machine::ops::unrolled::SubwordOnlyMemoryFamilyDecoder;
 use common_constants::circuit_families::LOAD_STORE_SUBWORD_ONLY_CIRCUIT_FAMILY_IDX;
 use prover::cs::cs::circuit::Circuit;
 use prover::cs::cs::oracle::ExecutorFamilyDecoderData;
-use prover::cs::machine::ops::unrolled::DecoderTableEntry;
-use crate::machine::ops::unrolled::SubwordOnlyMemoryFamilyDecoder;
 use prover::cs::machine::ops::unrolled::compile_unrolled_circuit_state_transition;
+use prover::cs::machine::ops::unrolled::DecoderTableEntry;
 use prover::cs::*;
 use prover::fft::GoodAllocator;
 use prover::field::Mersenne31Field;

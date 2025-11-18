@@ -5,8 +5,8 @@
 use common_constants::circuit_families::LOAD_STORE_WORD_ONLY_CIRCUIT_FAMILY_IDX;
 use prover::cs::cs::circuit::Circuit;
 use prover::cs::cs::oracle::ExecutorFamilyDecoderData;
-use prover::cs::machine::ops::unrolled::{DecoderTableEntry, WordOnlyMemoryFamilyDecoder};
 use prover::cs::machine::ops::unrolled::compile_unrolled_circuit_state_transition;
+use prover::cs::machine::ops::unrolled::{DecoderTableEntry, WordOnlyMemoryFamilyDecoder};
 use prover::cs::*;
 use prover::fft::GoodAllocator;
 use prover::field::Mersenne31Field;
