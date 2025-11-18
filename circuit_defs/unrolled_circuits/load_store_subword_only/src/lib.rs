@@ -6,9 +6,8 @@ use common_constants::circuit_families::LOAD_STORE_SUBWORD_ONLY_CIRCUIT_FAMILY_I
 use prover::cs::cs::circuit::Circuit;
 use prover::cs::cs::oracle::ExecutorFamilyDecoderData;
 use prover::cs::machine::ops::unrolled::DecoderTableEntry;
-use prover::cs::machine::ops::unrolled::{
-    compile_unrolled_circuit_state_transition, MemoryFamilyDecoder,
-};
+use crate::machine::ops::unrolled::SubwordOnlyMemoryFamilyDecoder;
+use prover::cs::machine::ops::unrolled::compile_unrolled_circuit_state_transition;
 use prover::cs::*;
 use prover::fft::GoodAllocator;
 use prover::field::Mersenne31Field;
@@ -161,7 +160,7 @@ pub fn get_decoder_table_for_rom_bound<
     use crate::machine::ops::unrolled::process_binary_into_separate_tables_ext;
     let mut t = process_binary_into_separate_tables_ext::<Mersenne31Field, true, A>(
         bytecode,
-        &[Box::new(MemoryFamilyDecoder)],
+        &[Box::new(SubwordOnlyMemoryFamilyDecoder)],
         num_bytecode_words,
         &[],
     );
