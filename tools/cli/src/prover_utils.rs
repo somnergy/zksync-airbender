@@ -810,14 +810,10 @@ pub struct UnrolledProverLevel {
     pub compiled_layouts: CompiledCircuitsSet,
 }
 
-pub const RECURSION_OVER_BASE_BIN: &[u8] = include_bytes!("../../verifier/unrolled_base_layer.bin");
-pub const RECURSION_OVER_BASE_TXT: &[u8] =
-    include_bytes!("../../verifier/unrolled_base_layer.text");
-
-pub const RECURSION_OVER_RECURSION_BIN: &[u8] =
-    include_bytes!("../../verifier/unrolled_recursion_layer.bin");
-pub const RECURSION_OVER_RECURSION_TXT: &[u8] =
-    include_bytes!("../../verifier/unrolled_recursion_layer.text");
+pub const RECURSION_UNROLLED_BIN: &[u8] =
+    include_bytes!("../../verifier/recursion_in_unrolled_layer.bin");
+pub const RECURSION_UNROLLED_TXT: &[u8] =
+    include_bytes!("../../verifier/recursion_in_unrolled_layer.text");
 
 impl UnrolledProver {
     pub fn new(path_without_bin: &String) -> Self {
@@ -849,8 +845,8 @@ impl UnrolledProver {
         };
 
         let recursion_over_base = {
-            let (binary, binary_u32) = pad_binary(RECURSION_OVER_BASE_BIN.to_vec());
-            let (text, text_u32) = pad_binary(RECURSION_OVER_BASE_TXT.to_vec());
+            let (binary, binary_u32) = pad_binary(RECURSION_UNROLLED_BIN.to_vec());
+            let (text, text_u32) = pad_binary(RECURSION_UNROLLED_TXT.to_vec());
 
             println!("Computing recursion over base setup");
 
@@ -873,8 +869,8 @@ impl UnrolledProver {
         };
 
         let recursion_over_recursion = {
-            let (binary, binary_u32) = pad_binary(RECURSION_OVER_RECURSION_BIN.to_vec());
-            let (text, text_u32) = pad_binary(RECURSION_OVER_RECURSION_TXT.to_vec());
+            let (binary, binary_u32) = pad_binary(RECURSION_UNROLLED_BIN.to_vec());
+            let (text, text_u32) = pad_binary(RECURSION_UNROLLED_TXT.to_vec());
 
             println!("Computing recursion over recursion setup");
 
