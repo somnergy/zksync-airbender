@@ -232,10 +232,10 @@ impl<C: Counters> ReplayerVM<C> {
                     }
                     _ => core::hint::unreachable_unchecked(),
                 }
+                state.timestamp += TIMESTAMP_STEP;
                 if state.pc == pc {
                     return;
                 }
-                state.timestamp += TIMESTAMP_STEP;
             }
         }
     }
