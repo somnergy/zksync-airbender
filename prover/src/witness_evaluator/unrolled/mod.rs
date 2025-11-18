@@ -510,7 +510,6 @@ pub fn run_unrolled_machine<
         last_access_timestamp: el.timestamp,
     });
 
-    let total_snapshots = snapshotter.snapshots.len();
     let exact_cycles_passed = (state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
     let final_pc = state.pc;
     let final_timestamp = state.timestamp;
@@ -976,7 +975,7 @@ pub fn run_unified_machine<
     )
 }
 
-fn replay_non_mem<
+pub(crate) fn replay_non_mem<
     const FAMILY_IDX: u8,
     A: GoodAllocator,
     const ROM_BOUND_SECOND_WORD_BITS: usize,
@@ -1216,7 +1215,7 @@ fn replay_non_mem<
     result
 }
 
-fn replay_mem<const FAMILY_IDX: u8, A: GoodAllocator, const ROM_BOUND_SECOND_WORD_BITS: usize>(
+pub(crate) fn replay_mem<const FAMILY_IDX: u8, A: GoodAllocator, const ROM_BOUND_SECOND_WORD_BITS: usize>(
     tape: &impl riscv_transpiler::vm::InstructionTape,
     snapshotter: &riscv_transpiler::vm::SimpleSnapshotter<
         riscv_transpiler::vm::DelegationsAndFamiliesCounters,
@@ -1452,7 +1451,7 @@ fn replay_mem<const FAMILY_IDX: u8, A: GoodAllocator, const ROM_BOUND_SECOND_WOR
     result
 }
 
-fn replay_generic_work<
+pub(crate) fn replay_generic_work<
     A: GoodAllocator,
     const ROM_BOUND_SECOND_WORD_BITS: usize,
     D: riscv_transpiler::witness::DestinationHolderConstructor,

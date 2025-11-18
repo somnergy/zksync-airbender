@@ -61,7 +61,7 @@ impl<C: Counters> State<C> {
 pub trait Snapshotter<C: Counters> {
     fn take_snapshot_if_needed(&mut self, state: &State<C>);
     fn take_final_snapshot(&mut self, state: &State<C>);
-    fn append_non_determinism_read(&mut self, value: u32);
+    fn append_arbitrary_value(&mut self, value: u32);
     fn append_memory_read(
         &mut self,
         address: u32,
@@ -77,7 +77,7 @@ impl<C: Counters> Snapshotter<C> for () {
     #[inline(always)]
     fn take_final_snapshot(&mut self, state: &State<C>) {}
     #[inline(always)]
-    fn append_non_determinism_read(&mut self, _value: u32) {}
+    fn append_arbitrary_value(&mut self, _value: u32) {}
     #[inline(always)]
     fn append_memory_read(
         &mut self,
@@ -124,6 +124,14 @@ pub trait RAM: RamPeek {
         word: u32,
         timestamp: TimestampScalar,
     ) -> (TimestampScalar, u32);
+    fn skip_if_replaying(&mut self, num_snapshots: usize);
+}
+
+// TODO
+pub trait ReplayableRam: RamPeek {
+    fn mask_read_for_witness(&self, address: &mut u32, value: &mut u32);
+    fn read_arbitrary_value(&self) -> u32;
+    fn skip(&mut self, num_snapshots: usize);
 }
 
 pub trait InstructionTape: Send + Sync {
@@ -471,5 +479,65 @@ pub(crate) mod test {
         dbg!(&state.registers[10..18]);
 
         dbg!(state.registers[0]);
+    }
+
+    #[test]
+    fn test_reference_block_exec() {
+        use crate::ir::*;
+        use risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
+
+        let (_, binary) = read_binary(&Path::new("examples/zksync_os/app.bin"));
+        let (_, text) = read_binary(&Path::new("examples/zksync_os/app.text"));
+
+        let (witness, _) = read_binary(&Path::new("examples/zksync_os/23620012_witness"));
+        let witness = hex::decode(core::str::from_utf8(&witness).unwrap()).unwrap();
+        let witness: Vec<_> = witness
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|el| u32::from_be_bytes(*el))
+            .collect();
+        let mut source = QuasiUARTSource::new_with_reads(witness);
+
+        let instructions: Vec<Instruction> =
+            preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(&text);
+        let tape = SimpleTape::new(&instructions);
+        let mut ram =
+            RamWithRomRegion::<{ common_constants::rom::ROM_SECOND_WORD_BITS }>::from_rom_content(
+                &binary,
+                1 << 30,
+            );
+
+        let cycles_bound = 1 << 30;
+
+        let mut state = State::initial_with_counters(DelegationsCounters::default());
+        let mut snapshotter = SimpleSnapshotter::new_with_cycle_limit(cycles_bound, state);
+
+        let now = std::time::Instant::now();
+        VM::<DelegationsCounters>::run_basic_unrolled::<
+            SimpleSnapshotter<DelegationsCounters, { common_constants::rom::ROM_SECOND_WORD_BITS }>,
+            _,
+            _,
+        >(
+            &mut state,
+            &mut ram,
+            &mut snapshotter,
+            &tape,
+            cycles_bound,
+            &mut source,
+        );
+        let elapsed = now.elapsed();
+
+        let final_timestamp = state.timestamp;
+        assert_eq!(final_timestamp % TIMESTAMP_STEP, 0);
+        let num_instructions = (final_timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
+        println!(
+            "Frequency is {} MHz over {} instructions",
+            (num_instructions as f64) * 1000f64 / (elapsed.as_nanos() as f64),
+            num_instructions,
+        );
+
+        println!("PC = 0x{:08x}", state.pc);
+        dbg!(state.registers.map(|el| el.value));
     }
 }

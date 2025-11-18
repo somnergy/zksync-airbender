@@ -14,22 +14,24 @@ pub(crate) fn jal<C: Counters, R: RAM>(
 
     let jump_address = state.pc.wrapping_add(instr.imm);
 
-    let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
-        opcode_data: NonMemoryOpcodeTracingData {
-            initial_pc: state.pc,
-            rs1_value: 0,
-            rs2_value: 0,
-            rd_old_value,
-            rd_value: rd,
-            new_pc: jump_address,
-            delegation_type: 0,
-        },
-        rs1_read_timestamp: TimestampData::from_scalar(rs1_ts),
-        rs2_read_timestamp: TimestampData::from_scalar(rs2_ts),
-        rd_read_timestamp: TimestampData::from_scalar(rd_ts),
-        cycle_timestamp: TimestampData::from_scalar(state.timestamp),
-    };
-    tracer.write_non_memory_family_data::<JUMP_BRANCH_SLT_CIRCUIT_FAMILY_IDX>(traced_data);
+    if tracer.needs_tracing_data_for_circuit_family::<JUMP_BRANCH_SLT_CIRCUIT_FAMILY_IDX>() {
+        let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
+            opcode_data: NonMemoryOpcodeTracingData {
+                initial_pc: state.pc,
+                rs1_value: 0,
+                rs2_value: 0,
+                rd_old_value,
+                rd_value: rd,
+                new_pc: jump_address,
+                delegation_type: 0,
+            },
+            rs1_read_timestamp: TimestampData::from_scalar(rs1_ts),
+            rs2_read_timestamp: TimestampData::from_scalar(rs2_ts),
+            rd_read_timestamp: TimestampData::from_scalar(rd_ts),
+            cycle_timestamp: TimestampData::from_scalar(state.timestamp),
+        };
+        tracer.write_non_memory_family_data::<JUMP_BRANCH_SLT_CIRCUIT_FAMILY_IDX>(traced_data);
+    }
     state.pc = jump_address;
 }
 
@@ -47,21 +49,23 @@ pub(crate) fn jalr<C: Counters, R: RAM>(
 
     let jump_address = rs1_value.wrapping_add(instr.imm) & !0x1;
 
-    let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
-        opcode_data: NonMemoryOpcodeTracingData {
-            initial_pc: state.pc,
-            rs1_value,
-            rs2_value: 0,
-            rd_old_value,
-            rd_value: rd,
-            new_pc: jump_address,
-            delegation_type: 0,
-        },
-        rs1_read_timestamp: TimestampData::from_scalar(rs1_ts),
-        rs2_read_timestamp: TimestampData::from_scalar(rs2_ts),
-        rd_read_timestamp: TimestampData::from_scalar(rd_ts),
-        cycle_timestamp: TimestampData::from_scalar(state.timestamp),
-    };
-    tracer.write_non_memory_family_data::<JUMP_BRANCH_SLT_CIRCUIT_FAMILY_IDX>(traced_data);
+    if tracer.needs_tracing_data_for_circuit_family::<JUMP_BRANCH_SLT_CIRCUIT_FAMILY_IDX>() {
+        let traced_data = NonMemoryOpcodeTracingDataWithTimestamp {
+            opcode_data: NonMemoryOpcodeTracingData {
+                initial_pc: state.pc,
+                rs1_value,
+                rs2_value: 0,
+                rd_old_value,
+                rd_value: rd,
+                new_pc: jump_address,
+                delegation_type: 0,
+            },
+            rs1_read_timestamp: TimestampData::from_scalar(rs1_ts),
+            rs2_read_timestamp: TimestampData::from_scalar(rs2_ts),
+            rd_read_timestamp: TimestampData::from_scalar(rd_ts),
+            cycle_timestamp: TimestampData::from_scalar(state.timestamp),
+        };
+        tracer.write_non_memory_family_data::<JUMP_BRANCH_SLT_CIRCUIT_FAMILY_IDX>(traced_data);
+    }
     state.pc = jump_address;
 }

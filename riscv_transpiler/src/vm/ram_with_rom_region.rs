@@ -83,6 +83,11 @@ impl<const ROM_BOUND_SECOND_WORD_BITS: usize> RAM for RamWithRomRegion<ROM_BOUND
         }
     }
 
+    #[inline(always)]
+    fn skip_if_replaying(&mut self, num_snapshots: usize) {
+        panic!("mustn not be used in replayer");
+    }
+
     // #[inline(always)]
     // fn read_word(&mut self, address: u32, timestamp: TimestampScalar) -> (TimestampScalar, u32) {
     //     debug_assert_eq!(address % 4, 0);

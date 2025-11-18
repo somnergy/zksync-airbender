@@ -10,6 +10,9 @@ use risc_v_simulator::machine_mode_only_unrolled::{
 };
 
 pub trait WitnessTracer {
+    fn needs_tracing_data_for_circuit_family<const FAMILY: u8>(&self) -> bool;
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE: u16>(&self) -> bool;
+
     fn write_non_memory_family_data<const FAMILY: u8>(
         &mut self,
         data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -67,6 +70,14 @@ impl<
         VARIABLE_OFFSETS,
     >
 {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY: u8>(&self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        DELEGATION_TYPE_T == DELEGATION_TYPE
+    }
     fn write_non_memory_family_data<const FAMILY: u8>(
         &mut self,
         _data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -181,6 +192,14 @@ impl<
         VARIABLE_OFFSETS,
     >
 {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY: u8>(&self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        DELEGATION_TYPE_T == DELEGATION_TYPE
+    }
     fn write_non_memory_family_data<const FAMILY: u8>(
         &mut self,
         _data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -276,6 +295,14 @@ pub struct NonMemDestinationHolder<'a, const FAMILY: u8> {
 
 impl<'a, const FAMILY: u8> WitnessTracer for NonMemDestinationHolder<'a, FAMILY> {
     #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY_T: u8>(&self) -> bool {
+        FAMILY_T == FAMILY
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        false
+    }
+    #[inline(always)]
     fn write_non_memory_family_data<const FAMILY_T: u8>(
         &mut self,
         data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -329,6 +356,14 @@ pub struct UninitNonMemDestinationHolder<'a, const FAMILY: u8> {
 
 impl<'a, const FAMILY: u8> WitnessTracer for UninitNonMemDestinationHolder<'a, FAMILY> {
     #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY_T: u8>(&self) -> bool {
+        FAMILY_T == FAMILY
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        false
+    }
+    #[inline(always)]
     fn write_non_memory_family_data<const FAMILY_T: u8>(
         &mut self,
         data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -381,6 +416,14 @@ pub struct MemDestinationHolder<'a, const FAMILY: u8> {
 }
 
 impl<'a, const FAMILY: u8> WitnessTracer for MemDestinationHolder<'a, FAMILY> {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY_T: u8>(&self) -> bool {
+        FAMILY_T == FAMILY
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        false
+    }
     fn write_non_memory_family_data<const FAMILY_T: u8>(
         &mut self,
         _data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -433,6 +476,14 @@ pub struct UninitMemDestinationHolder<'a, const FAMILY: u8> {
 }
 
 impl<'a, const FAMILY: u8> WitnessTracer for UninitMemDestinationHolder<'a, FAMILY> {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY_T: u8>(&self) -> bool {
+        FAMILY_T == FAMILY
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        false
+    }
     fn write_non_memory_family_data<const FAMILY_T: u8>(
         &mut self,
         _data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -485,6 +536,14 @@ pub struct UnifiedDestinationHolder<'a> {
 }
 
 impl<'a> WitnessTracer for UnifiedDestinationHolder<'a> {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY_T: u8>(&self) -> bool {
+        true
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        false
+    }
     fn write_non_memory_family_data<const FAMILY_T: u8>(
         &mut self,
         data: NonMemoryOpcodeTracingDataWithTimestamp,
@@ -551,6 +610,14 @@ pub struct UninitUnifiedDestinationHolder<'a> {
 }
 
 impl<'a> WitnessTracer for UninitUnifiedDestinationHolder<'a> {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY_T: u8>(&self) -> bool {
+        true
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE_T: u16>(&self) -> bool {
+        false
+    }
     fn write_non_memory_family_data<const FAMILY_T: u8>(
         &mut self,
         data: NonMemoryOpcodeTracingDataWithTimestamp,

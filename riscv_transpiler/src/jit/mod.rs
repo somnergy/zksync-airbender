@@ -26,7 +26,7 @@ const NUM_RAM_WORDS: usize = RAM_SIZE / core::mem::size_of::<u32>();
 pub const TRACE_CHUNK_LEN: usize = 1 << 20;
 pub const MAX_TRACE_CHUNK_LEN: usize = const {
     let mut max = core::cmp::max(24 + 16, 31 * 2);
-    max = core::cmp::max(max, 8 + 8);
+    max = core::cmp::max(max, 8 + 8 + 1);
 
     TRACE_CHUNK_LEN + max
 };

@@ -13,7 +13,7 @@ pub(crate) fn nd_read<C: Counters, S: Snapshotter<C>, R: RAM, ND: NonDeterminism
 
     touch_x0::<C, 1>(state);
     let mut rd = nd.read();
-    snapshotter.append_non_determinism_read(rd);
+    snapshotter.append_arbitrary_value(rd);
     write_register::<C, 2>(state, instr.rd, &mut rd);
     default_increase_pc::<C>(state);
     increment_family_counter::<C, SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>(state);

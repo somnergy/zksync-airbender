@@ -105,6 +105,20 @@ impl<'a, const ROM_BOUND_SECOND_WORD_BITS: usize> RAM
             (read_timestamp, value)
         }
     }
+
+    #[inline(always)]
+    fn skip_if_replaying(&mut self, num_snapshots: usize) {
+        unsafe {
+            let src = self.ram_log.get_unchecked_mut(0);
+            debug_assert!(src.len() >= num_snapshots);
+            let next = src.get_unchecked(num_snapshots..);
+            if next.len() > 0 {
+                *src = next;
+            } else {
+                self.ram_log = core::mem::transmute(self.ram_log.get_unchecked_mut(1..));
+            }
+        }
+    }
 }
 
 impl<'a> NonDeterminismCSRSource for ReplayerNonDeterminism<'a> {

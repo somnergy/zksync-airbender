@@ -15,9 +15,11 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
     ram: &mut R,
     tracer: &mut impl WitnessTracer,
 ) {
-    // NOTE: we need to produce witness not just to individual precompiles, but also potentially to calling circuit
+    let needs_cycle_data =
+        tracer.needs_tracing_data_for_circuit_family::<SHIFT_BINARY_CSR_CIRCUIT_FAMILY_IDX>();
+    let needs_delegation_data = tracer.needs_tracing_data_for_delegation_type::<{common_constants::keccak_special5::KECCAK_SPECIAL5_CSR_REGISTER as u16}>();
 
-    let x10 = state.registers[10].value; // don't process it just yet, wait for write!
+    let x10 = state.registers[10].value;
     let x11 = state.registers[11].value;
     debug_assert_eq!(state.timestamp % 4, 0);
     assert!(
@@ -29,38 +31,35 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
 
     assert_eq!(x10, common_constants::INITIAL_KECCAK_F1600_CONTROL_VALUE);
 
-    let upper_bound_read_timestamp = state.timestamp
-        + (((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP)
-        + 3;
-    let artificial_read_timestamp = upper_bound_read_timestamp + 1;
+    // we have absolutely happy case if we do NOT need any tracing data - just touch x0 enough times, bump PC + timestamp, and update x10
 
-    // now we need to be careful with accessed state elements. We always access u64s only, and for replaying purposes we will need
-    // to read 31 state elements (for snapshot), and then we will work over the
-    unsafe {
-        // we are fine to NOT keep track on the initial timestamps, as we only need final write ones
-        let mut local_state: [MaybeUninit<u64>; 31] = [const { MaybeUninit::uninit() }; 31];
-        let mut local_state_timestamps: [MaybeUninit<TimestampScalar>; 31 * 2] =
-            [const { MaybeUninit::uninit() }; 31 * 2];
+    if needs_cycle_data == false && needs_delegation_data == false {
+        ram.skip_if_replaying(31 * 2);
 
-        let mut addr = x11;
-        for i in 0..31 {
-            // low and high
-            let (low_ts, low_value) = ram.read_word(addr, artificial_read_timestamp);
-            addr += 4;
-            let (high_ts, high_value) = ram.read_word(addr, artificial_read_timestamp);
-            addr += 4;
+        state.timestamp +=
+            ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP;
+        state.pc = state.pc.wrapping_add(
+            (core::mem::size_of::<u32>() * common_constants::NUM_DELEGATION_CALLS_FOR_KECCAK_F1600)
+                as u32,
+        );
 
-            local_state[i].write((low_value as u64) | ((high_value as u64) << 32));
-            local_state_timestamps[2 * i].write(low_ts);
-            local_state_timestamps[2 * i + 1].write(high_ts);
-        }
-        let mut local_state = local_state.map(|el| el.assume_init());
-        let mut local_state_timestamps = local_state_timestamps.map(|el| el.assume_init());
+        state.registers[0].timestamp = state.timestamp | 2;
 
+        state.registers[10].value = common_constants::FINAL_KECCAK_F1600_CONTROL_VALUE;
+        state.registers[10].timestamp = state.timestamp | 3;
+
+        state.registers[11].timestamp = state.timestamp | 3;
+
+        return;
+    }
+
+    let timestamp_on_entry = state.timestamp;
+
+    // branches below will update state.pc and state.timestamp
+    if needs_cycle_data {
+        // touch x0 many times and formally record
         for call_round in 0..NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 {
             let last_round = call_round == NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1;
-            // NOTE: we should produce witness potentially for both calling cycle circuit, and delegation circuit
-
             {
                 // cycle
                 let next_pc = state.pc.wrapping_add(4);
@@ -88,25 +87,79 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
                 state.pc = next_pc;
             }
 
-            // delegation call
-            {
+            if last_round == false {
+                state.timestamp += TIMESTAMP_STEP;
+            }
+        }
+    } else {
+        state.timestamp +=
+            ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP;
+        state.pc = state.pc.wrapping_add(
+            (core::mem::size_of::<u32>() * common_constants::NUM_DELEGATION_CALLS_FOR_KECCAK_F1600)
+                as u32,
+        );
+
+        state.registers[0].timestamp = state.timestamp | 2;
+    }
+
+    // here we can no longer use state.timestamp for a good notion of time, so we use saved one
+    if needs_delegation_data {
+        let mut current_timestamp = timestamp_on_entry;
+        let upper_bound_read_timestamp = timestamp_on_entry
+            + (((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP)
+            + 3;
+        let artificial_read_timestamp = upper_bound_read_timestamp + 1;
+
+        // now we need to be careful with accessed state elements. We always access u64s only, and for replaying purposes we will need
+        // to read 31 state elements (for snapshot), and then we will work over the
+        unsafe {
+            // we are fine to NOT keep track on the initial timestamps, as we only need final write ones
+            let mut local_state: [MaybeUninit<u64>; 31] = [const { MaybeUninit::uninit() }; 31];
+            let mut local_state_timestamps: [MaybeUninit<TimestampScalar>; 31 * 2] =
+                [const { MaybeUninit::uninit() }; 31 * 2];
+
+            let mut addr = x11;
+            for i in 0..31 {
+                // low and high
+                let (low_ts, low_value) = ram.read_word(addr, artificial_read_timestamp);
+                addr += 4;
+                let (high_ts, high_value) = ram.read_word(addr, artificial_read_timestamp);
+                addr += 4;
+
+                local_state[i].write((low_value as u64) | ((high_value as u64) << 32));
+                local_state_timestamps[2 * i].write(low_ts);
+                local_state_timestamps[2 * i + 1].write(high_ts);
+            }
+            let mut local_state = local_state.map(|el| el.assume_init());
+            let mut local_state_timestamps = local_state_timestamps.map(|el| el.assume_init());
+
+            let mut control_flow_reg = x10;
+            let mut x10_timestamp = state.registers[10].timestamp;
+            let mut x11_timestamp = state.registers[11].timestamp;
+
+            for call_round in 0..NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 {
+                let last_round = call_round == NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1;
+
                 let mut witness = KeccakSpecial5DelegationWitness::empty();
-                witness.write_timestamp = state.timestamp | 3;
+                witness.write_timestamp = current_timestamp | 3;
 
                 let (precompile, iteration, round) =
-                    keccak_special5_impl_decode_control(state.registers[10].value);
+                    keccak_special5_impl_decode_control(control_flow_reg);
                 let next_control_reg =
                     keccak_special5_impl_bump_control(precompile, iteration, round);
                 witness.reg_accesses[0] = RegisterOrIndirectReadWriteData {
-                    read_value: state.registers[10].value,
+                    read_value: control_flow_reg,
                     write_value: next_control_reg,
-                    timestamp: TimestampData::from_scalar(state.registers[10].timestamp),
+                    timestamp: TimestampData::from_scalar(x10_timestamp),
                 };
                 witness.reg_accesses[1] = RegisterOrIndirectReadWriteData {
                     read_value: x11,
                     write_value: x11,
-                    timestamp: TimestampData::from_scalar(state.registers[11].timestamp),
+                    timestamp: TimestampData::from_scalar(x11_timestamp),
                 };
+
+                x10_timestamp = current_timestamp | 3;
+                x11_timestamp = current_timestamp | 3;
 
                 let state_indexes =
                     keccak_special5_impl_extract_indices(precompile, iteration, round);
@@ -146,8 +199,8 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
                     // update local state
                     let state_index = state_indexes[i];
                     local_state[state_index] = state_outputs[i];
-                    local_state_timestamps[2 * state_index] = state.timestamp | 3;
-                    local_state_timestamps[2 * state_index + 1] = state.timestamp | 3;
+                    local_state_timestamps[2 * state_index] = current_timestamp | 3;
+                    local_state_timestamps[2 * state_index + 1] = current_timestamp | 3;
 
                     // record writes into witness too
                     let value = state_outputs[i];
@@ -159,20 +212,25 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
 
                 tracer.write_delegation::<{common_constants::keccak_special5::KECCAK_SPECIAL5_CSR_REGISTER as u16}, _, _, _, _>(witness);
 
-                // update registers and control flow
-                state.registers[10].value = next_control_reg;
-                state.registers[10].timestamp = state.timestamp | 3;
-
-                state.registers[11].timestamp = state.timestamp | 3;
-            }
-
-            if last_round == false {
-                state.timestamp += TIMESTAMP_STEP;
+                control_flow_reg = next_control_reg;
+                current_timestamp += TIMESTAMP_STEP;
             }
         }
-        assert_eq!(
-            state.registers[10].value,
-            common_constants::FINAL_KECCAK_F1600_CONTROL_VALUE
-        );
+        assert_eq!(current_timestamp - TIMESTAMP_STEP, state.timestamp);
+
+        // update registers and control flow - can use state.timestamp
+        state.registers[10].value = common_constants::FINAL_KECCAK_F1600_CONTROL_VALUE;
+        state.registers[10].timestamp = state.timestamp | 3;
+
+        state.registers[11].timestamp = state.timestamp | 3;
+    } else {
+        // skip all memory side effects
+        ram.skip_if_replaying(31 * 2);
+
+        // update registers and control flow - can use state.timestamp
+        state.registers[10].value = common_constants::FINAL_KECCAK_F1600_CONTROL_VALUE;
+        state.registers[10].timestamp = state.timestamp | 3;
+
+        state.registers[11].timestamp = state.timestamp | 3;
     }
 }

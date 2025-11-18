@@ -1674,3 +1674,84 @@ fn test_bigint_with_replayer_oracle() {
         // );
     }
 }
+
+#[test]
+fn test_reference_block_exec() {
+    use std::path::Path;
+    use riscv_transpiler::ir::*;
+    use riscv_transpiler::vm::*;
+    use risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
+
+    let (_, binary) = read_binary(&Path::new("../riscv_transpiler/examples/zksync_os/app.bin"));
+    let (_, text) = read_binary(&Path::new("../riscv_transpiler/examples/zksync_os/app.text"));
+
+    let (witness, _) = read_binary(&Path::new("../riscv_transpiler/examples/zksync_os/23620012_witness"));
+    let witness = hex::decode(core::str::from_utf8(&witness).unwrap()).unwrap();
+    let witness: Vec<_> = witness
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|el| u32::from_be_bytes(*el))
+        .collect();
+    let mut source = QuasiUARTSource::new_with_reads(witness);
+
+    let instructions: Vec<Instruction> = preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(&text);
+    let tape = SimpleTape::new(&instructions);
+    let mut ram =
+        RamWithRomRegion::<{ common_constants::rom::ROM_SECOND_WORD_BITS }>::from_rom_content(
+            &binary,
+            1 << 30,
+        );
+
+    let cycles_bound = 1 << 30;
+
+    let mut state = State::initial_with_counters(DelegationsAndFamiliesCounters::default());
+    let mut snapshotter = SimpleSnapshotter::new_with_cycle_limit(cycles_bound, state);
+
+    let now = std::time::Instant::now();
+    VM::run_basic_unrolled::<
+        _,
+        _,
+        _,
+    >(
+        &mut state,
+        &mut ram,
+        &mut snapshotter,
+        &tape,
+        cycles_bound,
+        &mut source,
+    );
+    let elapsed = now.elapsed();
+
+    let final_timestamp = state.timestamp;
+    assert_eq!(final_timestamp % TIMESTAMP_STEP, 0);
+    let num_instructions = (final_timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
+    println!(
+        "Frequency is {} MHz over {} instructions",
+        (num_instructions as f64) * 1000f64 / (elapsed.as_nanos() as f64),
+        num_instructions,
+    );
+
+    println!("PC = 0x{:08x}", state.pc);
+    dbg!(state.registers.map(|el| el.value));
+
+    {
+        let worker = Worker::new_with_num_threads(8);
+        use crate::unrolled::replay_non_mem;
+        let cycles_per_circuit = (1 << 24) - 1;
+        let now = std::time::Instant::now();
+        let t = replay_non_mem::<
+            ADD_SUB_LUI_AUIPC_MOP_CIRCUIT_FAMILY_IDX,
+            Global,
+            {common_constants::rom::ROM_SECOND_WORD_BITS},
+        >(&tape, &snapshotter, cycles_per_circuit, &worker);
+        let elapsed = now.elapsed();
+
+        println!(
+            "Replay frequency is {} MHz over {} instructions into {} circuits",
+            (num_instructions as f64) * 1000f64 / (elapsed.as_nanos() as f64),
+            num_instructions,
+            t.len(),
+        );
+    }
+}

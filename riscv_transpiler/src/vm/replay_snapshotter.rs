@@ -377,7 +377,7 @@ impl<C: Counters, const ROM_BOUND_SECOND_WORD_BITS: usize, MB: ReplayBuffer<(u32
     }
 
     #[inline(always)]
-    fn append_non_determinism_read(&mut self, value: u32) {
+    fn append_arbitrary_value(&mut self, value: u32) {
         unsafe {
             self.reads_buffer
                 .push_within_capacity_unchecked((value, (0u32, 0u32)));

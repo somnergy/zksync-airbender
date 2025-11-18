@@ -71,15 +71,21 @@ pub(crate) fn bigint_call<C: Counters, S: Snapshotter<C>, R: RAM>(
     ram: &mut R,
     snapshotter: &mut S,
 ) {
-    // touch X0
+    // touch x0
     state.registers[0].timestamp = state.timestamp | 2;
 
     let x10 = read_register::<C, 3>(state, 10);
     let x11 = read_register::<C, 3>(state, 11);
     let x12 = state.registers[12].value;
 
-    assert!(x10 >= 1 << 21);
-    assert!(x11 >= 1 << 21);
+    assert!(
+        x10 >= common_constants::rom::ROM_BYTE_SIZE as u32,
+        "input pointer is in ROM"
+    );
+    assert!(
+        x11 >= common_constants::rom::ROM_BYTE_SIZE as u32,
+        "input pointer is in ROM"
+    );
 
     assert!(x10 != x11);
 
@@ -92,10 +98,12 @@ pub(crate) fn bigint_call<C: Counters, S: Snapshotter<C>, R: RAM>(
     let b = read_u256(x11, ram, snapshotter, write_ts);
 
     let (result, of) = bigint_impl(a, b, x12);
+    let of_for_bookkepping = of as u32;
 
     // write back
     write_register::<C, 3>(state, 12, &mut (of as u32));
     write_back_u256::<C, S, R>(x10, ram, snapshotter, write_ts, &result);
+    snapshotter.append_arbitrary_value(of_for_bookkepping);
 
     state.counters.bump_bigint(1);
     default_increase_pc::<C>(state);
