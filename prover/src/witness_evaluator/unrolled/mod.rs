@@ -1166,10 +1166,9 @@ pub(crate) fn replay_non_mem<
                     num_cycles as usize,
                     &mut tracer,
                 );
-
-                assert_eq!(expected_final_snapshot_state.registers, state.registers, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
                 assert_eq!(expected_final_snapshot_state.pc, state.pc, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
                 assert_eq!(expected_final_snapshot_state.timestamp, state.timestamp, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
+                assert_eq!(expected_final_snapshot_state.registers, state.registers, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
             });
 
             ram_range_start = ram_range_end;
@@ -1410,9 +1409,9 @@ pub(crate) fn replay_mem<
                     &mut tracer,
                 );
 
-                assert_eq!(expected_final_snapshot_state.registers, state.registers, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
                 assert_eq!(expected_final_snapshot_state.pc, state.pc, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
                 assert_eq!(expected_final_snapshot_state.timestamp, state.timestamp, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
+                assert_eq!(expected_final_snapshot_state.registers, state.registers, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
             });
 
             ram_range_start = ram_range_end;
@@ -1630,9 +1629,9 @@ pub(crate) fn replay_generic_work<
                     &mut tracer,
                 );
 
-                assert_eq!(expected_final_snapshot_state.registers, state.registers, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
                 assert_eq!(expected_final_snapshot_state.pc, state.pc, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
                 assert_eq!(expected_final_snapshot_state.timestamp, state.timestamp, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
+                assert_eq!(expected_final_snapshot_state.registers, state.registers, "diverged in thread {}: snapshots range {}..{}", _i, initial_snapshot_idx, total_snapshots_processed);
             });
 
             ram_range_start = ram_range_end;
