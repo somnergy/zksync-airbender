@@ -2,8 +2,7 @@ use super::*;
 use crate::imports::*;
 
 pub const MAX_BASE_LAYER_CIRCUITS: usize = const {
-    let max_circuits =
-        MAX_CYCLES / ((1 << 22) - 1);
+    let max_circuits = MAX_CYCLES / ((1 << 22) - 1);
 
     max_circuits as usize
 };

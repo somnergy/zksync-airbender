@@ -32,10 +32,10 @@ pub(crate) fn keccak_special5_call<C: Counters, S: Snapshotter<C>, R: RAM>(
 
     state.registers[10].value = FINAL_KECCAK_F1600_CONTROL_VALUE;
     state.registers[10].timestamp = state.timestamp
-        + (NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 as TimestampScalar) * TIMESTAMP_STEP
+        + ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP
         + 3;
     state.registers[11].timestamp = state.timestamp
-        + (NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 as TimestampScalar) * TIMESTAMP_STEP
+        + ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP
         + 3;
 
     // NOTE: we should touch x0 and give it a timestamp that would be at the very end of execution
@@ -84,66 +84,6 @@ pub(crate) fn keccak_special5_call<C: Counters, S: Snapshotter<C>, R: RAM>(
             addr += 4;
         }
     }
-
-    // let mut write_ts = state.timestamp | 3;
-    // // now we need to be careful with accessed state elements. We always access u64s only, and for replaying purposes we will need
-    // // to read 31 state elements (for snapshot), and then we will work over the
-    // unsafe {
-    //     // we are fine to NOT keep track on the initial timestamps, as we only need final write ones
-    //     let mut local_state: [MaybeUninit<u64>; 31] = [const { MaybeUninit::uninit() }; 31];
-
-    //     let mut addr = x11;
-    //     for i in 0..31 {
-    //         // low and high
-    //         let low_value = ram.peek_word(addr);
-    //         addr += 4;
-    //         let high_value = ram.peek_word(addr);
-    //         addr += 4;
-
-    //         local_state[i].write((low_value as u64) | ((high_value as u64) << 32));
-    //     }
-    //     let mut local_state = local_state.map(|el| el.assume_init());
-
-    //     let mut control_reg = common_constants::INITIAL_KECCAK_F1600_CONTROL_VALUE;
-    //     for call_round in 0..NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 {
-    //         let (precompile, iteration, round) = keccak_special5_impl_decode_control(control_reg);
-    //         control_reg = keccak_special5_impl_bump_control(precompile, iteration, round);
-
-    //         let state_indexes = keccak_special5_impl_extract_indices(precompile, iteration, round);
-    //         // get inputs
-    //         let state_inputs = state_indexes.map(|i| local_state[i]);
-    //         // get outputs
-    //         let state_outputs =
-    //             keccak_special5_impl_compute_outputs(precompile, iteration, round, state_inputs);
-    //         // write back
-    //         for i in 0..6 {
-    //             let state_index = state_indexes[i];
-    //             local_state[state_index] = state_outputs[i];
-    //         }
-    //     }
-    //     assert_eq!(
-    //         control_reg,
-    //         common_constants::FINAL_KECCAK_F1600_CONTROL_VALUE
-    //     );
-
-    //     assert_eq!(local_state, fast_state);
-
-    //     // and write everything back, and we know our discrete timestamp offsets
-
-    //     let mut addr = x11;
-    //     for i in 0..31 {
-    //         let value = local_state[i];
-    //         let ts_offset = KECCAK_FINAL_TIMESTAMP_OFFSETS[i];
-    //         let low = value as u32;
-    //         let high = (value >> 32) as u32;
-
-    //         ram.write_word(addr, low, write_ts + ts_offset);
-    //         addr += 4;
-    //         ram.write_word(addr, high, write_ts + ts_offset);
-    //         addr += 4;
-    //     }
-    // }
-
     // and full machine state also moves!
 
     // But timestamp needs 1 less bump as there is a default increase post-cycle
