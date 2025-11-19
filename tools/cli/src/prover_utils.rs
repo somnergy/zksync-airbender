@@ -896,7 +896,7 @@ impl UnrolledProver {
         }
     }
 
-    pub fn prove(&self, data: Vec<u32>) -> (UnrolledProgramProof, u64) {
+    pub fn prove(&self, data: impl riscv_transplier::NonDeterminism + Send + Sync + 'static) -> (UnrolledProgramProof, u64) {
         println!("Computing proof");
 
         let source = QuasiUARTSource::new_with_reads(data);
