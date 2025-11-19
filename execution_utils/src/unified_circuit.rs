@@ -104,7 +104,7 @@ pub fn verify_proof_in_unified_layer(
         println!("{} proofs for family {}", v.len(), k);
     }
 
-    let mut responses = flatten_proof_into_responses_for_unified_recursion(
+    let responses = flatten_proof_into_responses_for_unified_recursion(
         proof,
         setup,
         compiled_layouts,

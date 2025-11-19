@@ -896,7 +896,7 @@ impl UnrolledProver {
         }
     }
 
-    pub fn prove(&self, source: impl riscv_transpiler::NonDeterminism + Send + Sync + 'static) -> (UnrolledProgramProof, u64) {
+    pub fn prove(&self, source: impl riscv_transpiler::vm::NonDeterminismCSRSource + Send + Sync + 'static) -> (UnrolledProgramProof, u64) {
         println!("Computing proof");
 
         let start_time = std::time::Instant::now();
