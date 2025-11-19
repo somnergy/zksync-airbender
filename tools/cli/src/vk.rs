@@ -1,4 +1,5 @@
-use execution_utils::{verifier_binaries::VerificationKey, Machine};
+use execution_utils::Machine;
+// use execution_utils::verifier_binaries::VerificationKey;
 use sha3::{Digest, Keccak256};
 
 pub fn generate_vk(bin_path: &String, machine: &Option<Machine>, output: &Option<String>) {
