@@ -152,9 +152,7 @@ pub fn prove_unified_for_machine_configuration_into_program_proof<C: MachineConf
     binary_image: &[u32],
     text_section: &[u32],
     cycles_bound: usize,
-    non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource<
-        riscv_transpiler::vm::RamWithRomRegion<ROM_SECOND_WORD_BITS>,
-    >,
+    non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource,
     ram_bound: usize,
     worker: &prover::worker::Worker,
 ) -> UnrolledProgramProof {
@@ -194,9 +192,7 @@ pub fn prove_unified_with_replayer_for_machine_configuration<C: MachineConfig>(
     binary_image: &[u32],
     text_section: &[u32],
     cycles_bound: usize,
-    non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource<
-        riscv_transpiler::vm::RamWithRomRegion<ROM_SECOND_WORD_BITS>,
-    >,
+    non_determinism: impl riscv_transpiler::vm::NonDeterminismCSRSource,
     ram_bound: usize,
     worker: &prover::worker::Worker,
 ) -> (
