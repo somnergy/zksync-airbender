@@ -973,9 +973,6 @@ pub fn prove_unrolled_execution_with_replayer<
 ) {
     use prover::unrolled::run_unrolled_machine;
 
-    const DEFAULT_SNAPSHOT_PERIOD: usize = 1 << 20;
-    let max_snapshots = cycles_bound.div_ceil(DEFAULT_SNAPSHOT_PERIOD);
-
     let family_chunk_sizes = HashMap::from_iter(
         [
             (

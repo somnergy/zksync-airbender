@@ -102,6 +102,8 @@ pub(crate) fn keccak_special5_call<C: Counters, R: RAM>(
         state.registers[0].timestamp = state.timestamp | 2;
     }
 
+    assert_eq!(state.timestamp, timestamp_on_entry + ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP);
+
     // here we can no longer use state.timestamp for a good notion of time, so we use saved one
     if needs_delegation_data {
         let mut current_timestamp = timestamp_on_entry;

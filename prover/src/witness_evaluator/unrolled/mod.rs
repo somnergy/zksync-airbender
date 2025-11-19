@@ -1051,7 +1051,6 @@ pub(crate) fn replay_non_mem<
         let mut current_snapshot = starting_snapshot;
         let mut snapshots_iter = snapshotter.snapshots.iter();
         let mut ram_range_start = 0;
-        let mut nd_range_start = 0;
 
         // split snapshots over workers
         for _i in 0..worker.get_num_cores() {
@@ -1059,7 +1058,6 @@ pub(crate) fn replay_non_mem<
                 break;
             }
 
-            let mut num_snapshots = 0;
             'inner: while current_snapshot
                 .state
                 .counters
@@ -1071,7 +1069,6 @@ pub(crate) fn replay_non_mem<
             ) < average_calls_per_worker
             {
                 if let Some(next_snapshot) = snapshots_iter.next() {
-                    num_snapshots += 1;
                     current_snapshot = *next_snapshot;
                 } else {
                     break 'inner;
@@ -1167,6 +1164,7 @@ pub(crate) fn replay_non_mem<
 
                 assert_eq!(expected_final_snapshot_state.registers, state.registers);
                 assert_eq!(expected_final_snapshot_state.pc, state.pc);
+                assert_eq!(expected_final_snapshot_state.timestamp, state.timestamp);
             });
 
             ram_range_start = ram_range_end;
@@ -1290,7 +1288,6 @@ pub(crate) fn replay_mem<
         let mut current_snapshot = starting_snapshot;
         let mut snapshots_iter = snapshotter.snapshots.iter();
         let mut ram_range_start = 0;
-        let mut nd_range_start = 0;
 
         // split snapshots over workers
         for _i in 0..worker.get_num_cores() {
@@ -1298,7 +1295,6 @@ pub(crate) fn replay_mem<
                 break;
             }
 
-            let mut num_snapshots = 0;
             'inner: while current_snapshot
                 .state
                 .counters
@@ -1310,7 +1306,6 @@ pub(crate) fn replay_mem<
             ) < average_calls_per_worker
             {
                 if let Some(next_snapshot) = snapshots_iter.next() {
-                    num_snapshots += 1;
                     current_snapshot = *next_snapshot;
                 } else {
                     break 'inner;
@@ -1407,6 +1402,7 @@ pub(crate) fn replay_mem<
 
                 assert_eq!(expected_final_snapshot_state.registers, state.registers);
                 assert_eq!(expected_final_snapshot_state.pc, state.pc);
+                assert_eq!(expected_final_snapshot_state.timestamp, state.timestamp);
             });
 
             ram_range_start = ram_range_end;
@@ -1527,7 +1523,6 @@ pub(crate) fn replay_generic_work<
         let mut current_snapshot = starting_snapshot;
         let mut snapshots_iter = snapshotter.snapshots.iter();
         let mut ram_range_start = 0;
-        let mut nd_range_start = 0;
 
         // split snapshots over workers
         for _i in 0..worker.get_num_cores() {
@@ -1535,13 +1530,11 @@ pub(crate) fn replay_generic_work<
                 break;
             }
 
-            let mut num_snapshots = 0;
             'inner: while cycles_fn(&current_snapshot.state.counters)
                 - cycles_fn(&starting_snapshot.state.counters)
                 < average_calls_per_worker
             {
                 if let Some(next_snapshot) = snapshots_iter.next() {
-                    num_snapshots += 1;
                     current_snapshot = *next_snapshot;
                 } else {
                     break 'inner;
@@ -1624,6 +1617,7 @@ pub(crate) fn replay_generic_work<
 
                 assert_eq!(expected_final_snapshot_state.registers, state.registers);
                 assert_eq!(expected_final_snapshot_state.pc, state.pc);
+                assert_eq!(expected_final_snapshot_state.timestamp, state.timestamp);
             });
 
             ram_range_start = ram_range_end;
