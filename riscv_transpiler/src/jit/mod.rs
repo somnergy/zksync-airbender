@@ -132,17 +132,24 @@ impl MachineState {
     const CONTEXT_PTR_OFFSET: usize = offset_of!(Self, context_ptr);
 }
 
+#[cfg(target_pointer_width = "64")]
+const MEMORY_HOLDER_SIZE: usize = NUM_RAM_WORDS;
+// TODO: Temporary change to avoid too large allocations on 32-bit systems (mostly wasm).
+// Instead, in the future, we should completely remove the jit mode when working on non-64bit systems.
+#[cfg(not(target_pointer_width = "64"))]
+const MEMORY_HOLDER_SIZE: usize = 1024 * 1024;
+
 #[repr(C, align(8))]
 pub struct MemoryHolder {
-    memory: [u32; NUM_RAM_WORDS],
-    timestamps: [TimestampScalar; NUM_RAM_WORDS],
+    memory: [u32; MEMORY_HOLDER_SIZE],
+    timestamps: [TimestampScalar; MEMORY_HOLDER_SIZE],
 }
 
 impl MemoryHolder {
     pub fn empty() -> Self {
         Self {
-            memory: [0u32; NUM_RAM_WORDS],
-            timestamps: [0; NUM_RAM_WORDS],
+            memory: [0u32; MEMORY_HOLDER_SIZE],
+            timestamps: [0; MEMORY_HOLDER_SIZE],
         }
     }
 
