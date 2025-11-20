@@ -103,9 +103,9 @@ impl Default for ExecutionProverConfiguration {
             replay_worker_threads_count: 8,
             snapshot_period: 1 << 22,                        // 4 MCycles
             host_allocator_backing_allocation_size: 1 << 26, // 64 MB
-            host_allocators_per_job_count: 128,              // 8 GB
-            host_allocators_per_device_count: 64,            // 4 GB
-            min_free_host_allocators_per_job: 16,            // 1 GB
+            host_allocators_per_job_count: 256,              // 16 GB
+            host_allocators_per_device_count: 128,           // 8 GB
+            min_free_host_allocators_per_job: 32,            // 2 GB
         }
     }
 }
