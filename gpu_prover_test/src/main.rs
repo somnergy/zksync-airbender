@@ -21,6 +21,7 @@ mod tests {
         ExecutionKind, ExecutionProver, ExecutionProverConfiguration,
     };
     use gpu_prover::machine_type::MachineType;
+    use log::info;
     use risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
     use risc_v_simulator::cycle::{
         IMStandardIsaConfigWithUnsignedMulDiv, IWithoutByteAccessIsaConfigWithDelegation,
@@ -51,7 +52,7 @@ mod tests {
         let (binary, binary_u32) =
             read_and_pad_binary(Path::new("../../zksync-os/zksync_os/app.bin"));
         let (text, text_u32) = read_and_pad_binary(Path::new("../../zksync-os/zksync_os/app.text"));
-        println!("Computing setup");
+        info!("Computing setup");
         let setup = execution_utils::unrolled::compute_setup_for_machine_configuration::<
             IMStandardIsaConfigWithUnsignedMulDiv,
         >(&binary, &text);
@@ -62,8 +63,6 @@ mod tests {
             >(&binary_u32);
         serde_json::to_writer_pretty(File::create("layouts.json").unwrap(), &compiled_layouts)
             .unwrap();
-        println!("Computing proof");
-
         let mut configuration = ExecutionProverConfiguration::default();
         configuration.replay_worker_threads_count = 8;
         let mut prover = ExecutionProver::with_configuration(configuration);
@@ -74,6 +73,9 @@ mod tests {
             binary_u32,
             text_u32,
         );
+        info!("warmup");
+        let _result = prover.commit_memory_and_prove(0, 0, 1 << 36, source.clone());
+        info!("computing GPU proof");
         let result = prover.commit_memory_and_prove(0, 0, 1 << 36, source);
         let proof = UnrolledProgramProof {
             final_pc: result.final_pc,
@@ -120,7 +122,7 @@ mod tests {
             binary_u32.clone(),
             text_u32.clone(),
         );
-        let source = QuasiUARTSource::new_with_reads(vec![1 << 15, 0]);
+        let source = QuasiUARTSource::new_with_reads(vec![0, 0]);
         let result = prover.commit_memory_and_prove(0, 0, 1 << 36, source.clone());
         let gpu_proof = UnrolledProgramProof {
             final_pc: result.final_pc,
@@ -202,7 +204,7 @@ mod tests {
             "../tools/verifier/recursion_in_unrolled_layer.text",
         ));
 
-        println!("Computing setup");
+        info!("Computing setup");
         let setup = execution_utils::unrolled::compute_setup_for_machine_configuration::<
             IWithoutByteAccessIsaConfigWithDelegation,
         >(&binary, &text);
@@ -220,8 +222,6 @@ mod tests {
         )
         .unwrap();
 
-        println!("Computing proof");
-
         let mut configuration = ExecutionProverConfiguration::default();
         configuration.replay_worker_threads_count = 8;
         let mut prover = ExecutionProver::with_configuration(configuration);
@@ -232,6 +232,9 @@ mod tests {
             binary_u32.clone(),
             text_u32.clone(),
         );
+        info!("warmup");
+        let _ = prover.commit_memory_and_prove(0, 0, 1 << 36, source.clone());
+        info!("computing GPU proof");
         let result = prover.commit_memory_and_prove(0, 0, 1 << 36, source.clone());
         let mut gpu_proof = UnrolledProgramProof {
             final_pc: result.final_pc,
