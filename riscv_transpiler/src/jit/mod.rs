@@ -51,7 +51,7 @@ impl TraceChunk {
 
     #[inline(always)]
     pub fn add_element(&mut self, value: u32, ts: TimestampScalar) {
-        assert!((self.len as usize) < MAX_TRACE_CHUNK_LEN);
+        debug_assert!((self.len as usize) < MAX_TRACE_CHUNK_LEN);
         unsafe {
             self.values.as_mut_ptr().add(self.len as usize).write(value);
             self.timestamps

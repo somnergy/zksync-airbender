@@ -155,13 +155,22 @@ impl<C: Counters> ReplayerVM<C> {
         cycle_bound: usize,
         tracer: &mut impl WitnessTracer,
     ) {
-        use crate::replayer::instructions::*;
+        let final_ts = state.timestamp + (TIMESTAMP_STEP * (cycle_bound as u64));
+        Self::replay_by_timestamp_bound(state, ram, instruction_tape, nd, final_ts, tracer);
+    }
 
-        let mut final_ts = state.timestamp + (TIMESTAMP_STEP * (cycle_bound as u64));
-
-        while state.timestamp < final_ts {
+    pub fn replay_by_timestamp_bound<R: RAM, ND: NonDeterminismCSRSource>(
+        state: &mut State<C>,
+        ram: &mut R,
+        instruction_tape: &impl InstructionTape,
+        nd: &mut ND,
+        timestamp_bound: TimestampScalar,
+        tracer: &mut impl WitnessTracer,
+    ) {
+        while state.timestamp < timestamp_bound {
             unsafe {
                 let pc = state.pc;
+                use crate::replayer::instructions::*;
                 let instr = instruction_tape.read_instruction(pc);
                 match instr.name {
                     InstructionName::Illegal => illegal::<C, R>(state, ram, instr, tracer),

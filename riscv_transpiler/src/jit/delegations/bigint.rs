@@ -28,41 +28,7 @@ pub fn bigint_implementation(
 
     // read and save into snapshots
 
-    let a = unsafe {
-        // we are fine to NOT keep track on the initial timestamps, as we only need final write ones
-        let mut a = U256::ZERO;
-        let mut mem_ptr = memory_holder
-            .memory
-            .as_ptr()
-            .add((a_ptr as usize) / core::mem::size_of::<u32>());
-        let mut ts_ptr = memory_holder
-            .timestamps
-            .as_mut_ptr()
-            .add((a_ptr as usize) / core::mem::size_of::<u32>());
-
-        for dst in a.as_limbs_mut().iter_mut() {
-            // low and high
-
-            let low_value = mem_ptr.read();
-            mem_ptr = mem_ptr.add(1);
-            let high_value = mem_ptr.read();
-            mem_ptr = mem_ptr.add(1);
-
-            let low_ts = ts_ptr.read();
-            ts_ptr.write(write_ts);
-            ts_ptr = ts_ptr.add(1);
-            let high_ts = ts_ptr.read();
-            ts_ptr.write(write_ts);
-            ts_ptr = ts_ptr.add(1);
-
-            trace_piece.add_element(low_value, low_ts);
-            trace_piece.add_element(high_value, high_ts);
-
-            *dst = (low_value as u64) | ((high_value as u64) << 32);
-        }
-
-        a
-    };
+    // NOTE: read `b`` first, then `a` for snapshotting purposes
 
     let b = unsafe {
         // we are fine to NOT keep track on the initial timestamps, as we only need final write ones
@@ -98,6 +64,42 @@ pub fn bigint_implementation(
         }
 
         b
+    };
+
+    let a = unsafe {
+        // we are fine to NOT keep track on the initial timestamps, as we only need final write ones
+        let mut a = U256::ZERO;
+        let mut mem_ptr = memory_holder
+            .memory
+            .as_ptr()
+            .add((a_ptr as usize) / core::mem::size_of::<u32>());
+        let mut ts_ptr = memory_holder
+            .timestamps
+            .as_mut_ptr()
+            .add((a_ptr as usize) / core::mem::size_of::<u32>());
+
+        for dst in a.as_limbs_mut().iter_mut() {
+            // low and high
+
+            let low_value = mem_ptr.read();
+            mem_ptr = mem_ptr.add(1);
+            let high_value = mem_ptr.read();
+            mem_ptr = mem_ptr.add(1);
+
+            let low_ts = ts_ptr.read();
+            ts_ptr.write(write_ts);
+            ts_ptr = ts_ptr.add(1);
+            let high_ts = ts_ptr.read();
+            ts_ptr.write(write_ts);
+            ts_ptr = ts_ptr.add(1);
+
+            trace_piece.add_element(low_value, low_ts);
+            trace_piece.add_element(high_value, high_ts);
+
+            *dst = (low_value as u64) | ((high_value as u64) << 32);
+        }
+
+        a
     };
 
     let (result, of) = bigint_impl(a, b, x12);

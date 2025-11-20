@@ -23,8 +23,6 @@ pub fn keccak_unrolled_implementation(
 
     // Register accesses are easy - we just need to write final control flow value, and update timestamps
 
-    dbg!(&*machine_state);
-
     machine_state.registers[10] = FINAL_KECCAK_F1600_CONTROL_VALUE;
 
     // save for accesses in individual cycles
@@ -38,16 +36,10 @@ pub fn keccak_unrolled_implementation(
     // timestamp itself
     machine_state.timestamp +=
         ((NUM_DELEGATION_CALLS_FOR_KECCAK_F1600 - 1) as TimestampScalar) * TIMESTAMP_STEP;
-    // pc just in case
-    machine_state.pc = machine_state.pc.wrapping_add(
-        (core::mem::size_of::<u32>() * common_constants::NUM_DELEGATION_CALLS_FOR_KECCAK_F1600)
-            as u32,
-    );
+    // pc is not needed
 
     machine_state.register_timestamps[10] = machine_state.timestamp;
     machine_state.register_timestamps[11] = machine_state.timestamp;
-
-    dbg!(&*machine_state);
 
     // just stamp keccak_f1600 on top of it...
 
@@ -128,6 +120,8 @@ pub fn keccak_unrolled_implementation(
 
     assert!((trace_piece.len as usize) < MAX_TRACE_CHUNK_LEN);
     let should_flush = ((trace_piece.len as usize) >= TRACE_CHUNK_LEN) as u64;
+
+    // println!("Keccak, should flush = {}", should_flush);
 
     should_flush
 }

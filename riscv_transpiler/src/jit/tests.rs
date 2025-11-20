@@ -86,7 +86,7 @@ fn run_reference_for_num_cycles(
     binary: &[u32],
     text: &[u32],
     mut source: impl NonDeterminismCSRSource,
-    bound: u32,
+    timestamp_bound: TimestampScalar,
 ) -> (
     State<DelegationsAndFamiliesCounters>,
     RamWithRomRegion<{ common_constants::rom::ROM_SECOND_WORD_BITS }>,
@@ -103,19 +103,57 @@ fn run_reference_for_num_cycles(
         );
 
     let mut state = State::initial_with_counters(DelegationsAndFamiliesCounters::default());
-    // let mut snapshotter = SimpleSnapshotter::new_with_cycle_limit(1 << 31, period, state);
 
-    VM::run_basic_unrolled::<_, _, _>(
+    VM::run_by_timestamp_bound::<_, _, _>(
         &mut state,
         &mut ram,
-        // &mut snapshotter,
         &mut (),
         &tape,
-        bound as usize,
+        timestamp_bound,
         &mut source,
     );
 
     (state, ram)
+}
+
+fn run_reference_for_num_cycles_with_snapshots(
+    binary: &[u32],
+    text: &[u32],
+    mut source: impl NonDeterminismCSRSource,
+    timestamp_bound: TimestampScalar,
+) -> (
+    State<DelegationsAndFamiliesCounters>,
+    RamWithRomRegion<{ common_constants::rom::ROM_SECOND_WORD_BITS }>,
+    SimpleSnapshotter<
+        DelegationsAndFamiliesCounters,
+        { common_constants::rom::ROM_SECOND_WORD_BITS },
+    >,
+) {
+    use crate::ir::*;
+
+    let instructions: Vec<Instruction> =
+        preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(text);
+    let tape = SimpleTape::new(&instructions);
+    let mut ram =
+        RamWithRomRegion::<{ common_constants::rom::ROM_SECOND_WORD_BITS }>::from_rom_content(
+            &binary,
+            1 << 30,
+        );
+
+    let mut state = State::initial_with_counters(DelegationsAndFamiliesCounters::default());
+    let mut snapshotter = SimpleSnapshotter::<_, {common_constants::rom::ROM_SECOND_WORD_BITS }>::new_with_cycle_limit(1 << 31, state);
+
+    VM::run_by_timestamp_bound::<_, _, _>(
+        &mut state,
+        &mut ram,
+        &mut snapshotter,
+        // &mut (),
+        &tape,
+        timestamp_bound,
+        &mut source,
+    );
+
+    (state, ram, snapshotter)
 }
 
 #[test]
@@ -179,29 +217,37 @@ fn run_and_compare() {
         .collect();
     let mut source = QuasiUARTSource::new_with_reads(witness);
 
-    let step = 1 << 22;
-    let initial_step = step;
+    let step = 1 << 19;
+    let initial_step = 1 << 19;
     let upper_bound = (1 << 30) - 8;
 
     let mut num_steps = initial_step;
     while num_steps < upper_bound {
-        let (jit_state, jit_memory) = JittedCode::run_alternative_simulator(
-            &text,
-            &mut source.clone(),
-            &binary,
-            Some(num_steps),
-        );
+        // let (jit_state, jit_memory) = JittedCode::run_alternative_simulator(
+        //     &text,
+        //     &mut source.clone(),
+        //     &binary,
+        //     Some(num_steps),
+        // );
 
-        // NOTE: as JITted simulator skips many cycles in case of precompiles, we need to make it more precise for reference one
-        let reference_cycles = (jit_state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
+        let (jit_state, jit_memory, jit_last_trace_chunk) =
+            JittedCode::run_alternative_simulator_with_last_snapshot(
+                &text,
+                &mut source.clone(),
+                &binary,
+                Some(num_steps),
+            );
 
-        println!(
-            "JITted simulator ran for {} cycles instead of {}",
-            reference_cycles, num_steps
-        );
+        // let (reference_state, reference_ram) =
+        //     run_reference_for_num_cycles(&binary, &text, source.clone(), jit_state.timestamp);
 
-        let (reference_state, reference_rom) =
-            run_reference_for_num_cycles(&binary, &text, source.clone(), num_steps as u32);
+        let (reference_state, reference_ram, reference_snapshotter) =
+            run_reference_for_num_cycles_with_snapshots(
+                &binary,
+                &text,
+                source.clone(),
+                jit_state.timestamp,
+            );
 
         assert_eq!(
             reference_state.timestamp, jit_state.timestamp,
@@ -214,6 +260,8 @@ fn run_and_compare() {
                 num_steps, reference_state.pc, jit_state.pc,
             );
         }
+
+        // println!("Final instr = 0x{:08x}", text[(reference_state.pc as usize/4) - 1]);
 
         assert_eq!(
             reference_state.counters.add_sub_family as u32,
@@ -276,8 +324,8 @@ fn run_and_compare() {
             }
         }
 
-        assert_eq!(reference_rom.backing.len(), jit_memory.memory.len());
-        for (word_idx, ((reference_value, jit_value), jit_ts)) in reference_rom
+        assert_eq!(reference_ram.backing.len(), jit_memory.memory.len());
+        for (word_idx, ((reference_value, jit_value), jit_ts)) in reference_ram
             .backing
             .iter()
             .zip(jit_memory.memory.iter())
@@ -294,6 +342,51 @@ fn run_and_compare() {
                 "TIMESTAMP diverged for word {} after {} steps",
                 word_idx, num_steps
             );
+        }
+
+        // compare the end of snapshotter
+        let (jit_snapshot_values, jit_snapshot_tses) = jit_last_trace_chunk.data();
+        println!("Snapshot tail length is {}", jit_snapshot_values.len());
+        if jit_snapshot_values.len() > 0 {
+            let length = jit_snapshot_values.len();
+            let last_reference = &reference_snapshotter.reads_buffer
+                [(reference_snapshotter.reads_buffer.len() - length)..];
+
+            assert_eq!(last_reference.len(), length);
+            let mut num_diffs = 0;
+            for (
+                idx,
+                (((reference_value, (reference_ts_low, reference_ts_high)), jit_value), jit_ts),
+            ) in last_reference
+                .iter()
+                .zip(jit_snapshot_values.iter())
+                .zip(jit_snapshot_tses.iter())
+                .enumerate()
+            {
+                if *reference_value != *jit_value {
+                    println!(
+                        "VALUE diverged at snapshot index {}: expected {}, got {}",
+                        idx, reference_value, jit_value
+                    );
+                    equal_state = false;
+                    num_diffs += 1;
+                    if num_diffs >= 32 {
+                        panic!();
+                    }
+                }
+                let reference_ts = ((*reference_ts_high as u64) << 32) | (*reference_ts_low as u64);
+                if reference_ts != *jit_ts {
+                    println!(
+                        "TIMESTAMP diverged at snapshot index {}: expected {}, got {}",
+                        idx, reference_ts, jit_ts
+                    );
+                    equal_state = false;
+                    num_diffs += 1;
+                    if num_diffs >= 32 {
+                        panic!();
+                    }
+                }
+            }
         }
 
         if equal_state == false {

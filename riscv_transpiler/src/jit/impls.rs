@@ -91,7 +91,7 @@ macro_rules! receive_trace {
             ; ->trace_buffer_full:
             // we only call this function after executing the opcode in full,
             // so we do not care about rax (for stores), rdx (for loads) or rcx (scratch)
-            ;; before_call!($ops) // actual structure is 8 bytes above RSP
+            ;; before_call!($ops)
             // ; push rax
             // ; push rcx
             ; push rdx
@@ -739,14 +739,16 @@ impl<I: ContextImpl> JittedCode<I> {
                         record_circuit_type(&mut ops, CounterType::ShiftBinaryCsr, 1);
                     }
                     Instruction::Lui(parts) => {
-                        pre_bump_timestamp_and_touch!(ops, 2, 0);
+                        pre_bump_timestamp_and_touch!(ops, 1, 0);
+                        bump_timestamp!(ops, 1);
                         dynasm!(ops
                             ; mov Rd(out), parts.imm() as i32
                         );
                         record_circuit_type(&mut ops, CounterType::AddSubLui, 1);
                     }
                     Instruction::Auipc(parts) => {
-                        pre_bump_timestamp_and_touch!(ops, 2, 0);
+                        pre_bump_timestamp_and_touch!(ops, 1, 0);
+                        bump_timestamp!(ops, 1);
                         // NOTE: result is wrapping
                         dynasm!(ops
                             ; mov Rd(out), (pc.wrapping_add(parts.imm())) as i32
@@ -1489,7 +1491,8 @@ impl<I: ContextImpl> JittedCode<I> {
                                 ; mov rdx, rsp
                                 ;; before_call!(ops) // will save rsi and rdi
                                 ; push rdx
-                                // NOTE: we do not save and restore r9, as number of snapshots updated by the delegtion
+                                // NOTE: we should write r9 into structure, so snapshotter is consistent as a structure
+                                ; mov [rdi + (TraceChunk::LEN_OFFSET as i32)], r9
                                 ; sub rsp, 8
                                 ; mov rax, QWORD function as _
                                 // we already have trace chunk in RDI, memory in RSI, and MachineState in RDX
@@ -1497,7 +1500,7 @@ impl<I: ContextImpl> JittedCode<I> {
                                 ; add rsp, 8
                                 ; pop rdx
                                 ;; after_call!(ops) // restore rsi and rdi
-                                // otherwise just read it back into register
+                                // read snapshot length back into register
                                 ; mov r9, [rdi + (TraceChunk::LEN_OFFSET as i32)]
                                 // and check if we should save
                                 ;; check_to_save_trace!(ops, pc)
@@ -1686,6 +1689,63 @@ impl<N: NonDeterminismCSRSource> JittedCode<DefaultContextImpl<'_, N>> {
             .expect("must finish execution");
 
         (final_state, memory)
+    }
+
+    pub fn run_alternative_simulator_with_last_snapshot(
+        program: &[u32],
+        non_determinism_source: &mut N,
+        initial_memory: &[u32],
+        cycles_bound: Option<u32>,
+    ) -> (MachineState, Box<MemoryHolder>, Box<TraceChunk>) {
+        let mut context = Context::<DefaultContextImpl<'_, N>> {
+            implementation: DefaultContextImpl {
+                non_determinism_source,
+                trace_len: 0,
+                final_state: None,
+            },
+        };
+
+        let mut memory: Box<MemoryHolder> = unsafe {
+            // let mut memory: Box<MemoryHolder> = Box::new_uninit().assume_init();
+            let mut memory: Box<MemoryHolder> = Box::new_zeroed().assume_init();
+
+            memory
+        };
+
+        // println!(
+        //     "Memory chunk address = 0x{:x}",
+        //     (&*memory as *const MemoryHolder).addr()
+        // );
+
+        let mut trace: Box<TraceChunk> = unsafe {
+            // let trace = Box::new_uninit().assume_init();
+            let trace: Box<TraceChunk> = Box::new_zeroed().assume_init();
+
+            trace
+        };
+
+        // println!(
+        //     "Initial trace chunk address = 0x{:x}",
+        //     (&*trace as *const TraceChunk).addr()
+        // );
+
+        let context_ref_mut = &mut context;
+
+        let runner = Self::preprocess_bytecode(program, cycles_bound);
+
+        runner.run(
+            &mut context,
+            memory.as_mut(),
+            trace.as_mut(),
+            initial_memory,
+        );
+
+        let final_state = context
+            .implementation
+            .take_final_state()
+            .expect("must finish execution");
+
+        (final_state, memory, trace)
     }
 }
 
