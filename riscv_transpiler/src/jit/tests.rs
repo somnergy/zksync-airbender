@@ -218,8 +218,10 @@ fn run_and_compare() {
     let mut source = QuasiUARTSource::new_with_reads(witness);
 
     let step = 1 << 19;
-    let initial_step = 1 << 19;
+    let initial_step = 762314752;
     let upper_bound = (1 << 30) - 8;
+
+    let mut previous_cycles_taken = 0;
 
     let mut num_steps = initial_step;
     while num_steps < upper_bound {
@@ -237,6 +239,12 @@ fn run_and_compare() {
                 &binary,
                 Some(num_steps),
             );
+
+        let cycles_taken = (jit_state.timestamp - INITIAL_TIMESTAMP) / TIMESTAMP_STEP;
+        if cycles_taken == previous_cycles_taken {
+            break;
+        }
+        previous_cycles_taken = cycles_taken;
 
         // let (reference_state, reference_ram) =
         //     run_reference_for_num_cycles(&binary, &text, source.clone(), jit_state.timestamp);
