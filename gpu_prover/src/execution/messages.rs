@@ -4,7 +4,7 @@ use crate::prover::tracing_data::TracingDataHost;
 use crate::witness::trace_unrolled::ShuffleRamInitsAndTeardownsHost;
 use cs::definitions::TimestampScalar;
 use fft::GoodAllocator;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use trace_and_split::FinalRegisterValue;
 
 pub struct InitsAndTeardownsData<A: GoodAllocator> {
@@ -20,6 +20,7 @@ pub struct TracingData<A: GoodAllocator> {
     pub participating_snapshot_indexes: BTreeSet<usize>,
 }
 
+#[derive(Clone)]
 pub struct SimulationResult {
     pub final_register_values: [FinalRegisterValue; 32],
     pub final_pc: u32,
@@ -27,6 +28,7 @@ pub struct SimulationResult {
 }
 
 pub enum WorkerResult<A: GoodAllocator> {
+    SnapshotProduced(usize),
     InitsAndTeardownsData(InitsAndTeardownsData<A>),
     TracingData(TracingData<A>),
     SimulationResult(SimulationResult),
