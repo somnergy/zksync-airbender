@@ -22,6 +22,7 @@ use riscv_transpiler::vm::{
 };
 use std::cmp::min;
 use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use trace_and_split::FinalRegisterValue;
@@ -30,8 +31,6 @@ const RAM_LOG_SIZE: u32 = 30;
 
 type Ram = RamWithRomRegion<RAM_LOG_SIZE>;
 
-const SNAPSHOT_PERIOD: usize = 1 << 22;
-
 pub(crate) fn run_split_simulator(
     batch_id: u64,
     machine_type: MachineType,
@@ -39,9 +38,11 @@ pub(crate) fn run_split_simulator(
     tape: impl Deref<Target = impl InstructionTape>,
     non_determinism: &mut impl NonDeterminismCSRSource,
     cycles_limit: usize,
+    snapshot_period: usize,
     snapshots: Sender<SplitSnapshot>,
     results: Sender<WorkerResult<A>>,
     free_allocators: Receiver<A>,
+    abort: Arc<AtomicBool>,
 ) {
     trace!("BATCH[{batch_id}] SIMULATOR started");
     let mut ram = Ram::new(&binary_image);
@@ -52,14 +53,14 @@ pub(crate) fn run_split_simulator(
     let mut total_elapsed = Duration::default();
     loop {
         let initial_state = state.clone();
-        let mut snapshotter = OnceSnapshotter::new_for_period(SNAPSHOT_PERIOD, &initial_state);
+        let mut snapshotter = OnceSnapshotter::new_for_period(snapshot_period, &initial_state);
         let instant = Instant::now();
         let is_program_finished = VM::run_basic_unrolled(
             &mut state,
             &mut ram,
             &mut snapshotter,
             tape.deref(),
-            SNAPSHOT_PERIOD,
+            snapshot_period,
             non_determinism,
         );
         let elapsed = instant.elapsed();
@@ -71,6 +72,18 @@ pub(crate) fn run_split_simulator(
         let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
         let mhz = (cycles_count as f64) / (elapsed_ms * 1000.0);
         trace!("BATCH[{batch_id}] SIMULATOR produced SNAPSHOT[{snapshot_index}] with {cycles_count} cycles in {elapsed_ms:.3} ms @ {mhz:.3} MHz");
+        if abort.load(std::sync::atomic::Ordering::Relaxed) {
+            tracing_data_producers.finalize();
+            let timestamp_diff = state.timestamp - INITIAL_TIMESTAMP;
+            assert!(timestamp_diff.is_multiple_of(TIMESTAMP_STEP));
+            let cycles_count = (timestamp_diff / TIMESTAMP_STEP) as usize;
+            let elapsed_ms = total_elapsed.as_secs_f64() * 1000.0;
+            let mhz = (cycles_count as f64) / (elapsed_ms * 1000.0);
+            debug!("BATCH[{batch_id}] SIMULATOR aborted execution after {cycles_count} cycles in {elapsed_ms:.3} ms @ {mhz:.3} MHz");
+            return;
+        }
+        let result = WorkerResult::SnapshotProduced(snapshot_index);
+        results.send(result).unwrap();
         let trace_ranges = tracing_data_producers.process_snapshot(
             snapshot_index,
             &initial_state.counters,
@@ -150,9 +163,11 @@ pub(crate) fn run_unified_simulator(
     tape: impl Deref<Target = impl InstructionTape>,
     non_determinism: &mut impl NonDeterminismCSRSource,
     cycles_limit: usize,
+    snapshot_period: usize,
     snapshots: Sender<UnifiedSnapshot>,
     results: Sender<WorkerResult<A>>,
     free_allocators: Receiver<A>,
+    abort: Arc<AtomicBool>,
 ) {
     const CIRCUIT_TYPE: UnrolledCircuitType = UnrolledCircuitType::Unified;
     const NUM_CYCLES: usize = CIRCUIT_TYPE.get_num_cycles();
@@ -167,14 +182,14 @@ pub(crate) fn run_unified_simulator(
     let mut next_inits_and_teardowns_sequence_id = 0;
     loop {
         let initial_state = state.clone();
-        let mut snapshotter = OnceSnapshotter::new_for_period(SNAPSHOT_PERIOD, &initial_state);
+        let mut snapshotter = OnceSnapshotter::new_for_period(snapshot_period, &initial_state);
         let instant = Instant::now();
         let is_program_finished = VM::run_basic_unrolled(
             &mut state,
             &mut ram,
             &mut snapshotter,
             tape.deref(),
-            SNAPSHOT_PERIOD,
+            snapshot_period,
             non_determinism,
         );
         let elapsed = instant.elapsed();
@@ -187,6 +202,18 @@ pub(crate) fn run_unified_simulator(
         let elapsed_ms = elapsed.as_secs_f64() * 1000.0;
         let mhz = (cycles_count as f64) / (elapsed_ms * 1000.0);
         trace!("BATCH[{batch_id}] SIMULATOR produced SNAPSHOT[{snapshot_index}] with {cycles_count} cycles in {elapsed_ms:.3} ms @ {mhz:.3} MHz");
+        if abort.load(std::sync::atomic::Ordering::Relaxed) {
+            tracing_data_producers.finalize();
+            let timestamp_diff = state.timestamp - INITIAL_TIMESTAMP;
+            assert!(timestamp_diff.is_multiple_of(TIMESTAMP_STEP));
+            let cycles_count = (timestamp_diff / TIMESTAMP_STEP) as usize;
+            let elapsed_ms = total_elapsed.as_secs_f64() * 1000.0;
+            let mhz = (cycles_count as f64) / (elapsed_ms * 1000.0);
+            debug!("BATCH[{batch_id}] SIMULATOR aborted execution after {cycles_count} cycles in {elapsed_ms:.3} ms @ {mhz:.3} MHz");
+            return;
+        }
+        let result = WorkerResult::SnapshotProduced(snapshot_index);
+        results.send(result).unwrap();
         let touched_words_count = ram.get_touched_words_count() as usize;
         let available_cycles_count = total_cycles_count - touched_words_count;
         let available_circuits_count = available_cycles_count / NUM_CYCLES;
@@ -275,11 +302,18 @@ pub(crate) fn run_split_replayer(
     tape: impl Deref<Target = impl InstructionTape>,
     snapshots: Receiver<SplitSnapshot>,
     results: Sender<WorkerResult<A>>,
+    abort: Arc<AtomicBool>,
 ) {
     trace!("BATCH[{batch_id}] REPLAYER[{worker_id}] started");
     let mut total_elapsed = Duration::default();
     let mut total_cycles = 0;
     for snapshot in snapshots {
+        if abort.load(std::sync::atomic::Ordering::Relaxed) {
+            let elapsed_ms = total_elapsed.as_secs_f64() * 1000.0;
+            let mhz = (total_cycles as f64) / (elapsed_ms * 1000.0);
+            debug!("BATCH[{batch_id}] REPLAYER[{worker_id}] aborted replay after {total_cycles} cycles in {elapsed_ms:.3} ms @ {mhz:.3} MHz");
+            return;
+        }
         let SplitSnapshot {
             index,
             cycles_count,
@@ -327,11 +361,18 @@ pub(crate) fn run_unified_replayer(
     tape: impl Deref<Target = impl InstructionTape>,
     snapshots: Receiver<UnifiedSnapshot>,
     results: Sender<WorkerResult<A>>,
+    abort: Arc<AtomicBool>,
 ) {
     trace!("BATCH[{batch_id}] REPLAYER[{worker_id}] started");
     let mut total_elapsed = Duration::default();
     let mut total_cycles = 0;
     for snapshot in snapshots {
+        if abort.load(std::sync::atomic::Ordering::Relaxed) {
+            let elapsed_ms = total_elapsed.as_secs_f64() * 1000.0;
+            let mhz = (total_cycles as f64) / (elapsed_ms * 1000.0);
+            debug!("BATCH[{batch_id}] REPLAYER[{worker_id}] aborted replay after {total_cycles} cycles in {elapsed_ms:.3} ms @ {mhz:.3} MHz");
+            return;
+        }
         let UnifiedSnapshot {
             index,
             cycles_count,
@@ -414,7 +455,6 @@ mod tests {
     use crate::tests::{init_logger, read_binary};
     use crossbeam_channel::unbounded;
     use era_cudart::memory::{CudaHostAllocFlags, HostAllocation};
-    use itertools::Itertools;
     use log::info;
     use prover::risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
     use rayon::iter::IntoParallelIterator;
@@ -422,6 +462,7 @@ mod tests {
     use riscv_transpiler::ir::{preprocess_bytecode, FullMachineDecoderConfig};
     use riscv_transpiler::vm::SimpleTape;
     use std::path::Path;
+    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
     use worker::Worker;
 
@@ -453,12 +494,21 @@ mod tests {
         let tape = Arc::new(SimpleTape::new(&preprocessed_bytecode));
         let (snapshots_sender, snapshots_receiver) = unbounded();
         let (results_sender, results_receiver) = unbounded();
+        let abort = Arc::new(AtomicBool::new(false));
         for worker_id in 0..4 {
             let tape = tape.clone();
             let snapshots_receiver = snapshots_receiver.clone();
             let results_sender = results_sender.clone();
+            let abort = abort.clone();
             worker.pool.spawn(move || {
-                run_split_replayer(0, worker_id, tape, snapshots_receiver, results_sender)
+                run_split_replayer(
+                    0,
+                    worker_id,
+                    tape,
+                    snapshots_receiver,
+                    results_sender,
+                    abort,
+                )
             });
         }
         drop(snapshots_receiver);
@@ -469,9 +519,11 @@ mod tests {
             tape.clone(),
             &mut non_determinism_source,
             1 << 30,
+            1 << 20,
             snapshots_sender,
             results_sender,
             free_allocators_receiver.clone(),
+            abort.clone(),
         );
         results_receiver.iter().for_each(|_| {});
         drop(results_receiver);
@@ -483,8 +535,16 @@ mod tests {
             let tape = SimpleTape::new(&preprocessed_bytecode);
             let snapshots_receiver = snapshots_receiver.clone();
             let results_sender = results_sender.clone();
+            let abort = abort.clone();
             worker.pool.spawn(move || {
-                run_split_replayer(0, worker_id, &tape, snapshots_receiver, results_sender);
+                run_split_replayer(
+                    0,
+                    worker_id,
+                    &tape,
+                    snapshots_receiver,
+                    results_sender,
+                    abort,
+                );
             });
         }
         drop(snapshots_receiver);
@@ -495,9 +555,11 @@ mod tests {
             tape,
             &mut non_determinism_source,
             1 << 30,
+            1 << 20,
             snapshots_sender,
             results_sender,
             free_allocators_receiver.clone(),
+            abort.clone(),
         );
         results_receiver.iter().for_each(|_| {});
         drop(results_receiver);
