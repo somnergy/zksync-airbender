@@ -33,6 +33,39 @@ pub trait WitnessTracer {
     );
 }
 
+impl WitnessTracer for () {
+    #[inline(always)]
+    fn needs_tracing_data_for_circuit_family<const FAMILY: u8>(&self) -> bool {
+        true
+    }
+    #[inline(always)]
+    fn needs_tracing_data_for_delegation_type<const DELEGATION_TYPE: u16>(&self) -> bool {
+        true
+    }
+
+    fn write_non_memory_family_data<const FAMILY: u8>(
+        &mut self,
+        _data: NonMemoryOpcodeTracingDataWithTimestamp,
+    ) {
+    }
+    fn write_memory_family_data<const FAMILY: u8>(
+        &mut self,
+        _data: MemoryOpcodeTracingDataWithTimestamp,
+    ) {
+    }
+    fn write_delegation<
+        const DELEGATION_TYPE: u16,
+        const REG_ACCESSES: usize,
+        const INDIRECT_READS: usize,
+        const INDIRECT_WRITES: usize,
+        const VARIABLE_OFFSETS: usize,
+    >(
+        &mut self,
+        _data: DelegationWitness<REG_ACCESSES, INDIRECT_READS, INDIRECT_WRITES, VARIABLE_OFFSETS>,
+    ) {
+    }
+}
+
 // this is largely an example, but is fine for all CPU purposes
 
 // Holder for destination buffer for one particular delegation type. It may represent only part

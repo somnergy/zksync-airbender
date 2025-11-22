@@ -1,7 +1,11 @@
 use risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
 
 use super::*;
-use crate::{jit::minimal_tracer::PreallocatedSnapshots, vm::test::*};
+use crate::{
+    jit::minimal_tracer::{ChunkPostSnapshot, PreallocatedSnapshots},
+    replayer::ReplayerVM,
+    vm::test::*,
+};
 use std::{alloc::Global, path::Path};
 
 #[test]
@@ -438,6 +442,87 @@ fn test_perf_with_trace_keeping() {
 
     println!("Running");
     simulator.run(&mut context, &mut memory, initial_chunk, &binary);
+
+    // println!("PC = 0x{:08x}", state.pc);
+    // dbg!(state.registers);
+}
+
+#[test]
+fn test_replayer_over_jit() {
+    use crate::ir::*;
+    let path = std::env::current_dir().unwrap();
+    println!("The current directory is {}", path.display());
+
+    let (_, binary) = read_binary(&Path::new("examples/zksync_os/app.bin"));
+    let (_, text) = read_binary(&Path::new("examples/zksync_os/app.text"));
+
+    let (witness, _) = read_binary(&Path::new("examples/zksync_os/23620012_witness"));
+    let witness = hex::decode(core::str::from_utf8(&witness).unwrap()).unwrap();
+    let witness: Vec<_> = witness
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|el| u32::from_be_bytes(*el))
+        .collect();
+    let mut source = QuasiUARTSource::new_with_reads(witness);
+
+    let simulator = JittedCode::<_>::preprocess_bytecode(&text, None);
+
+    let mut implementation = PreallocatedSnapshots::<1024, _>::new_in(Global, &mut source);
+    let initial_chunk = implementation.initial_snapshot();
+    let mut context = Context { implementation };
+    let mut memory: Box<MemoryHolder> = unsafe {
+        let mut memory: Box<MemoryHolder> = Box::new_zeroed().assume_init();
+
+        memory
+    };
+
+    let instructions: Vec<Instruction> =
+        preprocess_bytecode::<FullUnsignedMachineDecoderConfig>(&text);
+    let tape = SimpleTape::new(&instructions);
+
+    println!("Running");
+    simulator.run(&mut context, &mut memory, initial_chunk, &binary);
+
+    let implementation = context.implementation;
+    let mut jit_state = MachineState::initial();
+
+    println!("Total of {} snapshots", implementation.snapshots().len());
+    for (snapshot_idx, snapshot) in implementation.snapshots().iter().enumerate() {
+        let ChunkPostSnapshot {
+            state_with_counters,
+            trace_chunk,
+        } = snapshot;
+
+        let (values, timestamps) = trace_chunk.data();
+
+        let mut replaying_ram = ReplayerMemChunks {
+            chunks: &mut [(values, timestamps)],
+        };
+        let mut state = jit_state.as_replayer_state();
+        let final_timestamp = state_with_counters.timestamp;
+
+        let _ = ReplayerVM::replay_by_timestamp_bound(
+            &mut state,
+            &mut replaying_ram,
+            &tape,
+            &mut (),
+            final_timestamp,
+            &mut (),
+        );
+        let mut state_with_counters = *state_with_counters;
+        state_with_counters.timestamp = state_with_counters
+            .timestamp
+            .next_multiple_of(TIMESTAMP_STEP);
+
+        let mut final_state = state_with_counters.as_replayer_state();
+        state.counters = Default::default();
+        final_state.counters = Default::default();
+        assert_eq!(state, final_state, "diverged at snapshot {}", snapshot_idx);
+        jit_state = state_with_counters;
+
+        println!("Snapshot {} passed", snapshot_idx);
+    }
 
     // println!("PC = 0x{:08x}", state.pc);
     // dbg!(state.registers);

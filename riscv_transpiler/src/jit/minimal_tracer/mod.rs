@@ -60,6 +60,11 @@ impl<'a, const N: usize, A: Allocator> PreallocatedSnapshots<'a, N, A> {
             next
         }
     }
+
+    pub fn snapshots(&'_ self) -> &'_ [ChunkPostSnapshot] {
+        let filled = self.filled.load(std::sync::atomic::Ordering::Acquire) as usize;
+        unsafe { core::slice::from_raw_parts(self.buffer.as_ptr(), filled) }
+    }
 }
 
 impl<'a, const N: usize, A: Allocator> ContextImpl for PreallocatedSnapshots<'a, N, A> {

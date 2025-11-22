@@ -1092,7 +1092,8 @@ impl<I: ContextImpl> JittedCode<I> {
 
                 // NOTE: ONLY issue snapshotting after store!
                 if issue_snapshot {
-                    increment_trace!(ops, pc);
+                    let pc_for_trace = pc + 4;
+                    increment_trace!(ops, pc_for_trace);
                 }
 
                 i += 1;
@@ -1498,6 +1499,8 @@ impl<I: ContextImpl> JittedCode<I> {
                             pre_bump_timestamp_and_touch!(ops, 2, 0); // touch x0 at 0/1/2 formally
                             bump_timestamp!(ops, 1); // 3 mod 4
 
+                            let pc_for_trace = pc + ((4 * cycles_taken) as u32);
+
                             dynasm!(ops
                                 ; mov rdx, rsp
                                 ;; before_call!(ops) // will save rsi and rdi
@@ -1514,7 +1517,7 @@ impl<I: ContextImpl> JittedCode<I> {
                                 // read snapshot length back into register
                                 ; mov r9, [rdi + (TraceChunk::LEN_OFFSET as i32)]
                                 // and check if we should save
-                                ;; check_to_save_trace!(ops, pc)
+                                ;; check_to_save_trace!(ops, pc_for_trace)
                             );
 
                             // delegation implementations are themselves responsible to call trace finalizers
@@ -1533,7 +1536,8 @@ impl<I: ContextImpl> JittedCode<I> {
 
             // NOTE: again, all snapshotting should only happen after stores (mainly due to CSSRW for non-determinism)
             if issue_snapshot {
-                increment_trace!(ops, pc);
+                let pc_for_trace = pc + 4;
+                increment_trace!(ops, pc_for_trace);
             }
         }
         assert_eq!(i, program.len());

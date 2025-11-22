@@ -149,6 +149,32 @@ impl MachineState {
             context_ptr: core::ptr::dangling_mut(),
         }
     }
+
+    pub fn as_replayer_state(&self) -> State<DelegationsAndFamiliesCounters> {
+        State {
+            registers: std::array::from_fn(|i| Register {
+                timestamp: self.register_timestamps[i],
+                value: self.registers[i],
+            }),
+            timestamp: self.timestamp,
+            pc: self.pc,
+            counters: DelegationsAndFamiliesCounters {
+                add_sub_family: self.counters[CounterType::AddSubLui as u8 as usize] as usize,
+                slt_branch_family: self.counters[CounterType::BranchSlt as u8 as usize] as usize,
+                binary_shift_csr_family: self.counters[CounterType::ShiftBinaryCsr as u8 as usize]
+                    as usize,
+                mul_div_family: self.counters[CounterType::MulDiv as u8 as usize] as usize,
+
+                word_size_mem_family: self.counters[CounterType::MemWord as u8 as usize] as usize,
+                subword_size_mem_family: self.counters[CounterType::MemSubword as u8 as usize]
+                    as usize,
+
+                blake_calls: self.counters[CounterType::BlakeDelegation as u8 as usize] as usize,
+                bigint_calls: self.counters[CounterType::BigintDelegation as u8 as usize] as usize,
+                keccak_calls: self.counters[CounterType::KeccakDelegation as u8 as usize] as usize,
+            },
+        }
+    }
 }
 
 #[repr(C, align(8))]
