@@ -1481,6 +1481,15 @@ impl<I: ContextImpl> JittedCode<I> {
                             };
                             assert!(i <= program.len());
 
+                            // NOTE: always record cycles taken before potentially sending trace
+                            // outside below
+                            assert!(cycles_taken <= u16::MAX as usize);
+                            record_circuit_type(
+                                &mut ops,
+                                CounterType::ShiftBinaryCsr,
+                                cycles_taken as u16,
+                            );
+
                             // Those are markers in nature
                             assert_eq!(parts.rs1(), 0);
                             assert_eq!(parts.rd(), 0);
@@ -1509,13 +1518,7 @@ impl<I: ContextImpl> JittedCode<I> {
                             // delegation implementations are themselves responsible to call trace finalizers
                             bump_timestamp!(ops, 1); // 0 mod 4
 
-                            assert!(cycles_taken <= u16::MAX as usize);
-
-                            record_circuit_type(
-                                &mut ops,
-                                CounterType::ShiftBinaryCsr,
-                                cycles_taken as u16,
-                            );
+  
                             // NOTE: no other snapshot check is required - we do the check above
                         }
                     }
