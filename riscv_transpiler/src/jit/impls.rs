@@ -1923,11 +1923,7 @@ impl<N: NonDeterminismCSRSource> JittedCode<DefaultContextImpl<'_, N>> {
         cycles_bound: Option<u32>,
     ) -> (MachineState, Box<MemoryHolder>, Box<TraceChunk>) {
         let mut context = Context::<DefaultContextImpl<'_, N>> {
-            implementation: DefaultContextImpl {
-                non_determinism_source,
-                trace_len: 0,
-                final_state: None,
-            },
+            implementation: DefaultContextImpl::new(non_determinism_source),
         };
 
         let mut memory: Box<MemoryHolder> = unsafe {
