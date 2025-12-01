@@ -55,7 +55,9 @@ DEVICE_FORCEINLINE void store_two_vectorized_complex(bf *gmem_out, const e2f val
 }
 
 DEVICE_FORCEINLINE void exchg_dit(e2f &a, e2f &b, const e2f &twiddle) {
-  b = e2f::mul(b, twiddle);
+  // b = e2f::mul(b, twiddle);
+  b[0] = bf::mul_mont(b[0], twiddle[0]);
+  b[1] = bf::mul_mont(b[1], twiddle[1]);
   const auto a_tmp = a;
   a = e2f::add(a_tmp, b);
   b = e2f::sub(a_tmp, b);
@@ -65,7 +67,9 @@ DEVICE_FORCEINLINE void exchg_dif(e2f &a, e2f &b, const e2f &twiddle) {
   const auto a_tmp = a;
   a = e2f::add(a_tmp, b);
   b = e2f::sub(a_tmp, b);
-  b = e2f::mul(b, twiddle);
+  // b = e2f::mul(b, twiddle);
+  b[0] = bf::mul_mont(b[0], twiddle[0]);
+  b[1] = bf::mul_mont(b[1], twiddle[1]);
 }
 
 // This is a little tricky:
