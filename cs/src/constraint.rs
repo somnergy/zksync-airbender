@@ -3,6 +3,9 @@ use crate::definitions::*;
 use crate::types::{Boolean, Num};
 use field::PrimeField;
 
+// use field::Field;
+// trait PrimeField = Field; // ugly hack
+
 pub const TERM_INNER_CAPACITY: usize = 4;
 
 // #[derive(Clone, Debug, Copy, PartialEq, Eq)]
@@ -319,6 +322,16 @@ impl<F: PrimeField> Term<F> {
 #[derive(Clone, Debug)]
 pub struct Constraint<F: PrimeField> {
     pub terms: Vec<Term<F>>,
+}
+
+impl<F: PrimeField> PartialEq for Constraint<F> {
+    fn eq(&self, other: &Self) -> bool {
+        let mut this = self.clone();
+        let mut that = other.clone();
+        this.normalize();
+        that.normalize();
+        this.terms == that.terms
+    }
 }
 
 impl<F: PrimeField> From<Variable> for Constraint<F> {
@@ -682,6 +695,21 @@ impl<F: PrimeField> std::ops::Mul for Constraint<F> {
     }
 }
 
+impl<F: PrimeField> core::ops::MulAssign for Constraint<F> {
+    fn mul_assign(&mut self, rhs: Self) {
+        let mut new_terms = Vec::with_capacity(self.terms.len() * rhs.terms.len());
+        for left in &mut self.terms {
+            for right in &rhs.terms {
+                let mut new_term = left.clone();
+                new_term.mul_assign(*right);
+                new_terms.push(new_term);
+            }
+        }
+        self.terms = new_terms;
+        self.normalize();
+    }
+}
+
 //CONSTRAINT -> TERM OPS
 impl<F: PrimeField> std::ops::Add<Term<F>> for Constraint<F> {
     type Output = Self;
@@ -749,6 +777,14 @@ impl<F: PrimeField> std::ops::Mul<Term<F>> for Constraint<F> {
         ans.normalize();
 
         ans
+    }
+}
+
+impl<F: PrimeField> core::ops::MulAssign<Term<F>> for Constraint<F> {
+    fn mul_assign(&mut self, rhs: Term<F>) {
+        for term in &mut self.terms {
+            term.mul_assign(rhs);
+        }
     }
 }
 
@@ -883,6 +919,59 @@ impl<F: PrimeField> std::ops::Mul for Term<F> {
                 let mut constraint = Constraint::empty();
                 constraint.terms.push(Term::Constant(res_coeff));
                 constraint
+            }
+        }
+    }
+}
+
+impl<F: PrimeField> core::ops::MulAssign for Term<F> {
+    fn mul_assign(&mut self, mut rhs: Self) {
+        match (&mut *self, &mut rhs) {
+            (
+                Term::Expression {
+                    coeff,
+                    inner,
+                    degree,
+                },
+                Term::Expression {
+                    coeff: coeff2,
+                    inner: inner2,
+                    degree: degree2,
+                },
+            ) => {
+                assert!(
+                    *degree + *degree2 <= 4,
+                    "Degree overflow, {} + {} > 4",
+                    degree,
+                    degree2
+                );
+                coeff.mul_assign(&coeff2);
+                for i in 0..*degree2 {
+                    inner[*degree + i] = inner2[i];
+                }
+                *degree += *degree2;
+            }
+            (
+                Term::Expression {
+                    coeff,
+                    ..
+                },
+                Term::Constant(coeff2),
+            ) => {
+                coeff.mul_assign(&coeff2);
+            }
+            (
+                Term::Constant(coeff),
+                Term::Expression {
+                    coeff: coeff2,
+                    ..
+                },
+            ) => {
+                coeff2.mul_assign(&coeff);
+                core::mem::swap(self, &mut rhs);
+            }
+            (Term::Constant(coeff), Term::Constant(coeff2)) => {
+                coeff.mul_assign(&coeff2);
             }
         }
     }

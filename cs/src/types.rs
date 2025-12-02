@@ -20,6 +20,12 @@ pub enum Num<F: PrimeField> {
     Constant(F),
 }
 
+impl<F: PrimeField> Default for Num<F> {
+    fn default() -> Self {
+        Self::Constant(F::ZERO)
+    }
+}
+
 impl TableType {
     pub fn to_num<F: PrimeField>(self) -> Num<F> {
         Num::Constant(F::from_u64_unchecked(self.to_table_id() as u64))

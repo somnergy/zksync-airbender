@@ -73,6 +73,9 @@ pub enum TableType {
     XorSpecialIota,
     AndN,
     RotL,
+    U16,
+    U19,
+    OpcodeFamilyDecoder,
     DynamicPlaceholder, // MUST be the last
 }
 

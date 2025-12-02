@@ -124,7 +124,7 @@ pub trait BaseField: Field {
     }
 }
 
-pub trait FieldExtension<BaseField: Field> {
+pub trait FieldExtension<BaseField: PrimeField> {
     const DEGREE: usize;
     fn mul_assign_by_base(&mut self, elem: &BaseField) -> &mut Self;
     fn into_coeffs_in_base(self) -> [BaseField; Self::DEGREE];
@@ -139,7 +139,7 @@ pub trait FieldExtension<BaseField: Field> {
     fn get_coef_mut(&mut self, idx: usize) -> &mut BaseField;
 }
 
-impl<F: Field> FieldExtension<F> for F {
+impl<F: PrimeField> FieldExtension<F> for F {
     const DEGREE: usize = 1;
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
     fn from_coeffs_in_base(coefs: &[F]) -> Self {

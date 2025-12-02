@@ -14,6 +14,7 @@ pub mod shift;
 pub mod store;
 
 pub mod unrolled;
+pub mod gkr;
 
 pub mod common_impls;
 

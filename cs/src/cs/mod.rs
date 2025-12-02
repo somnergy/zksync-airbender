@@ -4,7 +4,7 @@ pub mod oracle;
 pub mod placeholder;
 pub mod utils;
 pub mod witness_placer;
-
+pub mod gkr_circuit;
 mod spec_selection;
 
 use crate::definitions::*;
