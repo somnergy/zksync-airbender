@@ -124,6 +124,7 @@ fn gpu_worker(
                             )
                         })?
                         .clone();
+                    context.reset_used_mem_peak();
                     let mut setup = SetupPrecomputations::new(
                         circuit,
                         log_lde_factor,
@@ -272,6 +273,9 @@ fn gpu_worker(
                         trees_cache_mode,
                         &context,
                     )?;
+                    let peak = context.get_used_mem_peak() as f64 / 1024.0 / 1024.0 / 1024.0;
+                    debug!("{circuit_type:?} peak memory usage: {peak:.3} GB" );
+                    context.reset_used_mem_peak();
                     JobType::Proof(job)
                 }
             };

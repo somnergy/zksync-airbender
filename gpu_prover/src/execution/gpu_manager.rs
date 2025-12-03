@@ -211,7 +211,9 @@ fn gpu_manager(
                 let worker_id = worker_senders_indexes[&index];
                 let worker_sender = &worker_senders[worker_id];
                 let worker_queue = &mut worker_queues[worker_id];
-                let (request, batch_id) = if work_queue.is_empty() {
+                let (request, batch_id) = if work_queue.is_empty() || (worker_queue.len() == 2
+                    && worker_queue[0].is_none()
+                    && worker_queue[1].is_some()) {
                     let advance = worker_queue.len() == 2
                         && worker_queue[0].is_none()
                         && worker_queue[1].is_some();
@@ -243,32 +245,32 @@ fn gpu_manager(
             }
             _ => unreachable!(),
         };
-        while !work_queue.is_empty() {
-            let mut select = Select::new_biased();
-            let worker_senders_indexes: HashMap<_, _> = worker_queues
-                .iter()
-                .enumerate()
-                .sorted_by_key(|(_, q)| *q)
-                .map(|(worker_id, _)| (select.send(&worker_senders[worker_id]), worker_id))
-                .collect();
-            match select.try_select() {
-                Ok(op) => {
-                    let op_index = op.index();
-                    let worker_id = worker_senders_indexes[&op_index];
-                    let request = work_queue.pop_front().unwrap();
-                    let batch_id = request.batch_id();
-                    let circuit_type = request.circuit_type();
-                    let sequence_id = request.sequence_id();
-                    match &request {
-                        GpuWorkRequest::MemoryCommitment(_) => trace!("BATCH[{batch_id}] GPU_MANAGER sending memory commitment request to GPU_WORKER[{worker_id}] for circuit {circuit_type:?}[{sequence_id}]"),
-                        GpuWorkRequest::Proof(_) => trace!("BATCH[{batch_id}] GPU_MANAGER sending proof request to GPU_WORKER[{worker_id}] for circuit {circuit_type:?}[{sequence_id}]"),
-                    };
-                    op.send(&worker_senders[worker_id], Some(request)).unwrap();
-                    worker_queues[worker_id].push_back(Some(batch_id));
-                }
-                Err(_) => break,
-            }
-        }
+        // while !work_queue.is_empty() {
+        //     let mut select = Select::new_biased();
+        //     let worker_senders_indexes: HashMap<_, _> = worker_queues
+        //         .iter()
+        //         .enumerate()
+        //         .sorted_by_key(|(_, q)| *q)
+        //         .map(|(worker_id, _)| (select.send(&worker_senders[worker_id]), worker_id))
+        //         .collect();
+        //     match select.try_select() {
+        //         Ok(op) => {
+        //             let op_index = op.index();
+        //             let worker_id = worker_senders_indexes[&op_index];
+        //             let request = work_queue.pop_front().unwrap();
+        //             let batch_id = request.batch_id();
+        //             let circuit_type = request.circuit_type();
+        //             let sequence_id = request.sequence_id();
+        //             match &request {
+        //                 GpuWorkRequest::MemoryCommitment(_) => trace!("BATCH[{batch_id}] GPU_MANAGER sending memory commitment request to GPU_WORKER[{worker_id}] for circuit {circuit_type:?}[{sequence_id}]"),
+        //                 GpuWorkRequest::Proof(_) => trace!("BATCH[{batch_id}] GPU_MANAGER sending proof request to GPU_WORKER[{worker_id}] for circuit {circuit_type:?}[{sequence_id}]"),
+        //             };
+        //             op.send(&worker_senders[worker_id], Some(request)).unwrap();
+        //             worker_queues[worker_id].push_back(Some(batch_id));
+        //         }
+        //         Err(_) => break,
+        //     }
+        // }
         if batches_receiver.is_none() && batch_senders.is_empty() {
             break;
         }

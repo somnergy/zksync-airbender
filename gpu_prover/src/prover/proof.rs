@@ -89,6 +89,7 @@ pub fn prove<'a, A: GoodAllocator>(
 ) -> CudaResult<ProofJob<'a>> {
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("initial");
+    context.reset_used_mem_peak();
 
     let is_unrolled = matches!(circuit_type, CircuitType::Unrolled(_));
     // let is_unrolled = match circuit_type {
@@ -126,6 +127,7 @@ pub fn prove<'a, A: GoodAllocator>(
     setup_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after setup.ensure_is_extended");
+    context.reset_used_mem_peak();
 
     let mut stage_1_output = StageOneOutput::allocate_trace_holders(
         &circuit,
@@ -137,6 +139,7 @@ pub fn prove<'a, A: GoodAllocator>(
     )?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after stage_1.allocate_trace_holders");
+    context.reset_used_mem_peak();
 
     let mut stage_2_output = StageTwoOutput::allocate_trace_evaluations(
         &circuit,
@@ -148,6 +151,7 @@ pub fn prove<'a, A: GoodAllocator>(
     )?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after stage_2.allocate_trace_evaluations");
+    context.reset_used_mem_peak();
 
     // witness_generation
     let witness_generation_range = device_tracing::Range::new("witness_generation")?;
@@ -165,6 +169,7 @@ pub fn prove<'a, A: GoodAllocator>(
     witness_generation_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after generate_witness");
+    context.reset_used_mem_peak();
 
     // stage 1
     let stage_1_range = device_tracing::Range::new("stage_1")?;
@@ -173,6 +178,7 @@ pub fn prove<'a, A: GoodAllocator>(
     stage_1_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after stage_1");
+    context.reset_used_mem_peak();
 
     // seed
     let mut seed = initialize_seed(
@@ -202,6 +208,7 @@ pub fn prove<'a, A: GoodAllocator>(
     stage_2_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after stage_2");
+    context.reset_used_mem_peak();
 
     // stage 3
     let stage_3_range = device_tracing::Range::new("stage_3")?;
@@ -225,6 +232,7 @@ pub fn prove<'a, A: GoodAllocator>(
     stage_3_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
     context.log_gpu_mem_usage("after stage_3");
+    context.reset_used_mem_peak();
 
     // stage 4
     let stage_4_range = device_tracing::Range::new("stage_4")?;
@@ -246,7 +254,8 @@ pub fn prove<'a, A: GoodAllocator>(
     )?;
     stage_4_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
-    context.log_gpu_mem_usage("after stage_4 ");
+    context.log_gpu_mem_usage("after stage_4");
+    context.reset_used_mem_peak();
 
     // stage 5
     let stage_5_range = device_tracing::Range::new("stage_5")?;
@@ -264,7 +273,8 @@ pub fn prove<'a, A: GoodAllocator>(
     )?;
     stage_5_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
-    context.log_gpu_mem_usage("after stage_5 ");
+    context.log_gpu_mem_usage("after stage_5");
+    context.reset_used_mem_peak();
 
     // pow
     let pow_range = device_tracing::Range::new("pow")?;
@@ -278,7 +288,8 @@ pub fn prove<'a, A: GoodAllocator>(
     )?;
     pow_range.end(stream)?;
     #[cfg(feature = "log_gpu_mem_usage")]
-    context.log_gpu_mem_usage("after pow ");
+    context.log_gpu_mem_usage("after pow");
+    context.reset_used_mem_peak();
 
     // pow
     let queries_range = device_tracing::Range::new("queries")?;
