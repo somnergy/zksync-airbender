@@ -22,8 +22,7 @@ use fft::{GoodAllocator, LdePrecomputations};
 use field::Mersenne31Field;
 use itertools::Itertools;
 use prover::definitions::{
-    AuxArgumentsBoundaryValues, ExternalChallenges, ExternalValues, Transcript,
-    OPTIMAL_FOLDING_PROPERTIES,
+    AuxArgumentsBoundaryValues, ExternalChallenges, Transcript, OPTIMAL_FOLDING_PROPERTIES,
 };
 use prover::prover_stages::cached_data::ProverCachedData;
 use prover::prover_stages::unrolled_prover::UnrolledModeProof;
@@ -125,6 +124,8 @@ pub fn prove<'a, A: GoodAllocator>(
     setup_range.start(stream)?;
     setup.ensure_is_extended(context)?;
     setup_range.end(stream)?;
+    #[cfg(feature = "log_gpu_mem_usage")]
+    context.log_gpu_mem_usage("after setup.ensure_is_extended");
 
     let mut stage_1_output = StageOneOutput::allocate_trace_holders(
         &circuit,

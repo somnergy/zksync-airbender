@@ -340,16 +340,12 @@ pub(crate) unsafe fn parse_shuffle_ram_accesses(
                 };
             }
 
-            // if _row < 4 {
+            // if _row < 100 {
             //     println!("Row {}, index {}: read reg = {}, address = {} at ts = {} into value {}", _row, access_idx, is_register, address, read_ts, read_value);
             // }
 
-            // if _row < 4 {
+            // if _row < 100 {
             //     println!("Row {}, index {}: write reg = {}, address = {} at ts = {} into value {}", _row, access_idx, is_register, address, write_ts, write_value);
-            // }
-
-            // if address == 71106640 {
-            //     println!("ROW = {}, read ts = {}, write ts = {}, read value = {}, write value = {}", _row, read_ts, write_ts, read_value, write_value);
             // }
 
             let to_write = (is_register, address, write_ts, write_value);

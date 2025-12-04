@@ -1,7 +1,7 @@
 mod decode;
 mod encoding_types;
 mod instr_stream;
-mod instructions;
+pub(crate) mod instructions;
 
 use self::decode::*;
 use self::encoding_types::*;
@@ -107,7 +107,11 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                 match funct3 {
                     0 | 1 | 4 | 5 | 6 | 7 => {}
                     _ => {
-                        panic!("Unknown opcode 0x{:08x}", opcode);
+                        panic!(
+                            "Unknown BRANCH-like opcode 0x{:08x} at PC = 0x{:08x}",
+                            opcode,
+                            i * 4
+                        );
                     }
                 };
 

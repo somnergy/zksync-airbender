@@ -6,9 +6,7 @@ mod gpu_worker;
 mod messages;
 mod precomputations;
 pub mod prover;
-mod ram;
-mod snapshotter;
-mod tracer;
-mod tracing_data_producers;
+mod simulation_runner;
+mod tracing;
 
 type A = ConcurrentStaticHostAllocator;

@@ -1,4 +1,4 @@
-use super::gpu_manager::{GpuManager, GpuWorkBatch};
+use super::gpu_manager::GpuManager;
 use super::precomputations::{get_common_precomputations, CircuitPrecomputations};
 use super::A;
 use crate::circuit_type::{
@@ -6,25 +6,22 @@ use crate::circuit_type::{
 };
 use crate::cudart::device::get_device_count;
 use crate::cudart::memory::{CudaHostAllocFlags, HostAllocation};
-use crate::execution::cpu_worker::{
-    run_split_replayer, run_split_simulator, run_unified_replayer, run_unified_simulator,
-};
-use crate::execution::gpu_worker::{
-    GpuWorkRequest, GpuWorkResult, MemoryCommitmentRequest, MemoryCommitmentResult, ProofRequest,
-    ProofResult,
-};
+use crate::execution::cpu_worker::{run_replayer, run_simulator};
 use crate::execution::messages::{
-    InitsAndTeardownsData, SimulationResult, TracingData, WorkerResult,
+    GpuWorkBatch, GpuWorkRequest, GpuWorkResult, InitsAndTeardownsData, MemoryCommitmentRequest,
+    MemoryCommitmentResult, ProofRequest, ProofResult, SimulationResult, TracingData, WorkerResult,
 };
+use crate::execution::simulation_runner::{LockedBoxedMemoryHolder, LockedBoxedTraceChunk};
+use crate::execution::tracing::{SplitTracingType, UnifiedTracingType};
 use crate::machine_type::MachineType;
 use crate::prover::context::ProverContextConfig;
 use crate::prover::tracing_data::TracingDataHost;
 use crate::witness::trace_unrolled::ShuffleRamInitsAndTeardownsHost;
-use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
+use crossbeam_channel::{unbounded, Receiver, Sender};
 use crossbeam_utils::sync::WaitGroup;
 use cs::definitions::TimestampScalar;
 use itertools::Itertools;
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use prover::definitions::{AuxArgumentsBoundaryValues, ExternalChallenges, ExternalValues};
 use prover::merkle_trees::MerkleTreeCapVarLength;
 use prover::prover_stages::unrolled_prover::UnrolledModeProof;
@@ -40,54 +37,54 @@ use riscv_transpiler::vm::{NonDeterminismCSRSource, RamPeek, SimpleTape};
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fmt::Debug;
 use std::hash::Hash;
-use std::ops::DerefMut;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use trace_and_split::{
     fs_transform_for_memory_and_delegation_arguments_for_unrolled_circuits, FinalRegisterValue,
 };
+use type_map::concurrent::TypeMap;
 use worker::Worker;
 
+/// Specifies the execution mode for the prover.
+///
+/// Variants:
+/// - `Unrolled`: Uses unrolled circuit types for proof and memory commitment generation.
+/// - `Unified`: Uses a unified circuit type, supported only for the `Reduced` machine type.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum ExecutionKind {
     Unrolled,
     Unified,
 }
 
-// const CPU_WORKERS_COUNT: usize = 6;
-// const CYCLES_TRACING_WORKERS_COUNT: usize = CPU_WORKERS_COUNT - 2;
-// const CACHE_DELEGATIONS: bool = false;
-
-/// Represents an executable binary that can be proven by the prover
-///
-///  # Fields
-/// * `key`: unique identifier for the binary, can be for example a &str or usize, anything that implements Clone, Debug, Eq, and Hash
-/// * `circuit_type`: the type of the circuit this binary is for, one of the values from the `MainCircuitType` enumeration
-/// * `bytecode`: the bytecode of the binary, can be a Vec<u32> or any other type that can be converted into Box<[u32]>
-///
-// #[derive(Clone)]
-// pub struct ExecutableBinary<K: Clone + Debug + Eq + Hash, B: Into<Box<[u32]>>> {
-//     pub key: K,
-//     pub circuit_type: MainCircuitType,
-//     pub bytecode: B,
-// }
-
 struct BinaryHolder {
     execution_kind: ExecutionKind,
     machine_type: MachineType,
     binary_image: Arc<Box<[u32]>>,
+    text_section: Arc<Box<[u32]>>,
+    cycles_bound: Option<u32>,
+    jit_cache: Arc<Mutex<TypeMap>>,
     instruction_tape: Arc<SimpleTape>,
     precomputations: HashMap<UnrolledCircuitType, CircuitPrecomputations>,
 }
 
+/// Configuration for the `ExecutionProver`.
+///
+/// Fields:
+/// - `prover_context_config`: Configuration for the prover context.
+/// - `max_thread_pool_threads`: Optional maximum number of threads for the prover's thread pool.
+/// - `expected_concurrent_jobs`: Expected number of concurrent jobs the prover will handle.
+/// - `replay_worker_threads_count`: Number of threads for replay workers.
+/// - `host_allocator_backing_allocation_size`: Size (in bytes) of each host buffer allocation.
+/// - `host_allocators_per_job_count`: Number of host allocators allocated per job.
+/// - `host_allocators_per_device_count`: Number of host allocators allocated per device.
+/// - `min_free_host_allocators_per_job`: Minimum number of free host allocators per job before cache trimming is triggered.
 #[derive(Clone, Copy, Debug)]
 pub struct ExecutionProverConfiguration {
     pub prover_context_config: ProverContextConfig,
     pub max_thread_pool_threads: Option<usize>,
     pub expected_concurrent_jobs: usize,
     pub replay_worker_threads_count: usize,
-    pub snapshot_period: usize,
     pub host_allocator_backing_allocation_size: usize,
     pub host_allocators_per_job_count: usize,
     pub host_allocators_per_device_count: usize,
@@ -101,7 +98,6 @@ impl Default for ExecutionProverConfiguration {
             max_thread_pool_threads: None,
             expected_concurrent_jobs: 1,
             replay_worker_threads_count: 8,
-            snapshot_period: 1 << 22,                        // 4 MCycles
             host_allocator_backing_allocation_size: 1 << 26, // 64 MB
             host_allocators_per_job_count: 256,              // 16 GB
             host_allocators_per_device_count: 128,           // 8 GB
@@ -149,21 +145,6 @@ impl ExecutionProverResult {
     }
 }
 
-fn get_allocators_count(
-    inits_and_teardowns: &Option<ShuffleRamInitsAndTeardownsHost<A>>,
-    tracing_data: &Option<TracingDataHost<A>>,
-) -> usize {
-    let a = inits_and_teardowns
-        .as_ref()
-        .map(|v| v.get_allocators_count())
-        .unwrap_or_default();
-    let b = tracing_data
-        .as_ref()
-        .map(|v| v.get_allocators_count())
-        .unwrap_or_default();
-    a + b
-}
-
 struct TraceCacheEntry {
     pub circuit_type: CircuitType,
     pub sequence_id: usize,
@@ -175,6 +156,7 @@ struct TraceCacheEntry {
 struct TraceCache {
     entries: VecDeque<TraceCacheEntry>,
     total_requests_count: usize,
+    trivial_unified_inits_and_teardowns_count: usize,
     simulation_result: Option<SimulationResult>,
 }
 
@@ -194,6 +176,7 @@ impl TraceCache {
     fn is_not_initialized(&self) -> bool {
         self.entries.is_empty()
             && self.total_requests_count == 0
+            && self.trivial_unified_inits_and_teardowns_count == 0
             && self.simulation_result.is_none()
     }
 }
@@ -201,7 +184,9 @@ impl TraceCache {
 pub struct ExecutionProver {
     configuration: ExecutionProverConfiguration,
     gpu_manager: GpuManager,
-    worker: Worker,
+    worker: Arc<Worker>,
+    memory_holders_cache: Arc<Mutex<Vec<LockedBoxedMemoryHolder>>>,
+    trace_chunks_cache: Arc<Mutex<Vec<Vec<LockedBoxedTraceChunk>>>>,
     binary_holders: BTreeMap<usize, BinaryHolder>,
     common_precomputations: BTreeMap<CircuitType, CircuitPrecomputations>,
     free_allocators_sender: Sender<A>,
@@ -209,33 +194,38 @@ pub struct ExecutionProver {
 }
 
 impl ExecutionProver {
+    ///  Creates a new instance of `ExecutionProver` with the default configuration.
+    ///
+    /// returns: an instance of `ExecutionProver` that can be used to generate memory commitments and proofs for the provided binaries, it is supposed to be a Singleton instance
+    ///
     pub fn new() -> Self {
         Self::with_configuration(ExecutionProverConfiguration::default())
     }
-    ///  Creates a new instance of `ExecutionProver`.
+
+    ///  Creates a new instance of `ExecutionProver` with the supplied configuration.
     ///
     /// # Arguments
     ///
-    /// * `max_concurrent_batches`: maximum number of concurrent batches that the prover allocates host buffers for, this is a soft limit, the prover will work with more batches if needed, but it can stall certain operations for some time
-    /// * `binaries`: a vector of executable binaries that the prover can work with, each binary must have a unique key
+    /// * `configuration`: the configuration for the execution prover
     ///
     /// returns: an instance of `ExecutionProver` that can be used to generate memory commitments and proofs for the provided binaries, it is supposed to be a Singleton instance
     ///
     pub fn with_configuration(configuration: ExecutionProverConfiguration) -> Self {
         let ExecutionProverConfiguration {
             prover_context_config,
-            max_thread_pool_threads: thread_pool_threads_count,
+            max_thread_pool_threads,
             expected_concurrent_jobs,
+            replay_worker_threads_count,
             host_allocator_backing_allocation_size,
             host_allocators_per_job_count,
             host_allocators_per_device_count,
-            ..
+            min_free_host_allocators_per_job: _,
         } = configuration.clone();
         let device_count = get_device_count().unwrap() as usize;
         assert_ne!(device_count, 0, "no CUDA capable devices found");
         let gpu_wait_group = WaitGroup::new();
         let gpu_manager = GpuManager::new(gpu_wait_group.clone(), prover_context_config);
-        let worker = if let Some(thread_pool_threads_count) = thread_pool_threads_count {
+        let worker = if let Some(thread_pool_threads_count) = max_thread_pool_threads {
             Worker::new_with_num_threads(thread_pool_threads_count)
         } else {
             Worker::new()
@@ -244,6 +234,26 @@ impl ExecutionProver {
             "PROVER thread pool with {} threads created",
             worker.num_cores
         );
+        let worker = Arc::new(worker);
+        let simulator_cache_entries_count = expected_concurrent_jobs + 1;
+        info!("PROVER creating memory holders cache with {simulator_cache_entries_count} entries");
+        let memory_holders_cache = (0..simulator_cache_entries_count)
+            .into_par_iter()
+            .map(|_| LockedBoxedMemoryHolder::new())
+            .collect();
+        let memory_holders_cache = Arc::new(Mutex::new(memory_holders_cache));
+        let trace_chunks_count = replay_worker_threads_count * 2;
+        info!("PROVER creating trace chunks cache with {simulator_cache_entries_count} x {trace_chunks_count} entries");
+        let trace_chunks_cache = (0..simulator_cache_entries_count)
+            .into_par_iter()
+            .map(|_| {
+                (0..trace_chunks_count)
+                    .into_par_iter()
+                    .map(|_| LockedBoxedTraceChunk::new())
+                    .collect()
+            })
+            .collect();
+        let trace_chunks_cache = Arc::new(Mutex::new(trace_chunks_cache));
         let binary_holders = BTreeMap::new();
         info!("PROVER generating common precomputations");
         let common_precomputations = get_common_precomputations(&worker);
@@ -270,6 +280,8 @@ impl ExecutionProver {
             configuration,
             gpu_manager,
             worker,
+            memory_holders_cache,
+            trace_chunks_cache,
             binary_holders,
             common_precomputations,
             free_allocators_sender,
@@ -277,23 +289,34 @@ impl ExecutionProver {
         }
     }
 
+    /// Adds a binary to the `ExecutionProver` for proof or memory commitment generation.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - A unique identifier for the binary.
+    /// * `execution_kind` - Specifies the execution mode (`Unrolled` or `Unified`).
+    /// * `machine_type` - The type of machine for which the binary is intended.
+    /// * `binary_image` - The unpadded binary image as a vector of `u32`.
+    /// * `text_section` - The unpadded text section as a vector of `u32`.
+    /// * `cycles_bound` - An optional upper bound on execution cycles.
     pub fn add_binary(
         &mut self,
         key: usize,
         execution_kind: ExecutionKind,
         machine_type: MachineType,
-        mut binary_image: Vec<u32>,
-        mut text_section: Vec<u32>,
+        binary_image: Vec<u32>,
+        text_section: Vec<u32>,
+        cycles_bound: Option<u32>,
     ) {
-        setups::pad_bytecode_for_proving(&mut binary_image);
-        let binary_image = Arc::new(binary_image.into_boxed_slice());
+        info!("PROVER inserting binary with key {key:?}");
+        // setups::pad_bytecode_for_proving(&mut binary_image);
         let preprocess_bytecode_fn = match machine_type {
             MachineType::Full => preprocess_bytecode::<FullMachineDecoderConfig>,
             MachineType::FullUnsigned => preprocess_bytecode::<FullUnsignedMachineDecoderConfig>,
             MachineType::Reduced => preprocess_bytecode::<ReducedMachineDecoderConfig>,
         };
         let preprocessed_bytecode = preprocess_bytecode_fn(&text_section);
-        setups::pad_bytecode_for_proving(&mut text_section);
+        // setups::pad_bytecode_for_proving(&mut text_section);
         let instruction_tape = Arc::new(SimpleTape::new(&preprocessed_bytecode));
         let circuit_types = match execution_kind {
             ExecutionKind::Unrolled => {
@@ -320,20 +343,37 @@ impl ExecutionProver {
         };
         let precomputations = circuit_types.into_iter().map(|circuit_type| {
             debug!("PROVER producing precomputations for circuit {circuit_type:?} and binary with key {key:?}");
+            let mut binary_image = binary_image.clone();
+            setups::pad_bytecode_for_proving(&mut binary_image);
+            let mut text_section = text_section.clone();
+            setups::pad_bytecode_for_proving(&mut text_section);
             let precomputations = CircuitPrecomputations::new(CircuitType::Unrolled(circuit_type), &binary_image, &text_section, &self.worker);
             (circuit_type, precomputations)
         }).collect();
+        let binary_image = Arc::new(binary_image.into_boxed_slice());
+        let text_section = Arc::new(text_section.into_boxed_slice());
+        let jit_cache = Arc::new(Mutex::new(TypeMap::new()));
         let holder = BinaryHolder {
             execution_kind,
             machine_type,
             binary_image,
+            text_section,
+            cycles_bound,
             instruction_tape,
+            jit_cache,
             precomputations,
         };
-        info!("PROVER inserting binary with key {key:?}");
         assert!(self.binary_holders.insert(key, holder).is_none());
     }
 
+    /// Removes a binary from the `ExecutionProver`.
+    ///
+    /// # Arguments
+    ///
+    /// * `key`: A unique identifier for the binary to be removed.
+    ///
+    /// returns: ()
+    ///
     pub fn remove_binary(&mut self, key: usize) {
         info!("PROVER removing binary with key {key:?}");
         assert!(self.binary_holders.remove(&key).is_some());
@@ -345,8 +385,7 @@ impl ExecutionProver {
         cache: &mut Option<TraceCache>,
         batch_id: u64,
         binary_key: usize,
-        cycles_limit: usize,
-        non_determinism_source: Arc<Mutex<impl NonDeterminismCSRSource + Send + 'static>>,
+        non_determinism_source: Arc<Mutex<Option<impl NonDeterminismCSRSource + Send + 'static>>>,
         external_challenges: Option<ExternalChallenges>,
     ) -> ExecutionProverResult {
         if let Some(cache) = cache.as_ref() {
@@ -358,11 +397,11 @@ impl ExecutionProver {
         }
         assert!(proving ^ external_challenges.is_none());
         let replayers_count = self.configuration.replay_worker_threads_count;
-        let holder = &self.binary_holders[&binary_key];
+        let binary_holder = &self.binary_holders[&binary_key];
         let (work_results_sender, work_results_receiver) = unbounded();
         let (gpu_work_requests_sender, gpu_work_requests_receiver) = unbounded();
-        let (split_snapshot_sender, split_snapshot_receiver) = bounded(replayers_count);
-        let (unified_snapshot_sender, unified_snapshot_receiver) = bounded(replayers_count);
+        let (split_snapshot_sender, split_snapshot_receiver) = unbounded();
+        let (unified_snapshot_sender, unified_snapshot_receiver) = unbounded();
         let gpu_work_batch = GpuWorkBatch {
             batch_id,
             receiver: gpu_work_requests_receiver,
@@ -373,7 +412,14 @@ impl ExecutionProver {
         let mut pending_requests_count = 0;
         let mut sent_requests_count = 0;
         let mut requests_served_from_cache = BTreeSet::new();
+        let mut trivial_unified_inits_and_teardowns_count = 0;
+        let mut trivial_unified_inits_and_teardowns = BTreeSet::new();
         if let Some(cache) = cache.as_mut() {
+            trivial_unified_inits_and_teardowns_count =
+                cache.trivial_unified_inits_and_teardowns_count;
+            for i in 0..trivial_unified_inits_and_teardowns_count {
+                trivial_unified_inits_and_teardowns.insert(i);
+            }
             for entry in cache.entries.drain(..) {
                 let TraceCacheEntry {
                     circuit_type,
@@ -381,13 +427,20 @@ impl ExecutionProver {
                     inits_and_teardowns,
                     tracing_data,
                 } = entry;
+                if matches!(
+                    circuit_type,
+                    CircuitType::Unrolled(UnrolledCircuitType::InitsAndTeardowns)
+                ) && sequence_id < trivial_unified_inits_and_teardowns_count
+                {
+                    assert!(trivial_unified_inits_and_teardowns.remove(&sequence_id));
+                }
                 let precomputations = match circuit_type {
                     CircuitType::Delegation(_)
                     | CircuitType::Unrolled(UnrolledCircuitType::InitsAndTeardowns) => {
                         self.common_precomputations[&circuit_type].clone()
                     }
                     CircuitType::Unrolled(circuit_type) => {
-                        holder.precomputations[&circuit_type].clone()
+                        binary_holder.precomputations[&circuit_type].clone()
                     }
                 };
                 let request = ProofRequest {
@@ -407,8 +460,8 @@ impl ExecutionProver {
             }
         }
         let mut gpu_work_requests_sender = Some(gpu_work_requests_sender);
-        let execution_kind = holder.execution_kind;
-        let machine_type = holder.machine_type;
+        let execution_kind = binary_holder.execution_kind;
+        let machine_type = binary_holder.machine_type;
         let abort = Arc::new(AtomicBool::new(false));
         let mut simulation_result = None;
         let mut abort_signaled = if let Some(cache) = cache.as_ref() {
@@ -423,72 +476,128 @@ impl ExecutionProver {
             false
         };
         if abort_signaled {
-            trace!("BATCH[{batch_id}] skipping simulation as all proof requests have been served from cache");
+            debug!("BATCH[{batch_id}] all proof requests have been served from cache, skipping simulation");
         } else {
             trace!("BATCH[{batch_id}] PROVER spawning SIMULATOR worker");
+            let (free_trace_chunks_sender, free_trace_chunks_receiver) = unbounded();
             {
-                let snapshot_period = self.configuration.snapshot_period;
+                let memory_holders_cache = self.memory_holders_cache.clone();
+                let trace_chunks_cache = self.trace_chunks_cache.clone();
+                let free_trace_chunks_sender = free_trace_chunks_sender.clone();
                 let free_allocators_receiver = self.free_allocators_receiver.clone();
-                let binary_image = holder.binary_image.clone();
-                let instruction_tape = holder.instruction_tape.clone();
+                let binary_image = binary_holder.binary_image.clone();
+                let text_section = binary_holder.text_section.clone();
+                let cycles_bound = binary_holder.cycles_bound;
+                let jit_cache = binary_holder.jit_cache.clone();
+                let non_determinism_source = non_determinism_source.clone();
                 let work_results_sender = work_results_sender.clone();
                 let abort = abort.clone();
-                self.worker.pool.spawn(move || match execution_kind {
-                    ExecutionKind::Unrolled => run_split_simulator(
-                        batch_id,
-                        machine_type,
-                        binary_image,
-                        instruction_tape,
-                        non_determinism_source.lock().unwrap().deref_mut(),
-                        cycles_limit,
-                        snapshot_period,
-                        split_snapshot_sender,
-                        work_results_sender,
-                        free_allocators_receiver,
-                        abort,
-                    ),
-                    ExecutionKind::Unified => run_unified_simulator(
-                        batch_id,
-                        binary_image,
-                        instruction_tape,
-                        non_determinism_source.lock().unwrap().deref_mut(),
-                        cycles_limit,
-                        snapshot_period,
-                        unified_snapshot_sender,
-                        work_results_sender,
-                        free_allocators_receiver,
-                        abort,
-                    ),
+                let worker = self.worker.clone();
+                self.worker.pool.spawn(move || {
+                    let mut memory_holder = {
+                        let mut cache = memory_holders_cache.lock().unwrap();
+                        if cache.is_empty() {
+                            drop(cache);
+                            warn!("BATCH[{batch_id}] PROVER memory holders cache is empty, creating a new memory holder");
+                            LockedBoxedMemoryHolder::new()
+                        } else {
+                            cache.pop().unwrap()
+                        }
+                    };
+                    let trace_chunks_count = replayers_count * 2;
+                    {
+                        let mut cache = trace_chunks_cache.lock().unwrap();
+                        let chunks = if cache.is_empty() {
+                            drop(cache);
+                            warn!("BATCH[{batch_id}] PROVER trace chunks cache is empty, creating a new set of trace chunks");
+                            (0..trace_chunks_count)
+                                .into_par_iter()
+                                .map(|_| LockedBoxedTraceChunk::new())
+                                .collect()
+                        }
+                        else {
+                            cache.pop().unwrap()
+                        };
+                        for chunk in chunks {
+                            free_trace_chunks_sender.send(chunk).unwrap();
+                        }
+                    }
+                    let free_trace_chunks_receiver_clone = free_trace_chunks_receiver.clone();
+                    match execution_kind {
+                        ExecutionKind::Unrolled => run_simulator::<_, SplitTracingType>(
+                            batch_id,
+                            machine_type,
+                            binary_image,
+                            text_section,
+                            cycles_bound,
+                            jit_cache,
+                            &mut memory_holder,
+                            non_determinism_source,
+                            free_trace_chunks_sender,
+                            free_trace_chunks_receiver,
+                            split_snapshot_sender,
+                            work_results_sender,
+                            free_allocators_receiver,
+                            abort,
+                            &worker,
+                        ),
+                        ExecutionKind::Unified => run_simulator::<_, UnifiedTracingType>(
+                            batch_id,
+                            machine_type,
+                            binary_image,
+                            text_section,
+                            cycles_bound,
+                            jit_cache,
+                            &mut memory_holder,
+                            non_determinism_source,
+                            free_trace_chunks_sender,
+                            free_trace_chunks_receiver,
+                            unified_snapshot_sender,
+                            work_results_sender,
+                            free_allocators_receiver,
+                            abort,
+                            &worker,
+                        ),
+                    };
+                    memory_holders_cache.lock().unwrap().push(memory_holder);
+                    let trace_chunks = free_trace_chunks_receiver_clone.iter().collect_vec();
+                    assert_eq!(trace_chunks.len(), trace_chunks_count);
+                    trace_chunks_cache.lock().unwrap().push(trace_chunks);
                 });
             }
             trace!("BATCH[{batch_id}] PROVER spawning REPLAY workers");
             for worker_id in 0..replayers_count {
-                let instruction_tape = holder.instruction_tape.clone();
+                let instruction_tape = binary_holder.instruction_tape.clone();
                 let split_snapshot_receiver = split_snapshot_receiver.clone();
+                let free_trace_chunks_sender = free_trace_chunks_sender.clone();
                 let unified_snapshot_receiver = unified_snapshot_receiver.clone();
                 let work_results_sender = work_results_sender.clone();
                 let abort = abort.clone();
                 self.worker.pool.spawn(move || match execution_kind {
-                    ExecutionKind::Unrolled => run_split_replayer(
+                    ExecutionKind::Unrolled => run_replayer::<SplitTracingType>(
                         batch_id,
                         worker_id,
                         instruction_tape,
                         split_snapshot_receiver,
+                        free_trace_chunks_sender,
                         work_results_sender,
                         abort,
                     ),
-                    ExecutionKind::Unified => run_unified_replayer(
+                    ExecutionKind::Unified => run_replayer::<UnifiedTracingType>(
                         batch_id,
                         worker_id,
                         instruction_tape,
                         unified_snapshot_receiver,
+                        free_trace_chunks_sender,
                         work_results_sender,
                         abort,
                     ),
                 });
             }
+            drop(free_trace_chunks_sender);
         }
         drop(split_snapshot_receiver);
+        drop(unified_snapshot_receiver);
         drop(work_results_sender);
         let mut uninitialized_tracing_data = BTreeMap::new();
         let mut uninitialized_tracing_data_key_by_snapshot_index = BTreeMap::new();
@@ -501,6 +610,14 @@ impl ExecutionProver {
         let mut circuit_families_proofs = BTreeMap::new();
         let mut inits_and_teardowns_proofs = BTreeMap::new();
         let mut delegation_circuits_proofs = BTreeMap::new();
+        for sequence_id in trivial_unified_inits_and_teardowns {
+            let data = InitsAndTeardownsData {
+                circuit_type: CircuitType::Unrolled(UnrolledCircuitType::Unified),
+                sequence_id,
+                inits_and_teardowns: None,
+            };
+            unpaired_unified_inits_and_teardowns.insert(sequence_id, data);
+        }
         match execution_kind {
             ExecutionKind::Unrolled => {
                 let non_memory =
@@ -563,7 +680,7 @@ impl ExecutionProver {
                     self.common_precomputations[&circuit_type].clone()
                 }
                 CircuitType::Unrolled(circuit_type) => {
-                    holder.precomputations[&circuit_type].clone()
+                    binary_holder.precomputations[&circuit_type].clone()
                 }
             };
             if proving {
@@ -606,16 +723,33 @@ impl ExecutionProver {
                     }
                     CircuitType::Unrolled(UnrolledCircuitType::Unified) => {
                         let sequence_id = data.sequence_id;
-                        assert!(!unpaired_unified_inits_and_teardowns.contains_key(&sequence_id));
-                        if let Some(tracing_data) =
-                            unpaired_unified_tracing_data.remove(&sequence_id)
+                        if sequence_id < trivial_unified_inits_and_teardowns_count {
+                            assert!(data.inits_and_teardowns.is_none());
+                        }
+                        if !proving
+                            || cache.is_none()
+                            || sequence_id >= trivial_unified_inits_and_teardowns_count
                         {
-                            let request = get_gpu_work_request(Some(data), Some(tracing_data));
-                            gpu_work_requests.push_back(request);
-                        } else {
-                            assert!(unpaired_unified_inits_and_teardowns
-                                .insert(sequence_id, data)
-                                .is_none());
+                            assert!(
+                                !unpaired_unified_inits_and_teardowns.contains_key(&sequence_id)
+                            );
+                            if sequence_id >= trivial_unified_inits_and_teardowns_count {
+                                if proving && cache.is_some() {
+                                    assert!(data.inits_and_teardowns.is_some())
+                                } else if data.inits_and_teardowns.is_none() {
+                                    trivial_unified_inits_and_teardowns_count = sequence_id + 1;
+                                }
+                            }
+                            if let Some(tracing_data) =
+                                unpaired_unified_tracing_data.remove(&sequence_id)
+                            {
+                                let request = get_gpu_work_request(Some(data), Some(tracing_data));
+                                gpu_work_requests.push_back(request);
+                            } else {
+                                assert!(unpaired_unified_inits_and_teardowns
+                                    .insert(sequence_id, data)
+                                    .is_none());
+                            }
                         }
                     }
                     _ => panic!("unexpected circuit type for inits and teardowns data"),
@@ -840,7 +974,7 @@ impl ExecutionProver {
                     && gpu_work_requests_sender.is_some()
                     && cache.total_requests_count == sent_requests_count
                 {
-                    trace!("BATCH[{batch_id}] PROVER aborting simulation as all remaining proof requests have been served from cache");
+                    debug!("BATCH[{batch_id}] PROVER all remaining proof requests have been served from cache, signaling abort of simulation");
                     gpu_work_requests_sender = None;
                     abort.store(true, std::sync::atomic::Ordering::Relaxed);
                     simulation_result = cache.simulation_result.clone();
@@ -875,6 +1009,8 @@ impl ExecutionProver {
                 assert!(cache.is_empty())
             } else {
                 cache.total_requests_count = sent_requests_count;
+                cache.trivial_unified_inits_and_teardowns_count =
+                    trivial_unified_inits_and_teardowns_count;
                 cache.simulation_result = simulation_result.clone();
             }
         }
@@ -975,8 +1111,7 @@ impl ExecutionProver {
         cache: &mut Option<TraceCache>,
         batch_id: u64,
         binary_key: usize,
-        cycle_limit: usize,
-        non_determinism_source: Arc<Mutex<impl NonDeterminismCSRSource + Send + 'static>>,
+        non_determinism_source: Arc<Mutex<Option<impl NonDeterminismCSRSource + Send + 'static>>>,
     ) -> CommitMemoryResult {
         info!("BATCH[{batch_id}] PROVER producing memory commitments for binary with key {binary_key:?}");
         let timer = Instant::now();
@@ -986,7 +1121,6 @@ impl ExecutionProver {
                 cache,
                 batch_id,
                 binary_key,
-                cycle_limit,
                 non_determinism_source,
                 None,
             )
@@ -1001,30 +1135,19 @@ impl ExecutionProver {
     /// # Arguments
     ///
     /// * `batch_id`: a unique identifier for the batch of work, used to distinguish batches in a multithreaded scenario
-    /// * `binary_key`: a key that identifies the binary to work with, this key must match one of the keys in the `binaries` map provided during the creation of the `ExecutionProver`
-    /// * `num_instances_upper_bound`: maximum number of main circuit instances that the prover will try to trace, if the simulation does not end within this limit, it will fail
+    /// * `binary_key`: a key that identifies the binary to work with, this key must match one of the keys of the binaries that were previously added to the `ExecutionProver` using the `add_binary` method
     /// * `non_determinism_source`: a value implementing the `NonDeterminism` trait that provides non-deterministic values for the simulation
     ///
-    /// returns: a tuple containing:
-    ///     - final register values for the main circuit,
-    ///     - a vector of memory commitments for the chunks of the main circuit,
-    ///     - a vector of memory commitments for the chunks of the delegation circuits, where each element is a tuple containing the delegation circuit type and a vector of memory commitments for that type
+    /// returns: a CommitMemoryResult structure
     ///
     pub fn commit_memory(
         &self,
         batch_id: u64,
         binary_key: usize,
-        cycle_limit: usize,
         non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
     ) -> CommitMemoryResult {
-        let non_determinism_source = Arc::new(Mutex::new(non_determinism_source));
-        self.commit_memory_inner(
-            &mut None,
-            batch_id,
-            binary_key,
-            cycle_limit,
-            non_determinism_source,
-        )
+        let non_determinism_source = Arc::new(Mutex::new(Some(non_determinism_source)));
+        self.commit_memory_inner(&mut None, batch_id, binary_key, non_determinism_source)
     }
 
     fn prove_inner(
@@ -1032,8 +1155,7 @@ impl ExecutionProver {
         cache: &mut Option<TraceCache>,
         batch_id: u64,
         binary_key: usize,
-        cycle_limit: usize,
-        non_determinism_source: Arc<Mutex<impl NonDeterminismCSRSource + Send + 'static>>,
+        non_determinism_source: Arc<Mutex<Option<impl NonDeterminismCSRSource + Send + 'static>>>,
         external_challenges: ExternalChallenges,
     ) -> ProveResult {
         info!("BATCH[{batch_id}] PROVER producing proofs for binary with key {binary_key:?}");
@@ -1044,7 +1166,6 @@ impl ExecutionProver {
                 cache,
                 batch_id,
                 binary_key,
-                cycle_limit,
                 non_determinism_source,
                 Some(external_challenges),
             )
@@ -1060,29 +1181,23 @@ impl ExecutionProver {
     ///
     /// * `batch_id`: a unique identifier for the batch of work, used to distinguish batches in a multithreaded scenario
     /// * `binary_key`: a key that identifies the binary to work with, this key must match one of the keys in the `binaries` map provided during the creation of the `ExecutionProver`
-    /// * `num_instances_upper_bound`: maximum number of main circuit instances that the prover will try to trace, if the simulation does not end within this limit, it will fail
     /// * `non_determinism_source`: a value implementing the `NonDeterminism` trait that provides non-deterministic values for the simulation
     /// * `external_challenges`: an instance of `ExternalChallenges` that contains the challenges to be used in the proof generation
     ///
-    /// returns: a tuple containing:
-    ///     - final register values for the main circuit,
-    ///     - a vector of proofs for the chunks of the main circuit,
-    ///     - a vector of proofs for the chunks of the delegation circuits, where each element is a tuple containing the delegation circuit type and a vector of memory commitments for that type
+    /// returns: a ProveResult structure
     ///
     pub fn prove(
         &self,
         batch_id: u64,
         binary_key: usize,
-        cycle_limit: usize,
         non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
         external_challenges: ExternalChallenges,
     ) -> ProveResult {
-        let non_determinism_source = Arc::new(Mutex::new(non_determinism_source));
+        let non_determinism_source = Arc::new(Mutex::new(Some(non_determinism_source)));
         self.prove_inner(
             &mut None,
             batch_id,
             binary_key,
-            cycle_limit,
             non_determinism_source,
             external_challenges,
         )
@@ -1094,39 +1209,34 @@ impl ExecutionProver {
     ///
     /// * `batch_id`: a unique identifier for the batch of work, used to distinguish batches in a multithreaded scenario
     /// * `binary_key`: a key that identifies the binary to work with, this key must match one of the keys in the `binaries` map provided during the creation of the `ExecutionProver`
-    /// * `num_instances_upper_bound`: maximum number of main circuit instances that the prover will try to trace, if the simulation does not end within this limit, it will fail
     /// * `non_determinism_source`: a value implementing the `NonDeterminism` trait that provides non-deterministic values for the simulation
     ///
-    /// returns: a tuple containing:
-    ///     - final register values for the main circuit,
-    ///     - a vector of proofs for the chunks of the main circuit,
-    ///     - a vector of proofs for the chunks of the delegation circuits, where each element is a tuple containing the delegation circuit type and a vector of memory commitments for that type
+    /// returns: a ProveResult structure
     ///
     pub fn commit_memory_and_prove(
         &self,
         batch_id: u64,
         binary_key: usize,
-        cycle_limit: usize,
         non_determinism_source: impl NonDeterminismCSRSource + Send + 'static,
     ) -> ProveResult {
         let nd_rapper = NonDeterminismWrapper::new(non_determinism_source);
-        let non_determinism_source = Arc::new(Mutex::new(nd_rapper));
+        let non_determinism_source = Arc::new(Mutex::new(Some(nd_rapper)));
         let mut cache = Some(TraceCache::new());
         let timer = Instant::now();
         let memory_commitment_result = self.commit_memory_inner(
             &mut cache,
             batch_id,
             binary_key,
-            cycle_limit,
             non_determinism_source.clone(),
         );
         let non_determinism_values = Arc::into_inner(non_determinism_source)
             .unwrap()
             .into_inner()
             .unwrap()
+            .unwrap()
             .into_values();
         let non_determinism_source = QuasiUARTSource::new_with_reads(non_determinism_values);
-        let non_determinism_source = Arc::new(Mutex::new(non_determinism_source));
+        let non_determinism_source = Arc::new(Mutex::new(Some(non_determinism_source)));
         let CommitMemoryResult {
             final_register_values,
             final_pc,
@@ -1158,7 +1268,6 @@ impl ExecutionProver {
             &mut cache,
             batch_id,
             binary_key,
-            cycle_limit,
             non_determinism_source,
             external_challenges,
         );
@@ -1208,14 +1317,6 @@ impl ExecutionProver {
         prove_result
     }
 }
-
-// impl<'a, K: Debug + Eq + Hash> Drop for ExecutionProver<K> {
-//     fn drop(&mut self) {
-//         trace!("PROVER waiting for all threads to finish");
-//         self.wait_group.take().unwrap().wait();
-//         trace!("PROVER all threads finished");
-//     }
-// }
 
 fn unrolled_proof_into_proof(proof: UnrolledModeProof) -> Proof {
     assert!(proof.aux_boundary_values.is_empty());
@@ -1269,8 +1370,12 @@ impl<N: NonDeterminismCSRSource> NonDeterminismCSRSource for NonDeterminismWrapp
         value
     }
 
-    fn write_with_memory_access<R: RamPeek + ?Sized>(&mut self, ram: &R, value: u32) {
-        self.inner.write_with_memory_access(ram, value);
+    fn write_with_memory_access<R: RamPeek>(&mut self, ram: &R, value: u32) {
+        self.inner.write_with_memory_access(ram, value)
+    }
+
+    fn write_with_memory_access_dyn(&mut self, ram: &dyn RamPeek, value: u32) {
+        self.inner.write_with_memory_access_dyn(ram, value)
     }
 }
 
@@ -1278,8 +1383,9 @@ impl<N: NonDeterminismCSRSource> NonDeterminismCSRSource for NonDeterminismWrapp
 mod tests {
     use crate::execution::prover::{ExecutionKind, ExecutionProver, ExecutionProverConfiguration};
     use crate::machine_type::MachineType;
-    use crate::tests::{init_logger, read_binary};
+    use crate::tests::init_logger;
     use prover::risc_v_simulator::abstractions::non_determinism::QuasiUARTSource;
+    use setups::read_binary;
     use std::path::Path;
 
     #[test]
@@ -1288,28 +1394,30 @@ mod tests {
         let mut configuration = ExecutionProverConfiguration::default();
         configuration.replay_worker_threads_count = 8;
         let mut prover = ExecutionProver::with_configuration(configuration);
-        let binary_image = read_binary(&Path::new("../examples/hashed_fibonacci/app.bin"));
-        let text_section = read_binary(&Path::new("../examples/hashed_fibonacci/app.text"));
+        let (_, binary_image) = read_binary(&Path::new("../examples/hashed_fibonacci/app.bin"));
+        let (_, text_section) = read_binary(&Path::new("../examples/hashed_fibonacci/app.text"));
         prover.add_binary(
             0,
             ExecutionKind::Unrolled,
             MachineType::FullUnsigned,
             binary_image,
             text_section,
+            None,
         );
         let non_determinism_source = QuasiUARTSource::new_with_reads(vec![3 << 25, 0]);
-        let base_layer_result =
-            prover.commit_memory_and_prove(0, 0, 1 << 36, non_determinism_source);
-        let binary_image = read_binary(&Path::new("../tools/verifier/unrolled_base_layer.bin"));
-        let text_section = read_binary(&Path::new("../tools/verifier/unrolled_base_layer.text"));
+        let base_layer_result = prover.commit_memory_and_prove(0, 0, non_determinism_source);
+        let (_, binary_image) =
+            read_binary(&Path::new("../tools/verifier/unrolled_base_layer.bin"));
+        let (_, text_section) =
+            read_binary(&Path::new("../tools/verifier/unrolled_base_layer.text"));
         prover.add_binary(
             1,
             ExecutionKind::Unrolled,
             MachineType::Reduced,
             binary_image,
             text_section,
+            None,
         );
-
         drop(prover);
     }
 }

@@ -15,9 +15,6 @@ use era_cudart::execution::{CudaLaunchConfig, KernelFunction};
 use era_cudart::memory::memory_get_info;
 use era_cudart::result::CudaResult;
 use era_cudart::stream::CudaStream;
-use riscv_transpiler::witness::delegation::bigint::BigintDelegationWitness;
-use riscv_transpiler::witness::delegation::blake2_round_function::Blake2sRoundFunctionDelegationWitness;
-use riscv_transpiler::witness::delegation::keccak_special5::KeccakSpecial5DelegationWitness;
 use std::ptr::{null, null_mut};
 
 cuda_kernel!(GenerateWitnessUnrolledMemoryKernel,

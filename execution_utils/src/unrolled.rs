@@ -36,11 +36,16 @@ impl UnrolledProgramSetup {
 
         let setups: Vec<_> = circuit_families_setups.iter().map(|el| &el.1).collect();
 
-        let end_params = compute_end_parameters_for_unrolled_circuits(
-            final_pc,
-            &setups,
-            inits_and_teardowns_setup,
-        );
+        let end_params = if setups.len() > 1 {
+            compute_end_parameters_for_unrolled_circuits(
+                final_pc,
+                &setups,
+                inits_and_teardowns_setup,
+            )
+        } else {
+            assert!(inits_and_teardowns_setup.iter().all(|el| el.cap.iter().all(|el| *el == [0u32; 8])), "single setup is for unified circuits, where inits and teardowns setup is conventional all zeroes here");
+            compute_end_parameters_for_unified_circuit(final_pc, &setups[0])
+        };
 
         // binary hash can be anything - it's just for bookkeeping
         let binary_hash = sha3::Keccak256::digest(binary).into();
@@ -127,21 +132,21 @@ pub struct UnrolledProgramProof {
 }
 
 impl UnrolledProgramProof {
-    pub fn get_proof_counts(&self) -> (usize, usize) {
-        let proofs: usize = self
+    pub fn get_proof_counts(&self) -> (usize, usize, usize) {
+        let family_proofs: usize = self
             .circuit_families_proofs
             .iter()
             .map(|(_, v)| v.len())
             .sum();
+        let inits_and_teardowns_proofs = self.inits_and_teardowns_proofs.len();
         let delegation_proofs: usize = self.delegation_proofs.iter().map(|(_, v)| v.len()).sum();
-        (proofs, delegation_proofs)
+        (family_proofs, inits_and_teardowns_proofs, delegation_proofs)
     }
+
     pub fn debug_info(&self) -> String {
-        let (proofs, delegation_proofs) = self.get_proof_counts();
-        format!(
-            "Proofs: {} circuit family proofs, {} delegation proofs",
-            proofs, delegation_proofs
-        )
+        let (family_proofs, inits_and_teardowns_proofs, delegation_proofs) =
+            self.get_proof_counts();
+        format!("Proofs: {family_proofs} circuit family proof(s), {inits_and_teardowns_proofs} inits and teardowns proof(s), {delegation_proofs} delegation proof(s)")
     }
 
     pub fn flatten_into_responses(
@@ -172,10 +177,11 @@ impl UnrolledProgramProof {
         for (family, proofs) in self.circuit_families_proofs.iter() {
             responses.push(proofs.len() as u32);
             for proof in proofs.iter() {
-                let t = verifier_common::proof_flattener::flatten_full_unrolled_proof(
-                    proof,
-                    &compiled_layouts.compiled_circuit_families[family],
-                );
+                let Some(artifact) = &compiled_layouts.compiled_circuit_families.get(family) else {
+                    panic!("Proofs file has a proof for circuit type {}, but there is no matching compiled circuit in the set", family);
+                };
+                let t =
+                    verifier_common::proof_flattener::flatten_full_unrolled_proof(proof, artifact);
                 responses.extend(t);
             }
         }
