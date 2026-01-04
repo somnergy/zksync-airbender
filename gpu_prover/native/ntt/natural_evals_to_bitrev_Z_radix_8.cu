@@ -1,196 +1,94 @@
-#include "ntt.cuh"
+#include "radix_8_utils.cuh"
 
 namespace airbender::ntt {
 
-DEVICE_FORCEINLINE void size_8_fwd_dit(e2f *x) {
-  constexpr e2f W_1_8 = e2f{bf{32768}, bf{2147450879}};
-  // constexpr e2f W_1_4 = e2f{bf{0}, bf{2147483646}};
-  constexpr e2f W_3_8 = e2f{bf{2147450879}, bf{2147450879}};
-
-  // first stage
-#pragma unroll
-  for (unsigned i{0}; i < 4; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 4]);
-      x[i + 4] = e2f::sub(tmp, x[i + 4]);
-  }
-
-  // second stage
-#pragma unroll
-  for (unsigned i{0}; i < 2; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 2]);
-      x[i + 2] = e2f::sub(tmp, x[i + 2]);
-  }
-  // x[4] = x[4] + W_1_4 * (x[6].real + i * x[6].imag)
-  //      = x[4] + (-i) * (x[6].real + i * x[6].imag)
-  //      = x[4] + (x[6].imag - i * x[6].real)
-  // x[6] = x[4] - W_1_4 * (x[6].real + i * x[6].imag)
-  //      = x[4] - (-i) * (x[6].real + i * x[6].imag)
-  //      = x[4] + (-x[6].imag + i * x[6].real)
-#pragma unroll
-  for (unsigned i{4}; i < 6; i++) {
-      const e2f tmp0 = x[i];
-      x[i][0] = bf::add(x[i][0], x[i + 2][1]);
-      x[i][1] = bf::sub(x[i][1], x[i + 2][0]);
-      const bf tmp1 = x[i + 2][0];
-      x[i + 2][0] = bf::sub(tmp0[0], x[i + 2][1]);
-      x[i + 2][1] = bf::add(tmp0[1], tmp1);
-  }
-
-  // third stage
-  {
-    // x[3] = W_1_4 * x[3]
-    //      = -i * (x[3].real + i * x[3].imag)
-    //      = x[3].imag - i * x[3].real) 
-    const bf tmp = x[3][0];
-    x[3][0] = x[3][1];
-    x[3][1] = bf::neg(tmp);
-  }
-  x[5] = e2f::mul(W_1_8, x[5]); // don't bother optimizing, marginal gains
-  x[7] = e2f::mul(W_3_8, x[7]); // don't bother optimizing, marginal gains
-#pragma unroll
-  for (unsigned i{0}; i < 8; i += 2) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 1]);
-      x[i + 1] = e2f::sub(tmp, x[i + 1]);
-  }
-
-  // undo bitrev
-  const e2f tmp0 = x[1];
-  x[1] = x[4];
-  x[4] = tmp0;
-  const e2f tmp1 = x[3];
-  x[3] = x[6];
-  x[6] = tmp1;
-}
-
-DEVICE_FORCEINLINE void size_8_inv_dit(e2f *x) {
-  constexpr e2f W_1_8_INV = e2f{bf{32768}, bf{32768}};
-  // constexpr e2f W_1_4_INV = e2f{bf{0}, bf{1}};
-  constexpr e2f W_3_8_INV = e2f{bf{2147450879}, bf{32768}};
-
-  // first stage
-#pragma unroll
-  for (unsigned i{0}; i < 4; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 4]);
-      x[i + 4] = e2f::sub(tmp, x[i + 4]);
-  }
-
-  // second stage
-#pragma unroll
-  for (unsigned i{0}; i < 2; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 2]);
-      x[i + 2] = e2f::sub(tmp, x[i + 2]);
-  }
-  // x[4] = x[4] + W_1_4_INV * (x[6].real + i * x[6].imag)
-  //      = x[4] + i * (x[6].real + i * x[6].imag)
-  //      = x[4] + (-x[6].imag + i * x[6].real)
-  // x[6] = x[4] - W_1_4_INV * (x[6].real + i * x[6].imag)
-  //      = x[4] - i * (x[6].real + i * x[6].imag)
-  //      = x[4] + (x[6].imag - i * x[6].real)
-#pragma unroll
-  for (unsigned i{4}; i < 6; i++) {
-      const e2f tmp0 = x[i];
-      x[i][0] = bf::sub(x[i][0], x[i + 2][1]);
-      x[i][1] = bf::add(x[i][1], x[i + 2][0]);
-      const bf tmp1 = x[i + 2][0];
-      x[i + 2][0] = bf::add(tmp0[0], x[i + 2][1]);
-      x[i + 2][1] = bf::sub(tmp0[1], tmp1);
-  }
-
-  // third stage
-  {
-    // x[3] = W_1_4_INV * x[3]
-    //      = i * (x[3].real + i * x[3].imag)
-    //      = -x[3].imag + i * x[3].real) 
-    const bf tmp = x[3][0];
-    x[3][0] = bf::neg(x[3][1]);
-    x[3][1] = tmp;
-  }
-  x[5] = e2f::mul(W_1_8_INV, x[5]); // don't bother optimizing, marginal gains
-  x[7] = e2f::mul(W_3_8_INV, x[7]); // don't bother optimizing, marginal gains
-#pragma unroll
-  for (unsigned i{0}; i < 8; i += 2) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 1]);
-      x[i + 1] = e2f::sub(tmp, x[i + 1]);
-  }
-
-  // undo bitrev
-  const e2f tmp0 = x[1];
-  x[1] = x[4];
-  x[4] = tmp0;
-  const e2f tmp1 = x[3];
-  x[3] = x[6];
-  x[6] = tmp1;
-}
-
-template <unsigned LOG_RADIX>
-DEVICE_FORCEINLINE unsigned bitrev_by_radix(const unsigned idx, const unsigned bit_chunks) {
-  constexpr unsigned RADIX_MASK = (1 << LOG_RADIX) - 1;
-  unsigned out{0}, tmp_idx{idx};
-  for (unsigned i{0}; i < bit_chunks; i++) {
-    out <<= LOG_RADIX;
-    out |= tmp_idx & RADIX_MASK;
-    tmp_idx >>= LOG_RADIX;
-  }
-  return out;
-}
-
-EXTERN __launch_bounds__(128, 8) __global__
-    void ab_bit_reverse_by_radix_8(vectorized_e2_matrix_getter<ld_modifier::cg> src, vectorized_e2_matrix_setter<st_modifier::cg> dst,
-                                 const unsigned bit_chunks, const unsigned log_n) {
-  const unsigned n = 1 << log_n;
-  const unsigned l_index = blockIdx.x * blockDim.x + threadIdx.x;
-  if (l_index >= n)
-    return;
-  const unsigned r_index = bitrev_by_radix<3>(l_index, bit_chunks);
-  if (l_index > r_index)
-    return;
-  const e2f l_value = src.get_at_row(l_index);
-  const e2f r_value = src.get_at_row(r_index);
-  dst.set_at_row(l_index, r_value);
-  dst.set_at_row(r_index, l_value);
-}
-                                                     
-
-template <unsigned LOG_RADIX>
-DEVICE_FORCEINLINE void apply_twiddles_same_region(e2f *vals0, e2f *vals1, const unsigned exchg_region, const unsigned twiddle_stride,
-                                                   const unsigned idx_bit_chunks) {
+EXTERN __launch_bounds__(256, 3) __global__
+    void ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp(vectorized_e2_matrix_getter<ld_modifier::cg> gmem_in,
+                                                                  vectorized_e2_matrix_setter<st_modifier::cg> gmem_out, const unsigned start_stage,
+                                                                  unsigned exchg_region_bit_chunks, const unsigned log_n, const unsigned grid_offset) {
+  constexpr unsigned WARP_SIZE = 32u;
+  constexpr unsigned LOG_RADIX = 3u;
   constexpr unsigned RADIX = 1 << LOG_RADIX;
-  if (exchg_region > 0) {
-    const unsigned v = bitrev_by_radix<LOG_RADIX>(exchg_region, idx_bit_chunks);
-#pragma unroll
-    for (unsigned i{1}; i < RADIX; i++) {
-      const auto twiddle = get_twiddle_with_direct_index<true>(v * i * twiddle_stride);
-      vals0[i] = e2f::mul(vals0[i], twiddle);
-      vals1[i] = e2f::mul(vals1[i], twiddle);
-    }  
-  }
-}
+  constexpr unsigned LOG_WARPS_PER_BLOCK = 3;
+  constexpr unsigned LOG_VALS_PER_THREAD = 4;
+  constexpr unsigned VALS_PER_BLOCK = WARP_SIZE << (LOG_WARPS_PER_BLOCK + LOG_VALS_PER_THREAD);
+  constexpr unsigned LOG_TILE_SIZE = 3;
+  constexpr unsigned TILES_PER_WARP = 32 >> LOG_TILE_SIZE;
+  constexpr unsigned TILE_SIZE = 1 << LOG_TILE_SIZE;
+  constexpr unsigned TILE_MASK = TILE_SIZE - 1;
 
-template <unsigned LOG_RADIX>
-DEVICE_FORCEINLINE void apply_twiddles_distinct_regions(e2f *vals0, e2f *vals1, const unsigned exchg_region_0, const unsigned exchg_region_1,
-                                                        const unsigned twiddle_stride, const unsigned idx_bit_chunks) {
-  constexpr unsigned RADIX = 1 << LOG_RADIX;
-  if (exchg_region_0 > 0) {
-    const unsigned v = bitrev_by_radix<LOG_RADIX>(exchg_region_0, idx_bit_chunks);
+  __shared__ e2f static_smem[VALS_PER_BLOCK];
+
+  const unsigned effective_block_idx_x = blockIdx.x + grid_offset;
+  const unsigned warp_id = threadIdx.x >> 5;
+  e2f *smem = static_smem + warp_id * (WARP_SIZE << LOG_VALS_PER_THREAD);
+  const unsigned lane_id = threadIdx.x & 31;
+  const unsigned tile_id = lane_id >> LOG_TILE_SIZE;
+  const unsigned lane_in_tile = lane_id & TILE_MASK;
+  const unsigned log_exchg_region_size = log_n - start_stage * LOG_RADIX;
+  const unsigned log_tile_gmem_stride = log_exchg_region_size - 2 * LOG_RADIX;
+  const unsigned log_blocks_per_exchg_region = log_tile_gmem_stride - LOG_TILE_SIZE - LOG_WARPS_PER_BLOCK;
+  const unsigned tile_gmem_stride = 1 << log_tile_gmem_stride;
+  const unsigned block_exchg_region = effective_block_idx_x >> log_blocks_per_exchg_region;
+  const unsigned block_in_exchg_region = effective_block_idx_x & ((1 << log_blocks_per_exchg_region) - 1);
+  const unsigned gmem_block_offset = block_exchg_region << log_exchg_region_size;
+  const unsigned gmem_warp_offset = ((block_in_exchg_region << LOG_WARPS_PER_BLOCK) + warp_id) << LOG_TILE_SIZE;
+  gmem_in.add_row(gmem_block_offset + gmem_warp_offset);
+  gmem_out.add_row(gmem_block_offset + gmem_warp_offset);
+
+  e2f vals0[RADIX];
+  e2f vals1[RADIX];
+
+  unsigned twiddle_stride = 1 << (OMEGA_LOG_ORDER - LOG_RADIX * (start_stage + 1));
+
+  // First three stages
+  {
+    const unsigned thread_offset = lane_in_tile + tile_id * tile_gmem_stride;
 #pragma unroll
-    for (unsigned i{1}; i < RADIX; i++) {
-      const auto twiddle = get_twiddle_with_direct_index<true>(v * i * twiddle_stride);
-      vals0[i] = e2f::mul(vals0[i], twiddle);
-    }  
+    for (unsigned i{0}, addr{thread_offset}; i < RADIX; i++, addr += RADIX * tile_gmem_stride) {
+      vals0[i] = gmem_in.get_at_row(addr);
+      vals1[i] = gmem_in.get_at_row(addr + TILES_PER_WARP * tile_gmem_stride);
+    }
+
+    if (start_stage > 0)
+      apply_twiddles_same_region<LOG_RADIX>(vals0, vals1, block_exchg_region, twiddle_stride, exchg_region_bit_chunks);
+
+    size_8_inv_dit(vals0);
+    size_8_inv_dit(vals1);
+
+#pragma unroll
+    for (unsigned i{0}, addr{threadIdx.x}; i < RADIX; i++, addr += 2 * WARP_SIZE) {
+      smem[addr] = vals0[i];
+      smem[addr + WARP_SIZE] = vals1[i];
+    }
+
+    __syncwarp();
   }
-  // exchg_region_1 should never be 0
-  const unsigned v = bitrev_by_radix<LOG_RADIX>(exchg_region_1, idx_bit_chunks);
+
+  // Second three stages
+  {
+    const unsigned thread_offset = 0; // lane_in_tile + tile_id * 2 * RADIX * TILE_SIZE;
 #pragma unroll
-  for (unsigned i{1}; i < RADIX; i++) {
-    const auto twiddle = get_twiddle_with_direct_index<true>(v * i * twiddle_stride);
-    vals1[i] = e2f::mul(vals1[i], twiddle);
-  }  
+    for (unsigned i{0}, addr{thread_offset}; i < RADIX; i++, addr += RADIX) {
+      vals0[i] = smem[addr];
+      vals1[i] = smem[addr + 64];
+    }
+//
+//     const unsigned exchg_region_0 = block_exchg_region * RADIX + 2 * tile_id;
+//     const unsigned exchg_region_1 = exchg_region_0 + 1;
+//     twiddle_stride >>= LOG_RADIX;
+//     apply_twiddles_distinct_regions<LOG_RADIX>(vals0, vals1, exchg_region_0, exchg_region_1, twiddle_stride, ++exchg_region_bit_chunks);
+//
+//     size_8_inv_dit(vals0);
+//     size_8_inv_dit(vals1);
+
+    const unsigned gmem_write_offset = lane_in_tile + tile_id * 2 * RADIX * tile_gmem_stride;
+#pragma unroll
+    for (unsigned i{0}, addr{gmem_write_offset}; i < RADIX; i++, addr += tile_gmem_stride ) {
+      gmem_out.set_at_row(addr, vals0[i]);
+      gmem_out.set_at_row(addr + RADIX * tile_gmem_stride, vals1[i]);
+    }
+  }
 }
 
 EXTERN __launch_bounds__(256, 3) __global__

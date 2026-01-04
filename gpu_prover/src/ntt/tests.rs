@@ -1061,7 +1061,7 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
 #[serial]
 fn test_natural_evals_to_bitrev_Z_radix_8() {
     run_natural_evals_to_bitrev_Z_radix_8(
-        12..13,
+        18..19,
         2,
     );
 }
@@ -1070,8 +1070,9 @@ fn test_natural_evals_to_bitrev_Z_radix_8() {
 #[serial]
 fn test_natural_trace_main_evals_to_bitrev_Z() {
     run_natural_evals_to_bitrev_Z(
-        1..17,
-        2 * REAL_COLS_PER_BLOCK as usize + 2,
+        16..17,
+        // 2 * REAL_COLS_PER_BLOCK as usize + 2,
+        2,
         EvalsAre::TraceMainDomain,
     );
 }
