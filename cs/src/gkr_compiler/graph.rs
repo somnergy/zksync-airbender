@@ -23,8 +23,64 @@ impl GraphElement for Placeholder {
     fn short_name(&self) -> String {
         unreachable!()
     }
-    fn evaluation_description(&self, graph: &mut dyn GraphHolder) -> NoFieldGKRRelation {
+    fn evaluation_description(&self, _graph: &mut dyn GraphHolder) -> NoFieldGKRRelation {
         unreachable!()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum CopyNode {
+    FromBase(GKRAddress),
+    FromIntermediate(GKRAddress),
+}
+
+impl GraphElement for CopyNode {
+    fn as_dyn(&'_ self) -> &'_ (dyn GraphElement + 'static) {
+        self
+    }
+    fn dyn_clone(&self) -> Box<dyn GraphElement> {
+        Box::new(self.clone())
+    }
+    fn dependencies(&self, graph: &mut dyn GraphHolder) -> Vec<NodeIndex> {
+        match self {
+            Self::FromBase(base) => {
+                match base {
+                    GKRAddress::BaseLayerMemory(..)
+                    | GKRAddress::BaseLayerWitness(..)
+                    | GKRAddress::Setup(..) => {}
+                    a @ _ => {
+                        panic!("{:?} is not base layer", a);
+                    }
+                }
+                let node_idx = graph.get_node_index_for_address(*base);
+                vec![node_idx]
+            }
+            Self::FromIntermediate(intermediate) => {
+                let node_idx = graph.get_node_index_for_address(*intermediate);
+                vec![node_idx]
+            }
+        }
+    }
+    fn equals(&self, other: &dyn GraphElement) -> bool {
+        graph_element_equals_if_eq(self, other)
+    }
+    #[track_caller]
+    fn short_name(&self) -> String {
+        match self {
+            Self::FromBase(var) => {
+                format!("Copy of {:?}", var)
+            }
+            Self::FromIntermediate(intermediate) => {
+                format!("Copy of {:?}", intermediate)
+            }
+        }
+    }
+    fn evaluation_description(&self, graph: &mut dyn GraphHolder) -> NoFieldGKRRelation {
+        let source_pos = match self {
+            Self::FromBase(base) => *base,
+            Self::FromIntermediate(intermediate) => *intermediate,
+        };
+        NoFieldGKRRelation::Copy(source_pos)
     }
 }
 
@@ -42,6 +98,8 @@ pub struct GKRGraph {
     pub(crate) range_check_16_setup_column: GKRAddress,
     pub(crate) timestamp_check_16_setup_column: GKRAddress,
     pub(crate) generic_lookup_setup_width: usize,
+    pub(crate) copies: Vec<BTreeMap<GKRAddress, GKRAddress>>,
+    pub(crate) intermediate_layers_offsets: BTreeMap<usize, usize>,
 }
 
 impl GKRGraph {
@@ -60,11 +118,18 @@ impl GKRGraph {
             range_check_16_setup_column: GKRAddress::Setup(0),
             timestamp_check_16_setup_column: GKRAddress::Setup(1),
             generic_lookup_setup_width,
+            copies: vec![],
+            intermediate_layers_offsets: BTreeMap::new(),
         };
+
+        new.add_base_layer_position_as_node(new.range_check_16_setup_column);
+        new.add_base_layer_position_as_node(new.timestamp_check_16_setup_column);
 
         // add setups as already resolved
         for i in 0..generic_lookup_setup_width {
-            new.setups.push(GKRAddress::Setup(2 + i));
+            let pos = GKRAddress::Setup(2 + i);
+            new.setups.push(pos);
+            new.add_base_layer_position_as_node(new.timestamp_check_16_setup_column);
         }
 
         new
@@ -110,12 +175,64 @@ impl GKRGraph {
         let dependencies = node.dependencies(self);
         let existing = self
             .dependencies
-            .insert(idx, dependencies.into_iter().map(|el| el.0).collect());
+            .insert(idx, dependencies.iter().map(|el| el.0).collect());
         assert!(existing.is_none());
         // put actual node
         self.all_nodes[idx] = node;
 
+        // and make a decision about placing a node into layer
+        let mut dependency_layer = -1;
+        for dep in dependencies.into_iter() {
+            let placement = self.rev_mapping[&dep.0];
+            let dep_player = match placement {
+                GKRAddress::BaseLayerMemory(..)
+                | GKRAddress::BaseLayerWitness(..)
+                | GKRAddress::Setup(..) => 0,
+                GKRAddress::OptimizedOut(..) => {
+                    todo!();
+                }
+                GKRAddress::Cached(cached_rel_idx) => 0,
+                GKRAddress::InnerLayer { layer, .. } => layer,
+            };
+            if dependency_layer == -1 {
+                dependency_layer = dep_player as isize;
+            } else {
+                assert_eq!(dependency_layer, dep_player as isize, "node {:?} -> {:?}: {} has unexpected dependency layer", dep, placement, &self.all_nodes[dep.0].short_name());
+            }
+        }
+        let destination_layer = (dependency_layer as usize) + 1;
+        let dst_offset = self
+            .intermediate_layers_offsets
+            .entry(destination_layer)
+            .or_insert(0);
+        let offset = *dst_offset;
+        *dst_offset += 1;
+        let pos = GKRAddress::InnerLayer {
+            layer: destination_layer,
+            offset,
+        };
+        self.mapping.insert(pos, idx);
+        self.rev_mapping.insert(idx, pos);
+
         idx
+    }
+
+    fn add_base_layer_position_as_node(&mut self, place: GKRAddress) {
+        match place {
+            GKRAddress::BaseLayerMemory(..)
+            | GKRAddress::BaseLayerWitness(..)
+            | GKRAddress::Setup(..) => {}
+            a @ _ => {
+                panic!("{:?} is not base layer", a);
+            }
+        }
+        let node_idx = self.all_nodes.len();
+        self.all_nodes
+            .push(Box::new(place) as Box<dyn GraphElement>);
+        // no dependencies
+        self.dependencies.insert(node_idx, vec![]);
+        self.mapping.insert(place, node_idx);
+        self.rev_mapping.insert(node_idx, place);
     }
 
     #[track_caller]
@@ -132,13 +249,7 @@ impl GKRGraph {
             self.base_layer_memory.insert(variable, place);
             self.base_layer_memory_rev.insert(place, variable);
 
-            let node_idx = self.all_nodes.len();
-            self.all_nodes
-                .push(Box::new(place) as Box<dyn GraphElement>);
-            // no dependencies
-            self.dependencies.insert(node_idx, vec![]);
-            self.mapping.insert(place, node_idx);
-            self.rev_mapping.insert(node_idx, place);
+            self.add_base_layer_position_as_node(place);
 
             assert!(
                 all_variables_to_place.remove(&variable),
@@ -164,13 +275,7 @@ impl GKRGraph {
             self.base_layer_witness.insert(variable, place);
             self.base_layer_witness_rev.insert(place, variable);
 
-            let node_idx = self.all_nodes.len();
-            self.all_nodes
-                .push(Box::new(place) as Box<dyn GraphElement>);
-            // no dependencies
-            self.dependencies.insert(node_idx, vec![]);
-            self.mapping.insert(place, node_idx);
-            self.rev_mapping.insert(node_idx, place);
+            self.add_base_layer_position_as_node(place);
 
             assert!(
                 all_variables_to_place.remove(&variable),
@@ -226,7 +331,7 @@ impl GraphHolder for GKRGraph {
         self.search(node).map(|el| NodeIndex(el))
     }
 
-    fn get_variable_position_assume_placed(&self, variable: Variable) -> NodeIndex {
+    fn get_node_index_for_variable(&self, variable: Variable) -> NodeIndex {
         let Some(pos) = self.get_fixed_layout_pos(&variable) else {
             panic!("Variable {:?} is not placed", variable);
         };
@@ -241,7 +346,14 @@ impl GraphHolder for GKRGraph {
         NodeIndex(index)
     }
 
-    fn get_variable_address_assume_placed(&self, variable: Variable) -> GKRAddress {
+    fn get_node_index_for_address(&self, pos: GKRAddress) -> NodeIndex {
+        let Some(idx) = self.mapping.get(&pos).copied() else {
+            panic!("No node mapping found for position {:?}", pos)
+        };
+        NodeIndex(idx)
+    }
+
+    fn get_address_for_variable(&self, variable: Variable) -> GKRAddress {
         let Some(pos) = self.get_fixed_layout_pos(&variable) else {
             panic!("Variable {:?} is not placed", variable);
         };
@@ -249,7 +361,11 @@ impl GraphHolder for GKRGraph {
         pos
     }
 
-    fn get_node_address_assume_placed(&self, node: &dyn GraphElement) -> GKRAddress {
+    fn get_address_for_node_index(&self, node_idx: NodeIndex) -> GKRAddress {
+        self.rev_mapping[&node_idx.0]
+    }
+
+    fn get_address_for_node(&self, node: &dyn GraphElement) -> GKRAddress {
         let node_idx = self.search(node).expect("already placed");
         self.rev_mapping[&node_idx]
     }
@@ -278,10 +394,26 @@ impl GraphHolder for GKRGraph {
             LookupType::Generic => &self.setups[..],
         }
     }
+
+    fn copy_base_layer_variable(&mut self, variable: Variable) -> GKRAddress {
+        let pos = self.get_address_for_variable(variable);
+        let node = CopyNode::FromBase(pos);
+        let idx = self.add_node_impl(Box::new(node));
+        self.rev_mapping[&idx]
+    }
+
+    fn copy_intermediate_layer_variable(&mut self, pos: GKRAddress) -> GKRAddress {
+        let GKRAddress::InnerLayer { layer, .. } = pos else {
+            unreachable!()
+        };
+        let node = CopyNode::FromIntermediate(pos);
+        let idx = self.add_node_impl(Box::new(node));
+        self.rev_mapping[&idx]
+    }
 }
 
 #[derive(
-    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, serde::Serialize, serde::Deserialize,
 )]
 pub struct NodeIndex(usize);
 
@@ -293,9 +425,15 @@ pub trait GraphHolder {
     fn get_node_index(&mut self, node: &dyn GraphElement) -> Option<NodeIndex>;
     fn add_cached_relation(&mut self, relation: NoFieldGKRCacheRelation) -> GKRAddress;
     fn get_cached_relation(&self, relation: &NoFieldGKRCacheRelation) -> Option<GKRAddress>;
-    fn get_variable_position_assume_placed(&self, variable: Variable) -> NodeIndex;
-    fn get_variable_address_assume_placed(&self, variable: Variable) -> GKRAddress;
-    fn get_node_address_assume_placed(&self, node: &dyn GraphElement) -> GKRAddress;
+    fn copy_base_layer_variable(&mut self, variable: Variable) -> GKRAddress;
+    fn copy_intermediate_layer_variable(&mut self, variable: GKRAddress) -> GKRAddress;
+
+    fn get_node_index_for_variable(&self, variable: Variable) -> NodeIndex;
+    fn get_node_index_for_address(&self, pos: GKRAddress) -> NodeIndex;
+
+    fn get_address_for_variable(&self, variable: Variable) -> GKRAddress;
+    fn get_address_for_node_index(&self, node_idx: NodeIndex) -> GKRAddress;
+    fn get_address_for_node(&self, node: &dyn GraphElement) -> GKRAddress;
     fn setup_addresses(&self, lookup_type: LookupType) -> &[GKRAddress];
 }
 
@@ -368,7 +506,7 @@ impl GraphElement for GKRAddress {
     }
     #[track_caller]
     fn evaluation_description(&self, _graph: &mut dyn GraphHolder) -> NoFieldGKRRelation {
-        unreachable!()
+        NoFieldGKRRelation::FormalBaseLayerInput
     }
 }
 

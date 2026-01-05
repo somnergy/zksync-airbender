@@ -12,6 +12,7 @@ use crate::gkr_compiler::graph::graph_element_equals_if_eq;
 use crate::gkr_compiler::graph::GKRGraph;
 use crate::gkr_compiler::graph::GraphElement;
 use crate::gkr_compiler::graph::GraphHolder;
+use crate::gkr_compiler::lookup_nodes::LookupDenominator;
 
 #[track_caller]
 pub(crate) fn layout_witness_subtree_variable_at_column(
@@ -237,7 +238,7 @@ impl DependentNode for AddressSpace {
             Self::Constant(..) => {}
             Self::RegisterOrRam(t) => match t {
                 AddressSpaceIsRegister::Is(var) | AddressSpaceIsRegister::Not(var) => {
-                    let index = graph.get_variable_position_assume_placed(*var);
+                    let index = graph.get_node_index_for_variable(*var);
                     dst.push(index);
                 }
             },
@@ -268,12 +269,12 @@ impl DependentNode for AddressSpaceAddress {
         match self {
             Self::Empty => {}
             Self::SingleLimb(var) => {
-                let index = graph.get_variable_position_assume_placed(*var);
+                let index = graph.get_node_index_for_variable(*var);
                 dst.push(index);
             }
             Self::U32Space(vars) => {
                 for var in vars.iter() {
-                    let index = graph.get_variable_position_assume_placed(*var);
+                    let index = graph.get_node_index_for_variable(*var);
                     dst.push(index);
                 }
             }
@@ -283,11 +284,11 @@ impl DependentNode for AddressSpaceAddress {
                 high,
                 ..
             } => {
-                dst.push(graph.get_variable_position_assume_placed(*low_base));
+                dst.push(graph.get_node_index_for_variable(*low_base));
                 if let Some(low_dynamic_offset) = low_dynamic_offset {
-                    dst.push(graph.get_variable_position_assume_placed(*low_dynamic_offset));
+                    dst.push(graph.get_node_index_for_variable(*low_dynamic_offset));
                 }
-                dst.push(graph.get_variable_position_assume_placed(*high));
+                dst.push(graph.get_node_index_for_variable(*high));
             }
         }
     }
@@ -311,11 +312,11 @@ impl DependentNode for MemoryPermutationExpression {
         self.address_space.add_dependencies_into(graph, dst);
         self.address.add_dependencies_into(graph, dst);
         for ts in self.timestamp.iter() {
-            let index = graph.get_variable_position_assume_placed(*ts);
+            let index = graph.get_node_index_for_variable(*ts);
             dst.push(index);
         }
         for value in self.value.iter() {
-            let index = graph.get_variable_position_assume_placed(*value);
+            let index = graph.get_node_index_for_variable(*value);
             dst.push(index);
         }
     }
@@ -493,7 +494,7 @@ impl GraphElement for GrandProductAccumulationStep {
                     let cached = mem_permutation_expr_into_cached_expr(el, &*graph);
                     graph.add_cached_relation(cached)
                 });
-                NoFieldGKRRelation::InitialGrandProduct(parts)
+                NoFieldGKRRelation::InitialGrandProductFromCaches(parts)
             }
             Self::Aggregation { .. } => {
                 unimplemented!()
@@ -596,9 +597,7 @@ impl<T: DependentNode + GraphElement + Debug + Clone> DependentNode
             panic!("Node {:?} must be already placed", &self.lhs);
         };
         dst.push(t0);
-        let node_idx = graph
-            .get_node_index(&self.mask)
-            .expect("must be already placed");
+        let node_idx = graph.get_node_index_for_address(self.mask);
         dst.push(node_idx);
     }
 }
@@ -646,20 +645,20 @@ pub(crate) fn mem_permutation_expr_into_cached_expr(
         AddressSpace::Constant(c) => CompiledAddressSpaceRelationStrict::Constant(c as u8 as u32),
         AddressSpace::RegisterOrRam(is_reg) => match is_reg {
             AddressSpaceIsRegister::Is(v) => CompiledAddressSpaceRelationStrict::Is(
-                graph.get_variable_address_assume_placed(v).as_memory(),
+                graph.get_address_for_variable(v).as_memory(),
             ),
             AddressSpaceIsRegister::Not(v) => CompiledAddressSpaceRelationStrict::Not(
-                graph.get_variable_address_assume_placed(v).as_memory(),
+                graph.get_address_for_variable(v).as_memory(),
             ),
         },
     };
     let address = match mem.address {
         AddressSpaceAddress::Empty => CompliedAddressStrict::Constant(0),
         AddressSpaceAddress::SingleLimb(v) => {
-            CompliedAddressStrict::U16Space(graph.get_variable_address_assume_placed(v).as_memory())
+            CompliedAddressStrict::U16Space(graph.get_address_for_variable(v).as_memory())
         }
         AddressSpaceAddress::U32Space(s) => CompliedAddressStrict::U32Space(
-            s.map(|v| graph.get_variable_address_assume_placed(v).as_memory()),
+            s.map(|v| graph.get_address_for_variable(v).as_memory()),
         ),
         AddressSpaceAddress::U32SpaceSpecialIndirect {
             low_base,
@@ -667,12 +666,10 @@ pub(crate) fn mem_permutation_expr_into_cached_expr(
             offset,
             high,
         } => {
-            let low_base = graph
-                .get_variable_address_assume_placed(low_base)
-                .as_memory();
-            let low_dynamic_offset = low_dynamic_offset
-                .map(|el| graph.get_variable_address_assume_placed(el).as_memory());
-            let high = graph.get_variable_address_assume_placed(high).as_memory();
+            let low_base = graph.get_address_for_variable(low_base).as_memory();
+            let low_dynamic_offset =
+                low_dynamic_offset.map(|el| graph.get_address_for_variable(el).as_memory());
+            let high = graph.get_address_for_variable(high).as_memory();
             CompliedAddressStrict::U32SpaceSpecialIndirect {
                 low_base,
                 low_dynamic_offset,
@@ -683,10 +680,10 @@ pub(crate) fn mem_permutation_expr_into_cached_expr(
     };
     let value = mem
         .value
-        .map(|el| graph.get_variable_address_assume_placed(el).as_memory());
+        .map(|el| graph.get_address_for_variable(el).as_memory());
     let timestamp = mem
         .timestamp
-        .map(|el| graph.get_variable_address_assume_placed(el).as_memory());
+        .map(|el| graph.get_address_for_variable(el).as_memory());
 
     let rel = NoFieldSpecialMemoryContributionRelation {
         address_space,
@@ -699,15 +696,15 @@ pub(crate) fn mem_permutation_expr_into_cached_expr(
     NoFieldGKRCacheRelation::MemoryTuple(rel)
 }
 
-pub(crate) fn lookup_input_into_cached_expr<F: PrimeField, const TOTAL_WIDTH: usize>(
-    lookup: &LookupInputNode<F, TOTAL_WIDTH>,
+pub(crate) fn lookup_input_into_relation<F: PrimeField, const TOTAL_WIDTH: usize>(
+    lookup: &LookupInputRelation<F, TOTAL_WIDTH>,
     graph: &dyn GraphHolder,
-) -> NoFieldGKRCacheRelation {
+) -> NoFieldVectorLookupRelation {
     let mut dst = vec![];
     for relation in lookup.inputs.iter() {
         let mut t = vec![];
         for (c, v) in relation.linear_terms.iter() {
-            let v = graph.get_variable_address_assume_placed(*v);
+            let v = graph.get_address_for_variable(*v);
             t.push((c.as_u64_reduced(), v));
         }
         let rel = NoFieldLinearRelation {
@@ -716,5 +713,60 @@ pub(crate) fn lookup_input_into_cached_expr<F: PrimeField, const TOTAL_WIDTH: us
         };
         dst.push(rel);
     }
-    NoFieldGKRCacheRelation::VectorizedLookup(dst.into_boxed_slice())
+    NoFieldVectorLookupRelation(dst.into_boxed_slice())
+}
+
+pub(crate) fn lookup_input_into_cached_expr<F: PrimeField, const TOTAL_WIDTH: usize>(
+    lookup: &LookupInputRelation<F, TOTAL_WIDTH>,
+    graph: &dyn GraphHolder,
+) -> NoFieldGKRCacheRelation {
+    NoFieldGKRCacheRelation::VectorizedLookup(lookup_input_into_relation(lookup, graph))
+}
+
+pub(crate) fn vector_or_single_input<const TOTAL_WIDTH: usize>(
+    input: NoFieldVectorLookupRelation,
+) -> LookupDenominator {
+    if TOTAL_WIDTH == 1 {
+        assert_eq!(input.0.len(), 1);
+        lookup_nodes::LookupDenominator::UseInput(input.0[0].clone())
+    } else {
+        lookup_nodes::LookupDenominator::UseVectorInput(input)
+    }
+}
+
+pub(crate) fn vector_or_single_setup<const TOTAL_WIDTH: usize>(
+    graph: &dyn GraphHolder,
+    lookup_type: LookupType,
+) -> LookupDenominator {
+    if TOTAL_WIDTH == 1 {
+        assert!(
+            lookup_type == LookupType::RangeCheck16
+                || lookup_type == LookupType::TimestampRangeCheck
+        );
+        let setup = graph.setup_addresses(lookup_type);
+        assert_eq!(setup.len(), 1);
+        lookup_nodes::LookupDenominator::Setup(setup[0])
+    } else {
+        lookup_nodes::LookupDenominator::VectorSetup(
+            graph
+                .setup_addresses(lookup_type)
+                .to_vec()
+                .into_boxed_slice(),
+        )
+    }
+}
+
+pub(crate) fn copy_single_base_input_or_materialize_vector<const TOTAL_WIDTH: usize>(
+    input: NoFieldVectorLookupRelation,
+) -> LookupDenominator {
+    if TOTAL_WIDTH == 1 {
+        assert_eq!(input.0.len(), 1);
+        if input.0[0].constant == 0 && input.0[0].linear_terms.len() == 1 && input.0[0].linear_terms[0].0 == 1 {
+            lookup_nodes::LookupDenominator::UseInputViaCopy(input.0[0].linear_terms[0].1)
+        } else {
+            lookup_nodes::LookupDenominator::MaterializeBaseInput(input.0[0].clone())
+        }
+    } else {
+        lookup_nodes::LookupDenominator::MaterializeVectorInput(input)
+    }
 }

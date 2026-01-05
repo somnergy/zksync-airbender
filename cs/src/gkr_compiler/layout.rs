@@ -4,6 +4,12 @@ use crate::gkr_compiler::graph::{GKRGraph, GraphHolder};
 
 use super::*;
 
+pub struct GKRLayout {
+    pub layered_relations: Vec<Vec<NoFieldGKRRelation>>,
+    pub layered_cached_relations: Vec<Vec<NoFieldGKRCacheRelation>>,
+    pub base_layer_vars_participation_in_layers: BTreeMap<GKRAddress, Vec<usize>>, // transitive via cached relations
+}
+
 impl GKRGraph {
     pub(crate) fn layout_layers(
         &mut self,
@@ -74,7 +80,11 @@ impl GKRGraph {
                     let _pos = self.get_cached_relation(cached).expect("already placed");
                 }
 
-                layer.push(relation);
+                if relation == NoFieldGKRRelation::FormalBaseLayerInput {
+                    assert_eq!(layer_index, 0);
+                } else {
+                    layer.push(relation);
+                }
 
                 let unique = resolved_indexes.insert(node_idx);
                 assert!(unique);

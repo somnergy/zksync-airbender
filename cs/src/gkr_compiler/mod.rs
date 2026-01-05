@@ -15,6 +15,7 @@ mod graph;
 mod graphviz;
 mod layout;
 mod lookup;
+pub(crate) mod lookup_nodes;
 mod range_check_exprs;
 mod utils;
 
@@ -78,7 +79,8 @@ pub struct NoFieldPureQuadraticGKRRelation {
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NoFieldMaxQuadraticGKRRelation {
     pub quadratic_terms: Box<[(GKRAddress, Box<[(u64, GKRAddress)]>)]>,
-    pub linear_terms: Box<[(u64, GKRAddress)]>,
+    pub linear_terms: Box<[Box<[(u64, GKRAddress)]>]>,
+    pub constants: Box<[u64]>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -159,19 +161,57 @@ pub struct NoFieldLookupPostTrivialNumeratorRelation {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NoFieldGKRRelation {
+    FormalBaseLayerInput,
     PureQuadratic(NoFieldPureQuadraticGKRRelation),
     MaxQuadratic(NoFieldMaxQuadraticGKRRelation),
     SpecialConstraintCollapse(NoFieldSpecialConstraintCollapseGKRRelation),
-    LookupTrivialDenominator(NoFieldLookupTrivialDenominatorRelation),
-    LookupAggregationPostTrivialNumerator(NoFieldLookupPostTrivialNumeratorRelation),
-    InitialGrandProduct([GKRAddress; 2]),
-    UnbalancedGrandProduct([GKRAddress; 2]),
+    // LookupTrivialDenominator(NoFieldLookupTrivialDenominatorRelation),
+    // LookupAggregationPostTrivialNumerator(NoFieldLookupPostTrivialNumeratorRelation),
+    Copy(GKRAddress),
+
+    // Memory-like argument related
+    InitialGrandProductFromCaches([GKRAddress; 2]),
+    UnbalancedGrandProductWithCache([GKRAddress; 2]),
     TrivialProduct([GKRAddress; 2]),
+    // Lookup argument related
+    MaterializedSingleLookupInput(NoFieldLinearRelation),
+    MaterializedVectorLookupInput(NoFieldVectorLookupRelation),
+
+    LookupLinearNumeratorFromCaches([GKRAddress; 2]),
+    LookupDenominatorFromCaches([GKRAddress; 2]),
+
+    // 1/(a+gamma) + 1/(b + gamma) where a, b are in base field
+    LookupNumeratorFromBaseInputs([NoFieldLinearRelation; 2]),
+    LookupDenominatorFromBaseInputs([NoFieldLinearRelation; 2]),
+
+    // 1/(a+gamma) + 1/(b + gamma) where a, b are in in extension already due to vector nature
+    LookupNumeratorFromVectorInputs([NoFieldVectorLookupRelation; 2]),
+    LookupDenominatorFromVectorInputs([NoFieldVectorLookupRelation; 2]),
+
+    // a/b + c/d
+    LookupNumeratorContinueAggregation([GKRAddress; 2]),
+    LookupDenominatorContinueAggregation([GKRAddress; 2]),
 }
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NoFieldVectorLookupRelation(Box<[NoFieldLinearRelation]>);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NoFieldGKRCacheRelation {
     LongLinear,
-    VectorizedLookup(Box<[NoFieldLinearRelation]>),
+    VectorizedLookup(NoFieldVectorLookupRelation),
     MemoryTuple(NoFieldSpecialMemoryContributionRelation),
+}
+
+impl DependentNode for NoFieldLinearRelation {
+    fn add_dependencies_into(
+        &self,
+        graph: &mut dyn graph::GraphHolder,
+        dst: &mut Vec<graph::NodeIndex>,
+    ) {
+        for (_c, el) in self.linear_terms.iter() {
+            let node_idx = graph.get_node_index_for_address(*el);
+            dst.push(node_idx);
+        }
+    }
 }

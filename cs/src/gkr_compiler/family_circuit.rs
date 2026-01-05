@@ -327,6 +327,9 @@ impl<F: PrimeField> GKRCompiler<F> {
 
         let mut grand_product_read_accumulation_nodes = vec![];
         let mut grand_product_write_accumulation_nodes = vec![];
+        let mut copied_predicate_for_grand_product_masking =
+            graph.copy_base_layer_variable(executor_machine_state.execute);
+
         for [a, b] in shuffle_ram_augmented_sets.as_chunks::<2>().0.iter() {
             // we construct read and write sets separately
             let mut read_set = vec![];
@@ -559,6 +562,8 @@ impl<F: PrimeField> GKRCompiler<F> {
             let LookupQuery { row, table } = lookup.clone();
             generic_lookups.push((row.to_vec(), table));
         }
+
+        let mut decoder_lookup_pair = None;
         // and decoder - we tightly pack it, and will need to do the same in the setup generator
         {
             // pub pc: [F; 2],
@@ -605,18 +610,28 @@ impl<F: PrimeField> GKRCompiler<F> {
                     });
                 }
             }
-            generic_lookups.push((
-                decoder_lookup,
-                LookupQueryTableType::Constant(TableType::Decoder),
-            ));
+            decoder_lookup_pair = Some((executor_machine_state.execute, decoder_lookup));
+            // generic_lookups.push((
+            //     decoder_lookup,
+            //     LookupQueryTableType::Constant(TableType::Decoder),
+            // ));
         }
+
+        let total_generic_lookups = (generic_lookups.len() as u64
+            + decoder_lookup_pair.is_some() as u64)
+            * trace_len as u64;
+        assert!(total_generic_lookups < F::CHARACTERISTICS, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
 
         let mut max_width = generic_lookups
             .iter()
             .map(|el| el.0.len())
             .max()
             .unwrap_or(0);
+        if let Some(decoder_lookup) = decoder_lookup_pair.as_ref() {
+            max_width = std::cmp::max(max_width, decoder_lookup.1.len());
+        }
         if max_width > 0 {
+            // account for table ID
             max_width += 1;
         }
         println!("Generic lookup total tables in setup: {}", max_width);
@@ -763,6 +778,27 @@ impl<F: PrimeField> GKRCompiler<F> {
         let (final_read_node, final_write_node) = {
             let mut next_read_set = vec![];
             let mut next_write_set = vec![];
+            copied_predicate_for_grand_product_masking =
+                graph.copy_intermediate_layer_variable(copied_predicate_for_grand_product_masking);
+
+            let mut placement_expected_layer = 2;
+            let GKRAddress::InnerLayer { layer, .. } = copied_predicate_for_grand_product_masking
+            else {
+                unreachable!()
+            };
+            assert_eq!(placement_expected_layer, layer);
+
+            assert!(grand_product_read_accumulation_nodes.len() > 1);
+            assert_eq!(
+                grand_product_read_accumulation_nodes.len(),
+                grand_product_write_accumulation_nodes.len()
+            );
+
+            println!(
+                "Continuing grand product accumulation at layer {} for {} contribution pairs",
+                placement_expected_layer,
+                grand_product_read_accumulation_nodes.len()
+            );
 
             for [a, b] in grand_product_read_accumulation_nodes
                 .as_chunks::<2>()
@@ -803,6 +839,7 @@ impl<F: PrimeField> GKRCompiler<F> {
                 .len()
                 > 0
             {
+                todo!();
                 current_read_remainder =
                     Some(grand_product_read_accumulation_nodes.as_chunks::<2>().1[0].clone());
             }
@@ -812,6 +849,7 @@ impl<F: PrimeField> GKRCompiler<F> {
                 .len()
                 > 0
             {
+                todo!();
                 current_write_remainder =
                     Some(grand_product_write_accumulation_nodes.as_chunks::<2>().1[0].clone());
             }
@@ -821,10 +859,23 @@ impl<F: PrimeField> GKRCompiler<F> {
             let mut next_read_remainder = None;
             let mut next_write_remainder = None;
 
-            // if base_read_remainder.is_some()
-            //     || base_write_remainder.is_some()
             if current_read_set.len() > 1 || current_write_set.len() > 1 {
                 loop {
+                    copied_predicate_for_grand_product_masking = graph
+                        .copy_intermediate_layer_variable(
+                            copied_predicate_for_grand_product_masking,
+                        );
+
+                    placement_expected_layer += 1;
+                    let GKRAddress::InnerLayer { layer, .. } =
+                        copied_predicate_for_grand_product_masking
+                    else {
+                        unreachable!()
+                    };
+                    assert_eq!(placement_expected_layer, layer);
+
+                    println!("Continuing grand product accumulation at layer {} for {} contribution pairs", placement_expected_layer, next_read_set.len());
+
                     for [a, b] in current_read_set.as_chunks::<2>().0.iter() {
                         let el = GrandProductAccumulationStep::Aggregation {
                             lhs: Box::new(a.clone()),
@@ -897,18 +948,14 @@ impl<F: PrimeField> GKRCompiler<F> {
 
             let read_mask = GrandProductAccumulationMaskingNode {
                 lhs: read_node,
-                mask: graph
-                    .get_fixed_layout_pos(&executor_machine_state.execute)
-                    .expect("already placed"),
+                mask: copied_predicate_for_grand_product_masking,
                 is_write: false,
             };
             graph.add_node(read_mask.clone());
 
             let write_mask = GrandProductAccumulationMaskingNode {
                 lhs: write_node,
-                mask: graph
-                    .get_fixed_layout_pos(&executor_machine_state.execute)
-                    .expect("already placed"),
+                mask: copied_predicate_for_grand_product_masking,
                 is_write: true,
             };
             graph.add_node(write_mask.clone());
@@ -954,7 +1001,7 @@ impl<F: PrimeField> GKRCompiler<F> {
                     &mut all_variables_to_place,
                     &mut variable_names,
                     "generic lookup",
-                    Some(executor_machine_state.execute),
+                    decoder_lookup_pair,
                     LookupType::Generic,
                 );
             }
@@ -965,8 +1012,9 @@ impl<F: PrimeField> GKRCompiler<F> {
         // Dealing with constraints is simple - we will perform two step reduction:
         // - first all quadratic parts from all constraints are delinearized and summed
         // - then we compute execute * (quadratic + \sum linears + \sum constants
+        // let _ = layout_constraints(&mut graph, constraints, executor_machine_state.execute);
 
-        let _ = layout_constraints(&mut graph, constraints, executor_machine_state.execute);
+        let _ = layout_constraints_on_single_layer(&mut graph, constraints);
 
         let graphviz_string = graph.make_graphviz(&variable_names);
         println!("{}", &graphviz_string);
