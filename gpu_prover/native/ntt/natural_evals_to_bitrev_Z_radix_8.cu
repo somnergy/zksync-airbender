@@ -57,30 +57,35 @@ EXTERN __launch_bounds__(256, 3) __global__
     size_8_inv_dit(vals1);
 
 #pragma unroll
-    for (unsigned i{0}, addr{threadIdx.x}; i < RADIX; i++, addr += 2 * WARP_SIZE) {
+    for (unsigned i{0}, addr{lane_id}; i < RADIX; i++, addr += 2 * WARP_SIZE) {
       smem[addr] = vals0[i];
       smem[addr + WARP_SIZE] = vals1[i];
     }
+// #pragma unroll
+//     for (unsigned i{0}, addr{thread_offset}; i < RADIX; i++, addr += RADIX * tile_gmem_stride) {
+//       gmem_out.set_at_row(addr, vals0[i]);
+//       gmem_out.set_at_row(addr + TILES_PER_WARP * tile_gmem_stride, vals1[i]);
+//     }
 
     __syncwarp();
   }
 
   // Second three stages
   {
-    const unsigned thread_offset = 0; // lane_in_tile + tile_id * 2 * RADIX * TILE_SIZE;
+    const unsigned thread_offset = lane_in_tile + tile_id * 2 * RADIX * TILE_SIZE;
 #pragma unroll
     for (unsigned i{0}, addr{thread_offset}; i < RADIX; i++, addr += RADIX) {
       vals0[i] = smem[addr];
       vals1[i] = smem[addr + 64];
     }
-//
-//     const unsigned exchg_region_0 = block_exchg_region * RADIX + 2 * tile_id;
-//     const unsigned exchg_region_1 = exchg_region_0 + 1;
-//     twiddle_stride >>= LOG_RADIX;
-//     apply_twiddles_distinct_regions<LOG_RADIX>(vals0, vals1, exchg_region_0, exchg_region_1, twiddle_stride, ++exchg_region_bit_chunks);
-//
-//     size_8_inv_dit(vals0);
-//     size_8_inv_dit(vals1);
+
+    const unsigned exchg_region_0 = block_exchg_region * RADIX + 2 * tile_id;
+    const unsigned exchg_region_1 = exchg_region_0 + 1;
+    twiddle_stride >>= LOG_RADIX;
+    apply_twiddles_distinct_regions<LOG_RADIX>(vals0, vals1, exchg_region_0, exchg_region_1, twiddle_stride, ++exchg_region_bit_chunks);
+
+    size_8_inv_dit(vals0);
+    size_8_inv_dit(vals1);
 
     const unsigned gmem_write_offset = lane_in_tile + tile_id * 2 * RADIX * tile_gmem_stride;
 #pragma unroll
@@ -164,6 +169,8 @@ EXTERN __launch_bounds__(256, 3) __global__
     for (unsigned i{0}, addr{lane_id}; i < RADIX; i++, addr += 2 * WARP_SIZE) {
       smem[addr] = vals0[i];
       smem[addr + WARP_SIZE] = vals1[i];
+      // gmem_out.set_at_row(addr, vals0[i]);
+      // gmem_out.set_at_row(addr + WARP_SIZE, vals1[i]);
     }
 
     __syncwarp();

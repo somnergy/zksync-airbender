@@ -171,13 +171,14 @@ pub fn natural_evals_to_bitrev_Z_radix_8(
     let mut start_stage = 0;
     let mut exchg_region_bit_chunks = 0;
     let inputs_matrix = inputs_matrix.as_ptr_and_stride();
-    let outputs_matrix = outputs_matrix.as_mut_ptr_and_stride();
+    let outputs_matrix_const = outputs_matrix.as_ptr_and_stride();
+    let outputs_matrix_mut = outputs_matrix.as_mut_ptr_and_stride();
     let threads = 256;
     let blocks = n.get_chunks_count(4096);
     let config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
     let args = N2BRadix8Arguments::new(
         inputs_matrix,
-        outputs_matrix,
+        outputs_matrix_mut,
         start_stage as u32,
         exchg_region_bit_chunks as u32,
         log_n as u32,
@@ -190,8 +191,22 @@ pub fn natural_evals_to_bitrev_Z_radix_8(
     let blocks = n.get_chunks_count(4096);
     let config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
     let args = N2BRadix8Arguments::new(
-        inputs_matrix,
-        outputs_matrix,
+        outputs_matrix_const,
+        outputs_matrix_mut,
+        start_stage as u32,
+        exchg_region_bit_chunks as u32,
+        log_n as u32,
+        0,
+    );
+    N2BRadix8Function(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp).launch(&config, &args)?;
+    start_stage += 2;
+    exchg_region_bit_chunks += 2;
+    let threads = 256;
+    let blocks = n.get_chunks_count(4096);
+    let config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
+    let args = N2BRadix8Arguments::new(
+        outputs_matrix_const,
+        outputs_matrix_mut,
         start_stage as u32,
         exchg_region_bit_chunks as u32,
         log_n as u32,

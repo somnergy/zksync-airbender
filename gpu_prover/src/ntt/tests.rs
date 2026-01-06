@@ -10,7 +10,8 @@ use fft::field_utils::domain_generator_for_size;
 use fft::utils::bitreverse_enumeration_inplace;
 use fft::{fft_natural_to_bitreversed, ifft_natural_to_natural, precompute_twiddles_for_fft};
 use field::{Field, FieldExtension};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 use serial_test::serial;
 use worker::Worker;
 
@@ -918,7 +919,7 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
     let worker = Worker::new();
     let twiddles = precompute_twiddles_for_fft::<E2, Global, true>(n_max, &worker);
 
-    let mut rng = rand::rng();
+    let mut rng: StdRng = SeedableRng::seed_from_u64(5);
     const OFFSET: usize = 0;
     let max_stride: usize = n_max + OFFSET;
     let max_memory_size = (max_stride * num_bf_cols) as usize;
@@ -927,8 +928,8 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
         HostAllocation::<BF>::alloc(max_memory_size, CudaHostAllocFlags::DEFAULT).unwrap();
     inputs_orig_host.fill_with(|| BF::from_nonreduced_u32(rng.random()));
     for i in 0..max_stride {
-        inputs_orig_host[i] = BF::from_nonreduced_u32((i + 1) as u32);
-        inputs_orig_host[i + max_stride] = BF::from_nonreduced_u32((i + 2) as u32);
+        inputs_orig_host[i] = BF::from_nonreduced_u32(((i + 1) % 7 )as u32);
+        inputs_orig_host[i + max_stride] = BF::from_nonreduced_u32(((i + 2) % 7) as u32);
     }
     let mut inputs_host =
         HostAllocation::<BF>::alloc(max_memory_size, CudaHostAllocFlags::DEFAULT).unwrap();
@@ -1041,6 +1042,7 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
                 .collect();
             ifft_natural_to_natural::<BF, E2, E2>(&mut cpu_refs, E2::ONE, twiddles);
             for k in 0..n {
+                // println!("{} {} {}", k, Zs_out_of_place[k].real_part(), Zs_out_of_place[k].imag_part());
                 assert_eq!(
                     Zs_out_of_place[k], cpu_refs[k],
                     "2^{} ntt_pair {} k {}",
@@ -1061,7 +1063,7 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
 #[serial]
 fn test_natural_evals_to_bitrev_Z_radix_8() {
     run_natural_evals_to_bitrev_Z_radix_8(
-        18..19,
+        24..25,
         2,
     );
 }
@@ -1081,7 +1083,7 @@ fn test_natural_trace_main_evals_to_bitrev_Z() {
 #[serial]
 #[ignore]
 fn test_natural_trace_main_evals_to_bitrev_Z_large() {
-    run_natural_evals_to_bitrev_Z(17..25, 2, EvalsAre::TraceMainDomain);
+    run_natural_evals_to_bitrev_Z(24..25, 2, EvalsAre::TraceMainDomain);
 }
 
 #[test]

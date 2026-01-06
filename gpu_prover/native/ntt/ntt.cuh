@@ -86,7 +86,7 @@ template <bool inverse> DEVICE_FORCEINLINE e2f get_twiddle(const unsigned i) {
 template <bool inverse> DEVICE_FORCEINLINE e2f get_twiddle_with_direct_index(const unsigned i) {
   const powers_data_2_layer &data = inverse ? ab_powers_data_w_inv_direct_for_ntt : ab_powers_data_w_direct_for_ntt;
   unsigned coarse_idx = (i >> data.fine.log_count) & data.coarse.mask;
-  unsigned fine_idx = i & data.coarse.mask;
+  unsigned fine_idx = i & data.fine.mask;
   auto coarse = memory::load_ca(data.coarse.values + coarse_idx);
   if (fine_idx == 0)
     return coarse;
