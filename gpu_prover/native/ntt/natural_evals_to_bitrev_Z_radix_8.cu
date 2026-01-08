@@ -5,7 +5,8 @@ namespace airbender::ntt {
 EXTERN __launch_bounds__(256, 3) __global__
     void ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp(vectorized_e2_matrix_getter<ld_modifier::cg> gmem_in,
                                                                   vectorized_e2_matrix_setter<st_modifier::cg> gmem_out, const unsigned start_stage,
-                                                                  unsigned exchg_region_bit_chunks, const unsigned log_n, const unsigned grid_offset) {
+                                                                  unsigned exchg_region_bit_chunks, const unsigned log_exchg_region_size,
+                                                                  const unsigned tile_gmem_stride, const unsigned log_n, const unsigned grid_offset) {
   constexpr unsigned WARP_SIZE = 32u;
   constexpr unsigned LOG_RADIX = 3u;
   constexpr unsigned RADIX = 1 << LOG_RADIX;
@@ -25,12 +26,8 @@ EXTERN __launch_bounds__(256, 3) __global__
   const unsigned lane_id = threadIdx.x & 31;
   const unsigned tile_id = lane_id >> LOG_TILE_SIZE;
   const unsigned lane_in_tile = lane_id & TILE_MASK;
-  const unsigned log_exchg_region_size = log_n - start_stage * LOG_RADIX;
-  const unsigned log_tile_gmem_stride = log_exchg_region_size - 2 * LOG_RADIX;
-  const unsigned log_blocks_per_exchg_region = log_tile_gmem_stride - LOG_TILE_SIZE - LOG_WARPS_PER_BLOCK;
-  const unsigned tile_gmem_stride = 1 << log_tile_gmem_stride;
-  const unsigned block_exchg_region = effective_block_idx_x >> log_blocks_per_exchg_region;
-  const unsigned block_in_exchg_region = effective_block_idx_x & ((1 << log_blocks_per_exchg_region) - 1);
+  const unsigned block_exchg_region = blockIdx.x;    // effective_block_idx_x >> log_blocks_per_exchg_region;
+  const unsigned block_in_exchg_region = blockIdx.y; // effective_block_idx_x & ((1 << log_blocks_per_exchg_region) - 1);
   const unsigned gmem_block_offset = block_exchg_region << log_exchg_region_size;
   const unsigned gmem_warp_offset = ((block_in_exchg_region << LOG_WARPS_PER_BLOCK) + warp_id) << LOG_TILE_SIZE;
   gmem_in.add_row(gmem_block_offset + gmem_warp_offset);
@@ -61,11 +58,11 @@ EXTERN __launch_bounds__(256, 3) __global__
       smem[addr] = vals0[i];
       smem[addr + WARP_SIZE] = vals1[i];
     }
-// #pragma unroll
-//     for (unsigned i{0}, addr{thread_offset}; i < RADIX; i++, addr += RADIX * tile_gmem_stride) {
-//       gmem_out.set_at_row(addr, vals0[i]);
-//       gmem_out.set_at_row(addr + TILES_PER_WARP * tile_gmem_stride, vals1[i]);
-//     }
+    // #pragma unroll
+    //     for (unsigned i{0}, addr{thread_offset}; i < RADIX; i++, addr += RADIX * tile_gmem_stride) {
+    //       gmem_out.set_at_row(addr, vals0[i]);
+    //       gmem_out.set_at_row(addr + TILES_PER_WARP * tile_gmem_stride, vals1[i]);
+    //     }
 
     __syncwarp();
   }
@@ -89,7 +86,7 @@ EXTERN __launch_bounds__(256, 3) __global__
 
     const unsigned gmem_write_offset = lane_in_tile + tile_id * 2 * RADIX * tile_gmem_stride;
 #pragma unroll
-    for (unsigned i{0}, addr{gmem_write_offset}; i < RADIX; i++, addr += tile_gmem_stride ) {
+    for (unsigned i{0}, addr{gmem_write_offset}; i < RADIX; i++, addr += tile_gmem_stride) {
       gmem_out.set_at_row(addr, vals0[i]);
       gmem_out.set_at_row(addr + RADIX * tile_gmem_stride, vals1[i]);
     }
@@ -189,7 +186,7 @@ EXTERN __launch_bounds__(256, 3) __global__
     }
 
     warp_exchg_region_offset *= RADIX;
-    const unsigned exchg_region_0 = warp_exchg_region_offset + tile_id * 2; 
+    const unsigned exchg_region_0 = warp_exchg_region_offset + tile_id * 2;
     const unsigned exchg_region_1 = exchg_region_0 + 1;
     twiddle_stride >>= LOG_RADIX;
     apply_twiddles_distinct_regions<LOG_RADIX>(vals0, vals1, exchg_region_0, exchg_region_1, twiddle_stride, ++exchg_region_bit_chunks);
@@ -218,7 +215,7 @@ EXTERN __launch_bounds__(256, 3) __global__
     }
 
     warp_exchg_region_offset *= RADIX;
-    const unsigned exchg_region_0 = warp_exchg_region_offset + lane_id; 
+    const unsigned exchg_region_0 = warp_exchg_region_offset + lane_id;
     const unsigned exchg_region_1 = exchg_region_0 + 32;
     twiddle_stride >>= LOG_RADIX;
     apply_twiddles_distinct_regions<LOG_RADIX>(vals0, vals1, exchg_region_0, exchg_region_1, twiddle_stride, ++exchg_region_bit_chunks);

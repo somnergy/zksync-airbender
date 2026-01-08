@@ -11,17 +11,17 @@ DEVICE_FORCEINLINE void size_8_fwd_dit(e2f *x) {
   // first stage
 #pragma unroll
   for (unsigned i{0}; i < 4; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 4]);
-      x[i + 4] = e2f::sub(tmp, x[i + 4]);
+    const e2f tmp = x[i];
+    x[i] = e2f::add(tmp, x[i + 4]);
+    x[i + 4] = e2f::sub(tmp, x[i + 4]);
   }
 
   // second stage
 #pragma unroll
   for (unsigned i{0}; i < 2; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 2]);
-      x[i + 2] = e2f::sub(tmp, x[i + 2]);
+    const e2f tmp = x[i];
+    x[i] = e2f::add(tmp, x[i + 2]);
+    x[i + 2] = e2f::sub(tmp, x[i + 2]);
   }
   // x[4] = x[4] + W_1_4 * (x[6].real + i * x[6].imag)
   //      = x[4] + (-i) * (x[6].real + i * x[6].imag)
@@ -31,19 +31,19 @@ DEVICE_FORCEINLINE void size_8_fwd_dit(e2f *x) {
   //      = x[4] + (-x[6].imag + i * x[6].real)
 #pragma unroll
   for (unsigned i{4}; i < 6; i++) {
-      const e2f tmp0 = x[i];
-      x[i][0] = bf::add(x[i][0], x[i + 2][1]);
-      x[i][1] = bf::sub(x[i][1], x[i + 2][0]);
-      const bf tmp1 = x[i + 2][0];
-      x[i + 2][0] = bf::sub(tmp0[0], x[i + 2][1]);
-      x[i + 2][1] = bf::add(tmp0[1], tmp1);
+    const e2f tmp0 = x[i];
+    x[i][0] = bf::add(x[i][0], x[i + 2][1]);
+    x[i][1] = bf::sub(x[i][1], x[i + 2][0]);
+    const bf tmp1 = x[i + 2][0];
+    x[i + 2][0] = bf::sub(tmp0[0], x[i + 2][1]);
+    x[i + 2][1] = bf::add(tmp0[1], tmp1);
   }
 
   // third stage
   {
     // x[3] = W_1_4 * x[3]
     //      = -i * (x[3].real + i * x[3].imag)
-    //      = x[3].imag - i * x[3].real) 
+    //      = x[3].imag - i * x[3].real
     const bf tmp = x[3][0];
     x[3][0] = x[3][1];
     x[3][1] = bf::neg(tmp);
@@ -52,9 +52,9 @@ DEVICE_FORCEINLINE void size_8_fwd_dit(e2f *x) {
   x[7] = e2f::mul(W_3_8, x[7]); // don't bother optimizing, marginal gains
 #pragma unroll
   for (unsigned i{0}; i < 8; i += 2) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 1]);
-      x[i + 1] = e2f::sub(tmp, x[i + 1]);
+    const e2f tmp = x[i];
+    x[i] = e2f::add(tmp, x[i + 1]);
+    x[i + 1] = e2f::sub(tmp, x[i + 1]);
   }
 
   // undo bitrev
@@ -74,17 +74,17 @@ DEVICE_FORCEINLINE void size_8_inv_dit(e2f *x) {
   // first stage
 #pragma unroll
   for (unsigned i{0}; i < 4; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 4]);
-      x[i + 4] = e2f::sub(tmp, x[i + 4]);
+    const e2f tmp = x[i];
+    x[i] = e2f::add(tmp, x[i + 4]);
+    x[i + 4] = e2f::sub(tmp, x[i + 4]);
   }
 
   // second stage
 #pragma unroll
   for (unsigned i{0}; i < 2; i++) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 2]);
-      x[i + 2] = e2f::sub(tmp, x[i + 2]);
+    const e2f tmp = x[i];
+    x[i] = e2f::add(tmp, x[i + 2]);
+    x[i + 2] = e2f::sub(tmp, x[i + 2]);
   }
   // x[4] = x[4] + W_1_4_INV * (x[6].real + i * x[6].imag)
   //      = x[4] + i * (x[6].real + i * x[6].imag)
@@ -94,19 +94,19 @@ DEVICE_FORCEINLINE void size_8_inv_dit(e2f *x) {
   //      = x[4] + (x[6].imag - i * x[6].real)
 #pragma unroll
   for (unsigned i{4}; i < 6; i++) {
-      const e2f tmp0 = x[i];
-      x[i][0] = bf::sub(x[i][0], x[i + 2][1]);
-      x[i][1] = bf::add(x[i][1], x[i + 2][0]);
-      const bf tmp1 = x[i + 2][0];
-      x[i + 2][0] = bf::add(tmp0[0], x[i + 2][1]);
-      x[i + 2][1] = bf::sub(tmp0[1], tmp1);
+    const e2f tmp0 = x[i];
+    x[i][0] = bf::sub(x[i][0], x[i + 2][1]);
+    x[i][1] = bf::add(x[i][1], x[i + 2][0]);
+    const bf tmp1 = x[i + 2][0];
+    x[i + 2][0] = bf::add(tmp0[0], x[i + 2][1]);
+    x[i + 2][1] = bf::sub(tmp0[1], tmp1);
   }
 
   // third stage
   {
     // x[3] = W_1_4_INV * x[3]
     //      = i * (x[3].real + i * x[3].imag)
-    //      = -x[3].imag + i * x[3].real) 
+    //      = -x[3].imag + i * x[3].real)
     const bf tmp = x[3][0];
     x[3][0] = bf::neg(x[3][1]);
     x[3][1] = tmp;
@@ -115,9 +115,9 @@ DEVICE_FORCEINLINE void size_8_inv_dit(e2f *x) {
   x[7] = e2f::mul(W_3_8_INV, x[7]); // don't bother optimizing, marginal gains
 #pragma unroll
   for (unsigned i{0}; i < 8; i += 2) {
-      const e2f tmp = x[i];
-      x[i] = e2f::add(tmp, x[i + 1]);
-      x[i + 1] = e2f::sub(tmp, x[i + 1]);
+    const e2f tmp = x[i];
+    x[i] = e2f::add(tmp, x[i + 1]);
+    x[i + 1] = e2f::sub(tmp, x[i + 1]);
   }
 
   // undo bitrev
@@ -129,8 +129,7 @@ DEVICE_FORCEINLINE void size_8_inv_dit(e2f *x) {
   x[6] = tmp1;
 }
 
-template <unsigned LOG_RADIX>
-DEVICE_FORCEINLINE unsigned bitrev_by_radix(const unsigned idx, const unsigned bit_chunks) {
+template <unsigned LOG_RADIX> DEVICE_FORCEINLINE unsigned bitrev_by_radix(const unsigned idx, const unsigned bit_chunks) {
   constexpr unsigned RADIX_MASK = (1 << LOG_RADIX) - 1;
   unsigned out{0}, tmp_idx{idx};
   for (unsigned i{0}; i < bit_chunks; i++) {
@@ -152,7 +151,7 @@ DEVICE_FORCEINLINE void apply_twiddles_same_region(e2f *vals0, e2f *vals1, const
       const auto twiddle = get_twiddle_with_direct_index<true>(v * i * twiddle_stride);
       vals0[i] = e2f::mul(vals0[i], twiddle);
       vals1[i] = e2f::mul(vals1[i], twiddle);
-    }  
+    }
   }
 }
 
@@ -166,7 +165,7 @@ DEVICE_FORCEINLINE void apply_twiddles_distinct_regions(e2f *vals0, e2f *vals1, 
     for (unsigned i{1}; i < RADIX; i++) {
       const auto twiddle = get_twiddle_with_direct_index<true>(v * i * twiddle_stride);
       vals0[i] = e2f::mul(vals0[i], twiddle);
-    }  
+    }
   }
   // exchg_region_1 should never be 0
   const unsigned v = bitrev_by_radix<LOG_RADIX>(exchg_region_1, idx_bit_chunks);
@@ -174,7 +173,7 @@ DEVICE_FORCEINLINE void apply_twiddles_distinct_regions(e2f *vals0, e2f *vals1, 
   for (unsigned i{1}; i < RADIX; i++) {
     const auto twiddle = get_twiddle_with_direct_index<true>(v * i * twiddle_stride);
     vals1[i] = e2f::mul(vals1[i], twiddle);
-  }  
+  }
 }
 
-} // namespace airbender::ntt1
+} // namespace airbender::ntt

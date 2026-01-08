@@ -8,7 +8,7 @@ pub mod tests;
 use era_cudart::cuda_kernel;
 use era_cudart::error::get_last_error;
 use era_cudart::event::{CudaEvent, CudaEventCreateFlags};
-use era_cudart::execution::{CudaLaunchConfig, KernelFunction};
+use era_cudart::execution::{CudaLaunchConfig, Dim3, KernelFunction};
 use era_cudart::result::{CudaResult, CudaResultWrap};
 use era_cudart::slice::DeviceSlice;
 use era_cudart::stream::{CudaStream, CudaStreamWaitEventFlags};
@@ -116,6 +116,21 @@ n2b_multi_stage_kernel!(ab_compressed_coset_evals_to_Z_final_8_stages_warp);
 n2b_multi_stage_kernel!(ab_compressed_coset_evals_to_Z_final_9_to_12_stages_block);
 
 cuda_kernel!(
+    N2BRadix8Nonfinal,
+    n2b_radix_8_nonfinal_kernel,
+    inputs_matrix: PtrAndStride<BF>,
+    outputs_matrix: MutPtrAndStride<BF>,
+    start_stage: u32,
+    idx_bit_chunks: u32,
+    log_exchg_region_size: u32,
+    tile_gmem_stride: u32,
+    log_n: u32,
+    grid_offset: u32,
+);
+
+n2b_radix_8_nonfinal_kernel!(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp);
+
+cuda_kernel!(
     N2BRadix8,
     n2b_radix_8_kernel,
     inputs_matrix: PtrAndStride<BF>,
@@ -126,7 +141,6 @@ cuda_kernel!(
     grid_offset: u32,
 );
 
-n2b_radix_8_kernel!(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp);
 n2b_radix_8_kernel!(ab_radix_8_main_domain_evals_to_Z_final_12_stages_block);
 
 pub fn bit_reverse_by_radix_8(
@@ -156,6 +170,24 @@ pub fn bit_reverse_by_radix_8(
     BitReverseByRadix8Function(ab_bit_reverse_by_radix_8).launch(&config, &args)
 }
 
+fn get_noninitial_grid_helpers(log_n: usize, start_stage: usize) -> (usize, usize, Dim3) {
+    const LOG_RADIX: usize = 3;
+    const LOG_TILE_SIZE: usize = 3;
+    const LOG_WARPS_PER_BLOCK: usize = 3;
+    let log_exchg_region_size = log_n - start_stage * LOG_RADIX;
+    let log_tile_gmem_stride = log_exchg_region_size - 2 * LOG_RADIX;
+    let log_blocks_per_exchg_region = log_tile_gmem_stride - LOG_TILE_SIZE - LOG_WARPS_PER_BLOCK;
+    let tile_gmem_stride = 1 << log_tile_gmem_stride;
+    let num_exchg_regions = 1 << (log_n - log_exchg_region_size);
+    let mut block_dims: Dim3 = (num_exchg_regions as u32).into();
+    block_dims.y = 1 << log_blocks_per_exchg_region as u32;
+    assert_eq!(
+        block_dims.x * block_dims.y,
+        (1 << log_n).get_chunks_count(4096)
+    );
+    (log_exchg_region_size, tile_gmem_stride, block_dims)
+}
+
 pub fn natural_evals_to_bitrev_Z_radix_8(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
@@ -174,17 +206,39 @@ pub fn natural_evals_to_bitrev_Z_radix_8(
     let outputs_matrix_const = outputs_matrix.as_ptr_and_stride();
     let outputs_matrix_mut = outputs_matrix.as_mut_ptr_and_stride();
     let threads = 256;
-    let blocks = n.get_chunks_count(4096);
-    let config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
-    let args = N2BRadix8Arguments::new(
+    let (log_exchg_region_size, tile_gmem_stride, block_dims) =
+        get_noninitial_grid_helpers(log_n, start_stage);
+    let config = CudaLaunchConfig::basic(block_dims, threads as u32, stream);
+    let args = N2BRadix8NonfinalArguments::new(
         inputs_matrix,
         outputs_matrix_mut,
         start_stage as u32,
         exchg_region_bit_chunks as u32,
+        log_exchg_region_size as u32,
+        tile_gmem_stride as u32,
         log_n as u32,
         0,
     );
-    N2BRadix8Function(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp).launch(&config, &args)?;
+    N2BRadix8NonfinalFunction(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp)
+        .launch(&config, &args)?;
+    start_stage += 2;
+    exchg_region_bit_chunks += 2;
+    let threads = 256;
+    let (log_exchg_region_size, tile_gmem_stride, block_dims) =
+        get_noninitial_grid_helpers(log_n, start_stage);
+    let config = CudaLaunchConfig::basic(block_dims, threads as u32, stream);
+    let args = N2BRadix8NonfinalArguments::new(
+        outputs_matrix_const,
+        outputs_matrix_mut,
+        start_stage as u32,
+        exchg_region_bit_chunks as u32,
+        log_exchg_region_size as u32,
+        tile_gmem_stride as u32,
+        log_n as u32,
+        0,
+    );
+    N2BRadix8NonfinalFunction(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp)
+        .launch(&config, &args)?;
     start_stage += 2;
     exchg_region_bit_chunks += 2;
     let threads = 256;
@@ -198,21 +252,8 @@ pub fn natural_evals_to_bitrev_Z_radix_8(
         log_n as u32,
         0,
     );
-    N2BRadix8Function(ab_radix_8_main_domain_evals_to_Z_nonfinal_6_stages_warp).launch(&config, &args)?;
-    start_stage += 2;
-    exchg_region_bit_chunks += 2;
-    let threads = 256;
-    let blocks = n.get_chunks_count(4096);
-    let config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
-    let args = N2BRadix8Arguments::new(
-        outputs_matrix_const,
-        outputs_matrix_mut,
-        start_stage as u32,
-        exchg_region_bit_chunks as u32,
-        log_n as u32,
-        0,
-    );
-    N2BRadix8Function(ab_radix_8_main_domain_evals_to_Z_final_12_stages_block).launch(&config, &args)
+    N2BRadix8Function(ab_radix_8_main_domain_evals_to_Z_final_12_stages_block)
+        .launch(&config, &args)
 }
 
 #[allow(clippy::too_many_arguments)]

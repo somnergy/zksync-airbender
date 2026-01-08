@@ -4,7 +4,7 @@ namespace airbender::ntt {
 
 EXTERN __launch_bounds__(128, 8) __global__
     void ab_bit_reverse_by_radix_8(vectorized_e2_matrix_getter<ld_modifier::cg> src, vectorized_e2_matrix_setter<st_modifier::cg> dst,
-                                 const unsigned bit_chunks, const unsigned log_n) {
+                                   const unsigned bit_chunks, const unsigned log_n) {
   const unsigned n = 1 << log_n;
   const unsigned l_index = blockIdx.x * blockDim.x + threadIdx.x;
   if (l_index >= n)

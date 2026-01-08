@@ -10,8 +10,8 @@ use fft::field_utils::domain_generator_for_size;
 use fft::utils::bitreverse_enumeration_inplace;
 use fft::{fft_natural_to_bitreversed, ifft_natural_to_natural, precompute_twiddles_for_fft};
 use field::{Field, FieldExtension};
-use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use serial_test::serial;
 use worker::Worker;
 
@@ -22,10 +22,9 @@ use crate::device_structures::{
 use crate::field::{BaseField, Ext2Field};
 use crate::ntt::utils::REAL_COLS_PER_BLOCK;
 use crate::ntt::{
-    bit_reverse_by_radix_8,
-    bitrev_Z_to_natural_composition_main_evals, bitrev_Z_to_natural_trace_coset_evals,
-    natural_composition_coset_evals_to_bitrev_Z, natural_compressed_coset_evals_to_bitrev_Z,
-    natural_evals_to_bitrev_Z_radix_8,
+    bit_reverse_by_radix_8, bitrev_Z_to_natural_composition_main_evals,
+    bitrev_Z_to_natural_trace_coset_evals, natural_composition_coset_evals_to_bitrev_Z,
+    natural_compressed_coset_evals_to_bitrev_Z, natural_evals_to_bitrev_Z_radix_8,
     natural_main_evals_to_natural_coset_evals, natural_trace_main_evals_to_bitrev_Z,
 };
 use crate::prover::context::DeviceProperties;
@@ -878,19 +877,9 @@ fn test_bit_reverse_by_radix_8() {
     let mut d_dst = DeviceAllocation::<BF>::alloc(2 * n).unwrap();
     let mut d_src_matrix = DeviceMatrixChunkMut::new(&mut d_src, n, 0, n);
     let mut d_dst_matrix = DeviceMatrixChunkMut::new(&mut d_dst, n, 0, n);
-    memory_copy_async(
-        d_src_matrix.slice_mut(),
-        &h_src[0..2 * n],
-        &stream,
-    )
-    .unwrap();
+    memory_copy_async(d_src_matrix.slice_mut(), &h_src[0..2 * n], &stream).unwrap();
     bit_reverse_by_radix_8(&d_src_matrix, &mut d_dst_matrix, log_n, &stream).unwrap();
-    memory_copy_async(
-        &mut h_dst[0..2 * n],
-        d_dst_matrix.slice(),
-        &stream,
-    )
-    .unwrap();
+    memory_copy_async(&mut h_dst[0..2 * n], d_dst_matrix.slice(), &stream).unwrap();
     stream.synchronize().unwrap();
     let inputs: Vec<E2> = (&h_src[0..64])
         .iter()
@@ -908,10 +897,7 @@ fn test_bit_reverse_by_radix_8() {
     ctx.destroy().unwrap();
 }
 
-fn run_natural_evals_to_bitrev_Z_radix_8(
-    log_n_range: Range<usize>,
-    num_bf_cols: usize,
-) {
+fn run_natural_evals_to_bitrev_Z_radix_8(log_n_range: Range<usize>, num_bf_cols: usize) {
     let ctx = DeviceContext::create(12).unwrap();
     let n_max = 1 << (log_n_range.end - 1);
     assert_eq!(num_bf_cols % 2, 0);
@@ -928,7 +914,7 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
         HostAllocation::<BF>::alloc(max_memory_size, CudaHostAllocFlags::DEFAULT).unwrap();
     inputs_orig_host.fill_with(|| BF::from_nonreduced_u32(rng.random()));
     for i in 0..max_stride {
-        inputs_orig_host[i] = BF::from_nonreduced_u32(((i + 1) % 7 )as u32);
+        inputs_orig_host[i] = BF::from_nonreduced_u32(((i + 1) % 7) as u32);
         inputs_orig_host[i + max_stride] = BF::from_nonreduced_u32(((i + 2) % 7) as u32);
     }
     let mut inputs_host =
@@ -1062,10 +1048,7 @@ fn run_natural_evals_to_bitrev_Z_radix_8(
 #[test]
 #[serial]
 fn test_natural_evals_to_bitrev_Z_radix_8() {
-    run_natural_evals_to_bitrev_Z_radix_8(
-        24..25,
-        2,
-    );
+    run_natural_evals_to_bitrev_Z_radix_8(24..25, 2);
 }
 
 #[test]
