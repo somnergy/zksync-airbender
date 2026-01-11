@@ -17,7 +17,7 @@ pub(crate) fn layout_width_1_lookup_expressions<F: PrimeField>(
     variable_names: &mut HashMap<Variable, String>,
     lookup_type: &str,
     lookup: LookupType,
-) -> (Variable, LookupRationalPair) {
+) -> (Variable, LookupRationalPair, NoFieldGKRRelation) {
     layout_lookup_expressions::<F, 1>(
         graph,
         expressions
@@ -123,7 +123,7 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
     lookup_type: &str,
     decoder_lookup: Option<(Variable, Vec<LookupInput<F>>)>,
     lookup: LookupType,
-) -> (Variable, LookupRationalPair) {
+) -> (Variable, LookupRationalPair, NoFieldGKRRelation) {
     println!(
         "In total of {} lookups of type {}",
         expressions.len(),
@@ -186,14 +186,14 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     lookup_type: lookup,
                 };
 
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
                 if expressions.is_empty() {
-                    return (multiplicity_var, next_pair);
+                    return (multiplicity_var, next_pair, rel);
                 }
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
 
             // and continue over all other pairs
@@ -218,10 +218,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     den_node: None,
                     lookup_type: lookup,
                 };
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
         } else {
             // we will make a mixed node with one of the witnesses to avoid copying multiplicity
@@ -248,14 +248,14 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     lookup_type: lookup,
                 };
 
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
                 if expressions.is_empty() {
-                    return (multiplicity_var, next_pair);
+                    return (multiplicity_var, next_pair, rel);
                 }
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
 
             assert_eq!(expressions.len() % 2, 0);
@@ -278,10 +278,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     den_node: None,
                     lookup_type: lookup,
                 };
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
         }
     } else {
@@ -313,14 +313,14 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     lookup_type: lookup,
                 };
 
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
                 if expressions.is_empty() {
-                    return (multiplicity_var, next_pair);
+                    return (multiplicity_var, next_pair, rel);
                 }
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
 
             // and continue over all other pairs
@@ -344,10 +344,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     den_node: None,
                     lookup_type: lookup,
                 };
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
             {
                 let last_input = expressions.as_chunks::<2>().1[0].clone();
@@ -361,10 +361,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     lookup_type: lookup,
                 };
 
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::add_single_into_graph(last_input, graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
         } else {
             // we will make a mixed node with one of the witnesses to avoid copying multiplicity and setup
@@ -390,10 +390,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     lookup_type: lookup,
                 };
 
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
 
             assert_eq!(expressions.len() % 2, 1);
@@ -416,10 +416,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     den_node: None,
                     lookup_type: lookup,
                 };
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
             {
                 let last_input = expressions.as_chunks::<2>().1[0].clone();
@@ -433,10 +433,10 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     lookup_type: lookup,
                 };
 
-                let next_pair =
+                let (next_pair, rel) =
                     LookupRationalPair::add_single_into_graph(last_input, graph, placement_layer);
 
-                initial_reduction_layer_nodes.push(next_pair);
+                initial_reduction_layer_nodes.push((next_pair, rel));
             }
         }
     }
@@ -444,24 +444,25 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
     // now we resolved a problem of copying from base layer, but we still want to have all the relations to be between two
     // nearby layers only
 
-    placement_layer += 1;
     println!(
         "Will continue placement of {} lookup rationals into layer {}",
         initial_reduction_layer_nodes.len(),
-        placement_layer
+        placement_layer + 1
     );
 
     let mut current_layer = initial_reduction_layer_nodes;
 
     loop {
         if current_layer.len() == 1 {
-            return (multiplicity_var, current_layer.pop().unwrap());
+            let (last_pair, rel) = current_layer.pop().unwrap();
+            return (multiplicity_var, last_pair, rel);
         }
 
+        placement_layer += 1;
         let mut next_layer = vec![];
         for [a, b] in current_layer.as_chunks::<2>().0.iter() {
             let next_pair = LookupRationalPair::accumulate_pair_into_graph(
-                (a.clone(), b.clone()),
+                (a.0.clone(), b.0.clone()),
                 graph,
                 placement_layer,
             );
@@ -471,8 +472,11 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
         match current_layer.as_chunks::<2>().1 {
             [] => {}
             [last] => {
-                let next_pair =
-                    LookupRationalPair::add_single_into_graph(last.clone(), graph, placement_layer);
+                let next_pair = LookupRationalPair::add_single_into_graph(
+                    last.0.clone(),
+                    graph,
+                    placement_layer,
+                );
 
                 next_layer.push(next_pair);
             }

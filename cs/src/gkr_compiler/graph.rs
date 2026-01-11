@@ -27,16 +27,20 @@ impl GKRGate for CopyNode {
         }
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = graph.add_intermediate_variable_at_layer(output_layer);
         let input = match self {
             Self::FromBase(input) => *input,
             Self::FromIntermediate(input) => *input,
         };
         let rel = NoFieldGKRRelation::Copy { input, output };
-        graph.add_enforced_relation(rel, output_layer);
+        graph.add_enforced_relation(rel.clone(), output_layer);
 
-        output
+        (output, rel)
     }
 }
 
@@ -258,7 +262,9 @@ impl GraphHolder for GKRGraph {
     fn copy_base_layer_variable(&mut self, variable: Variable) -> GKRAddress {
         let pos = self.get_address_for_variable(variable);
         let node = CopyNode::FromBase(pos);
-        node.add_at_layer(self, 1)
+        let (out, _) = node.add_at_layer(self, 1);
+
+        out
     }
 
     fn copy_intermediate_layer_variable(&mut self, pos: GKRAddress) -> GKRAddress {
@@ -266,7 +272,9 @@ impl GraphHolder for GKRGraph {
             unreachable!()
         };
         let node = CopyNode::FromIntermediate(pos);
-        node.add_at_layer(self, layer + 1)
+        let (out, _) = node.add_at_layer(self, layer + 1);
+
+        out
     }
 }
 

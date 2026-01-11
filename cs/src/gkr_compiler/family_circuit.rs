@@ -70,6 +70,7 @@ impl<F: PrimeField> GKRCompiler<F> {
 
         // we merge decoder and generic tables as it's always beneficial
         let mut total_tables_size = table_driver.total_tables_len;
+        let offset_for_decoder_table = total_tables_size;
         total_tables_size += max_bytecode_size_in_words;
 
         let lookup_table_encoding_capacity = trace_len;
@@ -591,10 +592,12 @@ impl<F: PrimeField> GKRCompiler<F> {
             grand_product_write_accumulation_nodes,
         );
 
+        let mut lookup_outputs = BTreeMap::new();
+
         // placing lookup is move involved
-        let (final_lookup_numerator_nodes, final_lookup_denominator_nodes) = {
+        {
             if range_check_16_expressions.len() > 0 {
-                layout_width_1_lookup_expressions(
+                let (_multiplicity, final_pair, final_rel) = layout_width_1_lookup_expressions(
                     &mut graph,
                     range_check_16_expressions,
                     &mut num_variables,
@@ -603,10 +606,18 @@ impl<F: PrimeField> GKRCompiler<F> {
                     "range check 16",
                     LookupType::RangeCheck16,
                 );
+
+                lookup_outputs.insert(
+                    LookupType::RangeCheck16,
+                    (
+                        [final_pair.num_node.unwrap(), final_pair.den_node.unwrap()],
+                        final_rel,
+                    ),
+                );
             }
 
             if timestamp_range_check_expressions_to_compile.len() > 0 {
-                layout_width_1_lookup_expressions(
+                let (_multiplicity, final_pair, final_rel) = layout_width_1_lookup_expressions(
                     &mut graph,
                     timestamp_range_check_expressions_to_compile,
                     &mut num_variables,
@@ -615,6 +626,13 @@ impl<F: PrimeField> GKRCompiler<F> {
                     "timestamp range check",
                     LookupType::TimestampRangeCheck,
                 );
+                lookup_outputs.insert(
+                    LookupType::TimestampRangeCheck,
+                    (
+                        [final_pair.num_node.unwrap(), final_pair.den_node.unwrap()],
+                        final_rel,
+                    ),
+                );
             }
 
             if generic_lookups.len() > 0 {
@@ -622,7 +640,7 @@ impl<F: PrimeField> GKRCompiler<F> {
                     .into_iter()
                     .map(|el| (el.0, LookupQueryTableTypeExt::from_simple(el.1)))
                     .collect();
-                layout_lookup_expressions::<F, 10>(
+                let (_multiplicity, final_pair, final_rel) = layout_lookup_expressions::<F, 10>(
                     &mut graph,
                     generic_lookups,
                     &mut num_variables,
@@ -632,10 +650,15 @@ impl<F: PrimeField> GKRCompiler<F> {
                     decoder_lookup_pair,
                     LookupType::Generic,
                 );
+                lookup_outputs.insert(
+                    LookupType::Generic,
+                    (
+                        [final_pair.num_node.unwrap(), final_pair.den_node.unwrap()],
+                        final_rel,
+                    ),
+                );
             }
-
-            ((), ())
-        };
+        }
 
         // Dealing with constraints is simple - we will perform two step reduction:
         // - first all quadratic parts from all constraints are delinearized and summed
@@ -658,8 +681,20 @@ impl<F: PrimeField> GKRCompiler<F> {
         // let filename = "gkr_layout.svg";
         // ::layout::core::utils::save_to_file(filename, &content).unwrap();
 
-        let _ = graph.layout_layers();
+        let layers = graph.layout_layers([final_read_node, final_write_node], lookup_outputs);
 
-        todo!();
+        let table_offsets = table_driver
+            .table_starts_offsets()
+            .map(|el| el as u32)
+            .to_vec();
+
+        GKRCircuitArtifact {
+            trace_len,
+            table_offsets,
+            total_tables_size,
+            offset_for_decoder_table,
+            layers,
+            _marker: std::marker::PhantomData,
+        }
     }
 }

@@ -57,7 +57,7 @@ impl LookupRationalPair {
         this: Self,
         graph: &mut impl GraphHolder,
         output_layer: usize,
-    ) -> Self {
+    ) -> (Self, NoFieldGKRRelation) {
         // we consider very limited set of options here
         match (this.num, this.den) {
             (LookupNumerator::Identity, LookupDenominator::MaterializeVectorInput(input)) => {
@@ -65,15 +65,17 @@ impl LookupRationalPair {
                 assert!(this.den_node.is_none());
 
                 let node = MaterializeVectorInputNode(input);
-                let den_node = node.add_at_layer(graph, output_layer);
+                let (den_node, rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Identity,
                     num_node: None,
                     den: LookupDenominator::Explicit(den_node),
                     den_node: Some(den_node),
                     lookup_type: this.lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (LookupNumerator::Identity, LookupDenominator::UseInputViaCopy(input)) => {
                 assert!(this.num_node.is_none());
@@ -89,15 +91,17 @@ impl LookupRationalPair {
                 }
 
                 let node = CopyNode::FromBase(input);
-                let den_node = node.add_at_layer(graph, output_layer);
+                let (den_node, rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Identity,
                     num_node: None,
                     den: LookupDenominator::CopiedBaseInput(den_node),
                     den_node: Some(den_node),
                     lookup_type: this.lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (LookupNumerator::Identity, LookupDenominator::CopiedBaseInput(input)) => {
                 assert!(this.num_node.is_none());
@@ -108,30 +112,34 @@ impl LookupRationalPair {
                 };
 
                 let node = CopyNode::FromIntermediate(input);
-                let den_node = node.add_at_layer(graph, output_layer);
+                let (den_node, rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Identity,
                     num_node: None,
                     den: LookupDenominator::CopiedCopiedBaseInput(den_node),
                     den_node: Some(den_node),
                     lookup_type: this.lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (LookupNumerator::Identity, LookupDenominator::MaterializeBaseInput(input)) => {
                 assert!(this.num_node.is_none());
                 assert!(this.den_node.is_none());
 
                 let node = MaterializeSingleInputNode(input);
-                let den_node = node.add_at_layer(graph, output_layer);
+                let (den_node, rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Identity,
                     num_node: None,
                     den: LookupDenominator::CopiedCopiedBaseInput(den_node),
                     den_node: Some(den_node),
                     lookup_type: this.lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (LookupNumerator::Identity, LookupDenominator::CopiedCopiedBaseInput(input)) => {
                 assert!(this.num_node.is_none());
@@ -142,15 +150,17 @@ impl LookupRationalPair {
                 };
 
                 let node = CopyNode::FromIntermediate(input);
-                let den_node = node.add_at_layer(graph, output_layer);
+                let (den_node, rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Identity,
                     num_node: None,
                     den: LookupDenominator::CopiedCopiedBaseInput(den_node),
                     den_node: Some(den_node),
                     lookup_type: this.lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (num, den) => {
                 panic!("{:?}/{:?} is not supported", num, den);
@@ -162,7 +172,7 @@ impl LookupRationalPair {
         pair: (Self, Self),
         graph: &mut impl GraphHolder,
         output_layer: usize,
-    ) -> Self {
+    ) -> (Self, NoFieldGKRRelation) {
         let (a, b) = pair;
         assert_eq!(a.lookup_type, b.lookup_type);
         let lookup_type = a.lookup_type;
@@ -195,15 +205,17 @@ impl LookupRationalPair {
                     multiplicity,
                     setup,
                 };
-                let [num, den] = node.add_at_layer(graph, output_layer);
+                let ([num, den], rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Positive(num),
                     num_node: Some(num),
                     den: LookupDenominator::Explicit(den),
                     den_node: Some(den),
                     lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (
                 LookupNumerator::Identity,
@@ -215,15 +227,17 @@ impl LookupRationalPair {
                     lhs: a.clone(),
                     rhs: b.clone(),
                 };
-                let [num, den] = node.add_at_layer(graph, output_layer);
+                let ([num, den], rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Positive(num),
                     num_node: Some(num),
                     den: LookupDenominator::Explicit(den),
                     den_node: Some(den),
                     lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (
                 LookupNumerator::Positive(a_num),
@@ -237,15 +251,17 @@ impl LookupRationalPair {
                     rhs_num: b_num,
                     rhs_den: b_den,
                 };
-                let [num, den] = node.add_at_layer(graph, output_layer);
+                let ([num, den], rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Positive(num),
                     num_node: Some(num),
                     den: LookupDenominator::Explicit(den),
                     den_node: Some(den),
                     lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (
                 LookupNumerator::Positive(a_num),
@@ -264,15 +280,17 @@ impl LookupRationalPair {
                     lhs_den: a_den,
                     base_input: input,
                 };
-                let [num, den] = node.add_at_layer(graph, output_layer);
+                let ([num, den], rel) = node.add_at_layer(graph, output_layer);
 
-                Self {
+                let r = Self {
                     num: LookupNumerator::Positive(num),
                     num_node: Some(num),
                     den: LookupDenominator::Explicit(den),
                     den_node: Some(den),
                     lookup_type,
-                }
+                };
+
+                (r, rel)
             }
             (a_num, a_den, b_num, b_den) => {
                 panic!(
@@ -294,7 +312,11 @@ impl GKRGate for MaterializeSingleInputNode {
         "Materialize single lookup input node".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = graph.add_intermediate_variable_at_layer(output_layer);
         // TODO: decide to cache or not, maybe adaptively based on the number of terms
 
@@ -302,9 +324,9 @@ impl GKRGate for MaterializeSingleInputNode {
             input: self.0.clone(),
             output,
         };
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -318,7 +340,11 @@ impl GKRGate for MaterializeVectorInputNode {
         "Materialize vector lookup input node".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = graph.add_intermediate_variable_at_layer(output_layer);
         // TODO: decide to cache or not, maybe adaptively based on the number of terms
 
@@ -326,9 +352,9 @@ impl GKRGate for MaterializeVectorInputNode {
             input: self.0.clone(),
             output,
         };
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -347,7 +373,11 @@ impl GKRGate for LookupMaskedWitnessMinusSetupInputNode {
         "Mask/vector_input - multiplicity/vector_setup".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = [(); 2].map(|_| graph.add_intermediate_variable_at_layer(output_layer));
         let cached_input = NoFieldGKRCacheRelation::VectorizedLookup(self.input.clone());
         let cached_output = NoFieldGKRCacheRelation::VectorizedLookupSetup(self.setup.clone());
@@ -359,9 +389,9 @@ impl GKRGate for LookupMaskedWitnessMinusSetupInputNode {
             setup: [self.multiplicity, cached_output],
             output,
         };
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -379,7 +409,11 @@ impl GKRGate for LookupSingleColumnWitnessMinusSetupInputNode {
         "1/single_input - multiplicity/single_setup".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = [(); 2].map(|_| graph.add_intermediate_variable_at_layer(output_layer));
 
         let relation = NoFieldGKRRelation::LookupFromBaseInputsWithSetup {
@@ -388,9 +422,9 @@ impl GKRGate for LookupSingleColumnWitnessMinusSetupInputNode {
             output,
         };
 
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -407,7 +441,11 @@ impl GKRGate for LookupSingleColumnWitnessPairAggregationNode {
         "1/single_input + 1/single_input".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = [(); 2].map(|_| graph.add_intermediate_variable_at_layer(output_layer));
 
         let relation = NoFieldGKRRelation::LookupPairFromBaseInputs {
@@ -415,9 +453,9 @@ impl GKRGate for LookupSingleColumnWitnessPairAggregationNode {
             output,
         };
 
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -436,16 +474,23 @@ impl GKRGate for LookupExplicitPairAggregationNode {
         "a/b + c/d".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = [(); 2].map(|_| graph.add_intermediate_variable_at_layer(output_layer));
 
         let relation = NoFieldGKRRelation::LookupPair {
             input: [[self.lhs_num, self.lhs_den], [self.rhs_num, self.rhs_den]],
             output,
         };
-        graph.add_enforced_relation(relation, output_layer);
+        for el in [self.lhs_num, self.lhs_den, self.rhs_num, self.rhs_den] {
+            el.assert_as_dependency_for_layer(output_layer);
+        }
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -463,7 +508,11 @@ impl GKRGate for LookupExplicitPairWithSingleColumnInputAggregationNode {
         "a/b + 1/single_input".to_string()
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = [(); 2].map(|_| graph.add_intermediate_variable_at_layer(output_layer));
 
         let relation = NoFieldGKRRelation::LookupUnbalancedPairWithBaseInputs {
@@ -472,8 +521,8 @@ impl GKRGate for LookupExplicitPairWithSingleColumnInputAggregationNode {
             output,
         };
 
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }

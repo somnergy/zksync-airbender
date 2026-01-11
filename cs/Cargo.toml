@@ -26,6 +26,7 @@ quote = {version = "1", optional = true }
 divrem = {version = "1", optional = true }
 seq-macro = { workspace = true, optional = true }
 super-seq-macro = { workspace = true, optional = true }
+serde_with = { version = "*", optional = true }
 serde_json = { version = "*", optional = true }
 bincode = { version = "1.3", optional = true }
 rayon =  { version = "1", optional = true }
@@ -39,7 +40,7 @@ rand = { workspace = true, features = ["std", "thread_rng", "std_rng"]}
 
 [features]
 definitions_only = []
-compiler = ["blake2s_u32", "fft", "poseidon2", "itertools", "derivative", "smallvec", "proc-macro2", "syn", "quote", "divrem", "seq-macro", "super-seq-macro", "serde_json", "bincode", "rayon", "type-map", "layout-rs"]
+compiler = ["blake2s_u32", "fft", "poseidon2", "itertools", "derivative", "smallvec", "proc-macro2", "syn", "quote", "divrem", "seq-macro", "super-seq-macro", "serde_json", "bincode", "rayon", "type-map", "layout-rs", "serde_with"]
 # Will perform witness evaluation in synthesis functions
 debug_evaluate_witness = []
 # When enabled, the crate will print detailed debug logs.

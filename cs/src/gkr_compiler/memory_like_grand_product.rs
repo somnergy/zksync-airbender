@@ -64,7 +64,11 @@ impl GKRGate for GrandProductAccumulationStep {
         }
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = graph.add_intermediate_variable_at_layer(output_layer);
         // create caches
         match self {
@@ -74,16 +78,16 @@ impl GKRGate for GrandProductAccumulationStep {
                     graph.add_cached_relation(expr, output_layer)
                 });
                 let relation = NoFieldGKRRelation::InitialGrandProductFromCaches { input, output };
-                graph.add_enforced_relation(relation, output_layer);
+                graph.add_enforced_relation(relation.clone(), output_layer);
 
-                output
+                (output, relation)
             }
             Self::Aggregation { lhs, rhs, .. } => {
                 let input = [*lhs, *rhs];
                 let relation = NoFieldGKRRelation::TrivialProduct { input, output };
-                graph.add_enforced_relation(relation, output_layer);
+                graph.add_enforced_relation(relation.clone(), output_layer);
 
-                output
+                (output, relation)
             }
             Self::Unbalanced { .. } => {
                 todo!();
@@ -110,16 +114,20 @@ impl GKRGate for GrandProductAccumulationMaskingNode {
         }
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         let output = graph.add_intermediate_variable_at_layer(output_layer);
         let relation = NoFieldGKRRelation::MaskIntoIdentityProduct {
             input: self.lhs,
             mask: self.mask,
             output,
         };
-        graph.add_enforced_relation(relation, output_layer);
+        graph.add_enforced_relation(relation.clone(), output_layer);
 
-        output
+        (output, relation)
     }
 }
 
@@ -214,7 +222,7 @@ pub(crate) fn layout_initial_grand_product_accumulation(
             rhs: read_set[1].clone(),
             is_write: false,
         };
-        let read_set_node = read_set_node.add_at_layer(graph, PLACEMENT_LAYER);
+        let (read_set_node, _) = read_set_node.add_at_layer(graph, PLACEMENT_LAYER);
         grand_product_read_accumulation_nodes.push(read_set_node);
 
         let write_set_node = GrandProductAccumulationStep::Base {
@@ -222,7 +230,7 @@ pub(crate) fn layout_initial_grand_product_accumulation(
             rhs: write_set[1].clone(),
             is_write: true,
         };
-        let write_set_node = write_set_node.add_at_layer(graph, PLACEMENT_LAYER);
+        let (write_set_node, _) = write_set_node.add_at_layer(graph, PLACEMENT_LAYER);
         grand_product_write_accumulation_nodes.push(write_set_node);
     }
 
@@ -327,7 +335,7 @@ pub(crate) fn layout_initial_grand_product_accumulation(
             rhs: read_set[1].clone(),
             is_write: false,
         };
-        let read_set_node = read_set_node.add_at_layer(graph, PLACEMENT_LAYER);
+        let (read_set_node, _) = read_set_node.add_at_layer(graph, PLACEMENT_LAYER);
         grand_product_read_accumulation_nodes.push(read_set_node);
 
         let write_set_node = GrandProductAccumulationStep::Base {
@@ -335,7 +343,7 @@ pub(crate) fn layout_initial_grand_product_accumulation(
             rhs: write_set[1].clone(),
             is_write: true,
         };
-        let write_set_node = write_set_node.add_at_layer(graph, PLACEMENT_LAYER);
+        let (write_set_node, _) = write_set_node.add_at_layer(graph, PLACEMENT_LAYER);
         grand_product_write_accumulation_nodes.push(write_set_node);
     } else {
         todo!();
@@ -355,7 +363,10 @@ pub(crate) fn accumulate_memory_like_grand_product(
     mut copied_predicate_for_grand_product_masking: GKRAddress,
     grand_product_read_accumulation_nodes: Vec<GKRAddress>,
     grand_product_write_accumulation_nodes: Vec<GKRAddress>,
-) -> (GKRAddress, GKRAddress) {
+) -> (
+    (GKRAddress, NoFieldGKRRelation),
+    (GKRAddress, NoFieldGKRRelation),
+) {
     let mut next_read_set = vec![];
     let mut next_write_set = vec![];
 
@@ -460,8 +471,8 @@ pub(crate) fn accumulate_memory_like_grand_product(
 
             for [a, b] in current_read_set.as_chunks::<2>().0.iter() {
                 let el = GrandProductAccumulationStep::Aggregation {
-                    lhs: *a,
-                    rhs: *b,
+                    lhs: a.0,
+                    rhs: b.0,
                     is_write: false,
                 };
                 let el = el.add_at_layer(graph, placement_layer);
@@ -470,8 +481,8 @@ pub(crate) fn accumulate_memory_like_grand_product(
 
             for [a, b] in current_write_set.as_chunks::<2>().0.iter() {
                 let el = GrandProductAccumulationStep::Aggregation {
-                    lhs: *a,
-                    rhs: *b,
+                    lhs: a.0,
+                    rhs: b.0,
                     is_write: true,
                 };
                 let el = el.add_at_layer(graph, placement_layer);
@@ -481,28 +492,28 @@ pub(crate) fn accumulate_memory_like_grand_product(
             if current_read_set.as_chunks::<2>().1.len() > 0 {
                 if let Some(current_read_remainder) = current_read_remainder.take() {
                     let el = GrandProductAccumulationStep::Aggregation {
-                        lhs: current_read_set.as_chunks::<2>().1[0].clone(),
+                        lhs: current_read_set.as_chunks::<2>().1[0].0.clone(),
                         rhs: current_read_remainder,
                         is_write: false,
                     };
                     let el = el.add_at_layer(graph, placement_layer);
                     next_read_set.push(el);
                 } else {
-                    next_read_remainder = Some(current_read_set.as_chunks::<2>().1[0].clone());
+                    next_read_remainder = Some(current_read_set.as_chunks::<2>().1[0].0.clone());
                 }
             }
 
             if current_write_set.as_chunks::<2>().1.len() > 0 {
                 if let Some(current_write_remainder) = current_write_remainder.take() {
                     let el = GrandProductAccumulationStep::Aggregation {
-                        lhs: current_write_set.as_chunks::<2>().1[0].clone(),
+                        lhs: current_write_set.as_chunks::<2>().1[0].0.clone(),
                         rhs: current_write_remainder,
                         is_write: false,
                     };
                     let el = el.add_at_layer(graph, placement_layer);
                     next_write_set.push(el);
                 } else {
-                    next_write_remainder = Some(current_write_set.as_chunks::<2>().1[0].clone());
+                    next_write_remainder = Some(current_write_set.as_chunks::<2>().1[0].0.clone());
                 }
             }
 
@@ -526,15 +537,17 @@ pub(crate) fn accumulate_memory_like_grand_product(
     let read_node = current_read_set.pop().unwrap();
     let write_node = current_write_set.pop().unwrap();
 
+    placement_layer += 1;
+
     let read_mask = GrandProductAccumulationMaskingNode {
-        lhs: read_node,
+        lhs: read_node.0,
         mask: copied_predicate_for_grand_product_masking,
         is_write: false,
     };
     let read_output = read_mask.add_at_layer(graph, placement_layer);
 
     let write_mask = GrandProductAccumulationMaskingNode {
-        lhs: write_node,
+        lhs: write_node.0,
         mask: copied_predicate_for_grand_product_masking,
         is_write: true,
     };

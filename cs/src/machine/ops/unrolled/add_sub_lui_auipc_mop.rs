@@ -517,11 +517,13 @@ mod test {
     fn compile_add_sub_lui_auipc_mop_into_gkr() {
         use ::field::Mersenne31Field;
 
-        let compiled = compile_unrolled_circuit_state_transition_into_gkr::<Mersenne31Field>(
+        let gkr_compiled = compile_unrolled_circuit_state_transition_into_gkr::<Mersenne31Field>(
             &|cs| add_sub_lui_auipc_mop_table_addition_fn(cs),
             &|cs| add_sub_lui_auipc_mop_circuit_with_preprocessed_bytecode_for_gkr(cs),
             1 << 20,
             24,
         );
+
+        serialize_to_file(&gkr_compiled, "add_sub_lui_auipc_mop_gkr.json");
     }
 }

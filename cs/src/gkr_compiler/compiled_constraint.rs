@@ -409,93 +409,71 @@ impl<F: PrimeField> GKRGate for OneStepConstraintsEvaluationNode<F> {
         )
     }
 
-    fn add_at_layer(&self, graph: &mut impl GraphHolder, output_layer: usize) -> Self::Output {
+    fn add_at_layer(
+        &self,
+        graph: &mut impl GraphHolder,
+        output_layer: usize,
+    ) -> (Self::Output, NoFieldGKRRelation) {
         assert_eq!(output_layer, 1);
 
-        // compute stats
-        let mut cross_terms_for_vars = HashMap::<Variable, HashSet<(F, Variable)>>::new();
-        for constraint in self.quadratic_parts.iter() {
-            for (c, a, b) in constraint.iter() {
-                if *a != *b {
-                    let p = cross_terms_for_vars.entry(*a).or_default().insert((*c, *b));
-                    assert!(p, "constraint {:?} is not normalized", constraint);
-                    let p = cross_terms_for_vars.entry(*b).or_default().insert((*c, *a));
-                    assert!(p, "constraint {:?} is not normalized", constraint);
-                } else {
-                    let p = cross_terms_for_vars.entry(*a).or_default().insert((*c, *a));
-                    assert!(p, "constraint {:?} is not normalized", constraint);
-                }
+        assert_eq!(self.quadratic_parts.len(), self.linear_parts.len());
+        assert_eq!(self.quadratic_parts.len(), self.constant_parts.len());
+
+        let mut quadratic_sorted = BTreeMap::new();
+        let mut linear_sorted = BTreeMap::new();
+        let mut constant_sorted = vec![];
+
+        for (i, ((q, l), c)) in self
+            .quadratic_parts
+            .iter()
+            .zip(self.linear_parts.iter())
+            .zip(self.constant_parts.iter())
+            .enumerate()
+        {
+            for (coeff, a, b) in q.iter() {
+                let a = graph.get_address_for_variable(*a);
+                let b = graph.get_address_for_variable(*b);
+                quadratic_sorted
+                    .entry((a, b))
+                    .or_insert(vec![])
+                    .push((coeff.as_u64_reduced(), i));
+            }
+            for (coeff, a) in l.iter() {
+                let a = graph.get_address_for_variable(*a);
+                linear_sorted
+                    .entry(a)
+                    .or_insert(vec![])
+                    .push((coeff.as_u64_reduced(), i));
+            }
+            if c.is_zero() == false {
+                constant_sorted.push((c.as_u64_reduced(), i));
             }
         }
 
-        // we want to reduce number of multiplications
-        let mut selected_terms = vec![];
-        loop {
-            if cross_terms_for_vars.is_empty() {
-                break;
-            }
-            let (next_best_candidate, _) = cross_terms_for_vars
-                .iter()
-                .map(|(k, v)| (*k, v.len()))
-                .max_by(|a, b| a.1.cmp(&b.1))
-                .unwrap();
-            let cross_terms = cross_terms_for_vars.remove(&next_best_candidate).unwrap();
-            // cleanup
-            for (c, other) in cross_terms.iter() {
-                if *other != next_best_candidate {
-                    let exists = cross_terms_for_vars
-                        .get_mut(other)
-                        .unwrap()
-                        .remove(&(*c, next_best_candidate));
-                    assert!(exists);
-                    if cross_terms_for_vars.get(other).unwrap().is_empty() {
-                        cross_terms_for_vars.remove(other);
-                    }
-                }
-            }
-            // we do not care yet about stable sort
-            let mut terms = vec![];
-            for (c, other) in cross_terms.iter() {
-                let place = graph.get_address_for_variable(*other);
-                terms.push((c.as_u64_reduced(), place));
-            }
-            terms.sort_by(|a, b| a.1.cmp(&b.1));
-            let next_best_candidate = graph.get_address_for_variable(next_best_candidate);
-            selected_terms.push((next_best_candidate, terms.into_boxed_slice()));
-        }
-
-        let linear_terms = self
-            .linear_parts
-            .iter()
-            .map(|els| {
-                let mut inner = vec![];
-                for (c, v) in els.iter() {
-                    let c = c.as_u64_reduced();
-                    let pos = graph.get_address_for_variable(*v);
-                    inner.push((c, pos));
-                }
-                inner.into_boxed_slice()
-            })
+        let quadratic_terms = quadratic_sorted
+            .into_iter()
+            .map(|(k, v)| (k, v.into_boxed_slice()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
-        let constants = self
-            .constant_parts
-            .iter()
-            .map(|c| c.as_u64_reduced())
+        let linear_terms = linear_sorted
+            .into_iter()
+            .map(|(k, v)| (k, v.into_boxed_slice()))
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
-        let input = NoFieldMaxQuadraticGKRRelation {
-            quadratic_terms: selected_terms.into_boxed_slice(),
+        let constants = constant_sorted.into_boxed_slice();
+
+        let input = NoFieldMaxQuadraticConstraintsGKRRelation {
+            quadratic_terms,
             linear_terms,
             constants,
         };
 
         let node = NoFieldGKRRelation::EnforceConstraintsMaxQuadratic { input };
-        graph.add_enforced_relation(node, output_layer);
+        graph.add_enforced_relation(node.clone(), output_layer);
 
-        ()
+        ((), node)
     }
 }
 

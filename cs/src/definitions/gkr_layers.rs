@@ -15,6 +15,14 @@ impl GKRAddress {
         Self::OptimizedOut(0)
     }
 
+    pub const fn is_cache(&self) -> bool {
+        if let Self::Cached { .. } = self {
+            true
+        } else {
+            false
+        }
+    }
+
     #[inline(always)]
     pub const fn offset(&self) -> usize {
         match self {
@@ -32,5 +40,17 @@ impl GKRAddress {
             panic!("expected memory location")
         };
         *offset
+    }
+
+    #[track_caller]
+    pub fn assert_as_dependency_for_layer(&self, output_layer: usize) {
+        match self {
+            Self::BaseLayerWitness(..) | Self::BaseLayerMemory(..) | Self::Setup(..) => {
+                assert_eq!(output_layer, 1)
+            }
+            Self::InnerLayer { layer, .. } => assert_eq!(output_layer, *layer + 1),
+            Self::OptimizedOut(..) => unreachable!(),
+            Self::Cached { layer, .. } => assert_eq!(output_layer, *layer + 1),
+        }
     }
 }
