@@ -92,7 +92,7 @@ fn apply_reduced_machine_circuit<
     inputs: OpcodeFamilyCircuitState<F>,
 ) {
     let (decoder_bits, decoder_output, memory_queries, start_pc) =
-        get_initial_data_for_execution(cs, inputs);
+        get_initial_data_for_execution(cs, inputs.clone());
 
     let flags_source = decoder_bits.get_flag_source();
 

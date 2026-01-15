@@ -1,4 +1,7 @@
 use super::*;
+use common_constants::{
+    TimestampScalar, NUM_TIMESTAMP_COLUMNS_FOR_RAM, TIMESTAMP_COLUMNS_NUM_BITS,
+};
 use cs::{
     definitions::{gkr::*, GKRAddress},
     gkr_compiler::GKRCircuitArtifact,
@@ -56,7 +59,7 @@ impl<F: PrimeField, A: Allocator + Clone, B: Allocator + Clone> GKRMemoryOnlyWit
                 scratch_space: vec![F::ZERO; scratch_space_size].into_boxed_slice(),
                 table_driver,
                 multiplicity_counting_scratch: &mut [],
-                lookup_mapping_rows_starts: &mut [],
+                lookup_mapping_rows_starts: vec![].into_boxed_slice(),
                 oracle,
                 absolute_row_idx: total_chunked,
             };
@@ -71,7 +74,12 @@ impl<F: PrimeField, A: Allocator + Clone, B: Allocator + Clone> GKRMemoryOnlyWit
             total_chunked += chunk_size;
         }
 
-        assert!(total_chunked <= trace_len);
+        assert!(
+            total_chunked <= trace_len,
+            "total chunks len is {} from worker geometry, while trace length is {}",
+            total_chunked,
+            trace_len
+        );
 
         result
     }
@@ -105,13 +113,13 @@ pub fn evaluate_gkr_memory_witness_for_executor_family<
 
     // NOTE: we only evaluate memory and can not rely on the circuit's machinery to evaluate witness at all
 
-    worker.scope(num_cycles, |scope, geometry| {
+    worker.scope(trace_len, |scope, geometry| {
         let chunks = memory_trace.make_proxies_for_geometry(
             oracle,
             geometry,
             &table_driver,
-            trace_len,
             compiled_circuit.scratch_space_size,
+            trace_len,
         );
         for (thread_idx, chunk) in chunks.into_iter().enumerate() {
             let chunk_size = geometry.get_chunk_size(thread_idx);
@@ -134,16 +142,23 @@ pub fn evaluate_gkr_memory_witness_for_executor_family<
     // set filled rows
     for el in memory_trace.column_major_trace.iter_mut() {
         unsafe {
-            el.set_len(num_cycles);
+            el.set_len(trace_len);
         }
     }
 
-    // pad the last rows - so far it's all zeroes
-    if num_cycles < trace_len {
-        for el in memory_trace.column_major_trace.iter_mut() {
-            el.resize(trace_len, F::ZERO);
-        }
-    }
+    // // pad the last rows - so far it's all zeroes
+    // if num_cycles < trace_len {
+    //     for el in memory_trace.column_major_trace.iter_mut() {
+    //         el.resize(trace_len, F::ZERO);
+    //     }
+    // }
+
+    // // and perform non-trivial padding if needed
+    // non_trivial_padding_convention_for_executor_circuit_memory(
+    //     &mut memory_trace.column_major_trace,
+    //     compiled_circuit,
+    //     num_cycles
+    // );
 
     // we also do not care about multiplicities
 
@@ -151,7 +166,7 @@ pub fn evaluate_gkr_memory_witness_for_executor_family<
 }
 
 #[inline]
-pub(crate) unsafe fn process_machine_state_assuming_preprocessed_decoder<
+pub(crate) unsafe fn gkr_process_machine_state_assuming_preprocessed_decoder<
     'a,
     F: PrimeField,
     O: Oracle<F> + 'a,
@@ -159,6 +174,7 @@ pub(crate) unsafe fn process_machine_state_assuming_preprocessed_decoder<
 >(
     proxy: &mut ColumnMajorWitnessProxy<'a, O, F>,
     compiled_circuit: &GKRCircuitArtifact<F>,
+    generic_lookup_multiplicities: &mut [u32],
 ) {
     #[cfg(feature = "profiling")]
     let t = std::time::Instant::now();
@@ -170,16 +186,18 @@ pub(crate) unsafe fn process_machine_state_assuming_preprocessed_decoder<
         .unwrap();
 
     // we need to assign execute flag, PCs, timestamps,
-    proxy.write_boolean_placeholder_into_columns::<true>(
-        machine_state.execute,
+    let execute = proxy.oracle.get_boolean_witness_from_placeholder(
         Placeholder::ExecuteOpcodeFamilyCycle,
+        proxy.absolute_row_idx,
     );
+    proxy.write_boolean_value_into_columns::<true>(machine_state.execute, execute);
 
     // initial state
-    proxy.write_u32_placeholder_into_columns::<true>(
-        machine_state.initial_state.pc,
-        Placeholder::PcInit,
-    );
+    let initial_pc = proxy
+        .oracle
+        .get_u32_witness_from_placeholder(Placeholder::PcInit, proxy.absolute_row_idx);
+    proxy.write_u32_value_into_columns::<true>(machine_state.initial_state.pc, initial_pc);
+
     proxy.write_timestamp_placeholder_into_columns(
         machine_state.initial_state.timestamp,
         Placeholder::OpcodeFamilyCycleInitialTimestamp,
@@ -194,101 +212,71 @@ pub(crate) unsafe fn process_machine_state_assuming_preprocessed_decoder<
         Placeholder::OpcodeFamilyCycleInitialTimestamp,
         proxy.absolute_row_idx,
     );
-    let (final_ts, intermediate_carry) = timestamp_increment(initial_ts);
+    let (final_ts, _intermediate_carry) = timestamp_increment(initial_ts);
+    debug_assert!(
+        final_ts <= (1 << (TIMESTAMP_COLUMNS_NUM_BITS * (NUM_TIMESTAMP_COLUMNS_FOR_RAM as u32)))
+    );
     proxy.write_timestamp_value_into_columns(machine_state.final_state.timestamp, final_ts);
 
-    // rare case when it's in memory
-    if let Some(decoder_input) = compiled_circuit.memory_layout.decoder_input.as_ref() {
-        if let Some(GKRAddress::BaseLayerMemory(circuit_family_extra_mask)) =
-            decoder_input.circuit_family_extra_mask
-        {
-            let decoder_data = proxy
-                .oracle
-                .get_executor_family_data(proxy.absolute_row_idx);
+    let decoder_input = compiled_circuit
+        .memory_layout
+        .decoder_input
+        .as_ref()
+        .expect("is present in execution families");
+    let decoder_data = proxy
+        .oracle
+        .get_executor_family_data(proxy.absolute_row_idx);
 
-            proxy.write_field_value_into_columns::<true>(
-                circuit_family_extra_mask,
-                F::from_u64_unchecked(decoder_data.opcode_family_bits as u64),
-            );
+    // rare case when it's in memory
+    for (i, el) in decoder_input.circuit_family_mask_bits.iter().enumerate() {
+        if let GKRAddress::BaseLayerMemory(circuit_family_extra_mask) = *el {
+            let bit = (decoder_data.opcode_family_bits & (1 << i)) > 0;
+            proxy.write_boolean_value_into_columns::<true>(circuit_family_extra_mask, bit);
         }
     }
 
-    // if COMPUTE_WITNESS {
-    //     // also write timestamp intermediate carry
-    //     if let Some(executor_family_circuit_next_timestamp_aux_var) =
-    //         compiled_circuit.executor_family_circuit_next_timestamp_aux_var
-    //     {
-    //         write_boolean_value_into_columns(
-    //             ColumnSet::new(executor_family_circuit_next_timestamp_aux_var.offset(), 1),
-    //             intermediate_carry,
-    //             witness_row,
-    //         );
-    //     }
+    if COMPUTE_WITNESS {
+        let decoder_data = proxy
+            .oracle
+            .get_executor_family_data(proxy.absolute_row_idx);
 
-    //     let decoder_data = oracle.get_executor_family_data(absolute_row_idx);
+        // and maybe some decoder values, that wouldn't end up as RS2/RD indexes and so on
+        if let GKRAddress::BaseLayerWitness(offset) = decoder_input.rs2_index {
+            proxy.write_u8_value_into_columns::<false>(offset, decoder_data.rs2_index);
+        }
 
-    //     // and maybe some decoder values, that wouldn't end up as RS2/RD indexes and so on
-    //     if let ColumnAddress::WitnessSubtree(offset) = input_state_and_decoder_parts.rs2_index {
-    //         write_u8_value_into_columns(
-    //             ColumnSet::new(offset, 1),
-    //             decoder_data.rs2_index,
-    //             witness_row,
-    //         );
-    //     }
+        if let GKRAddress::BaseLayerWitness(offset) = decoder_input.rd_index {
+            proxy.write_u8_value_into_columns::<false>(offset, decoder_data.rd_index);
+        }
 
-    //     if let ColumnAddress::WitnessSubtree(offset) = input_state_and_decoder_parts.rd_index {
-    //         write_u8_value_into_columns(
-    //             ColumnSet::new(offset, 1),
-    //             decoder_data.rd_index,
-    //             witness_row,
-    //         );
-    //     }
+        for (i, el) in decoder_input.circuit_family_mask_bits.iter().enumerate() {
+            if let GKRAddress::BaseLayerWitness(circuit_family_extra_mask) = *el {
+                let bit = (decoder_data.opcode_family_bits & (1 << i)) > 0;
+                proxy.write_boolean_value_into_columns::<false>(circuit_family_extra_mask, bit);
+            }
+        }
 
-    //     if let ColumnAddress::WitnessSubtree(circuit_family_extra_mask) =
-    //         input_state_and_decoder_parts.circuit_family_extra_mask
-    //     {
-    //         debug_assert!(circuit_family_extra_mask < witness_row.len());
-    //         unsafe {
-    //             *witness_row.get_unchecked_mut(circuit_family_extra_mask) =
-    //                 Mersenne31Field(decoder_data.opcode_family_bits);
-    //         }
-    //     }
+        if decoder_input.decoder_witness_is_in_memory == false {
+            // these variables are for sure in witness
 
-    //     if input_state_and_decoder_parts.decoder_witness_is_in_memory == false {
-    //         // these variables are for sure in witness
+            proxy.write_boolean_value_into_columns::<false>(
+                decoder_input.rd_is_zero,
+                decoder_data.rd_is_zero,
+            );
 
-    //         // pub rd_is_zero: ColumnSet<1>,
-    //         // pub imm: ColumnSet<REGISTER_SIZE>,
-    //         // pub funct3: ColumnSet<1>,
-    //         // pub circuit_family_extra_mask: ColumnAddress,
+            proxy.write_u32_value_into_columns::<false>(decoder_input.imm, decoder_data.imm);
+            if let Some(funct3) = decoder_input.funct3 {
+                proxy.write_u8_value_into_columns::<false>(funct3, decoder_data.funct3);
+            }
 
-    //         write_boolean_value_into_columns(
-    //             input_state_and_decoder_parts.rd_is_zero,
-    //             decoder_data.rd_is_zero,
-    //             witness_row,
-    //         );
-
-    //         write_u32_value_into_columns(
-    //             input_state_and_decoder_parts.imm,
-    //             decoder_data.imm,
-    //             witness_row,
-    //         );
-
-    //         write_u8_value_into_columns(
-    //             input_state_and_decoder_parts.funct3,
-    //             decoder_data.funct3,
-    //             witness_row,
-    //         );
-
-    //         // and count multiplicity right away
-    //         if execute {
-    //             assert!(initial_pc % 4 == 0);
-    //             let idx = (initial_pc / 4) as usize;
-    //             assert!(idx < compiled_circuit.executor_family_decoder_table_size);
-    //             decoder_multiplicieties[idx] += 1;
-    //         }
-    //     }
-    // }
+            // and count multiplicity right away
+            if execute {
+                assert!(initial_pc % 4 == 0);
+                let idx = (initial_pc / 4) as usize;
+                generic_lookup_multiplicities[idx + compiled_circuit.offset_for_decoder_table] += 1;
+            }
+        }
+    }
 
     #[cfg(feature = "profiling")]
     PROFILING_TABLE.with_borrow_mut(|el| {
@@ -297,7 +285,7 @@ pub(crate) unsafe fn process_machine_state_assuming_preprocessed_decoder<
 }
 
 #[inline]
-pub(crate) unsafe fn process_shuffle_ram_accesses_in_executor_family<
+pub(crate) unsafe fn gkr_process_shuffle_ram_accesses_in_executor_family<
     'a,
     F: PrimeField,
     O: Oracle<F> + 'a,
@@ -364,10 +352,11 @@ pub(crate) unsafe fn process_shuffle_ram_accesses_in_executor_family<
             }
         }
 
-        proxy.write_timestamp_placeholder_into_columns(
-            mem_query.get_read_timestamp_columns(),
+        let read_ts = proxy.oracle.get_timestamp_witness_from_placeholder(
             Placeholder::ShuffleRamReadTimestamp(access_idx),
+            proxy.absolute_row_idx,
         );
+        proxy.write_timestamp_value_into_columns(mem_query.get_read_timestamp_columns(), read_ts);
 
         proxy.write_u32_placeholder_into_columns::<true>(
             mem_query.get_read_value_columns(),
@@ -382,36 +371,36 @@ pub(crate) unsafe fn process_shuffle_ram_accesses_in_executor_family<
             );
         }
 
-        // if COMPUTE_WITNESS {
-        //     let write_ts = cycle_ts + (access_idx as TimestampScalar);
+        if COMPUTE_WITNESS {
+            let write_ts = cycle_ts + (access_idx as TimestampScalar);
 
-        //     let read_ts_split = split_timestamp(read_ts);
-        //     let write_ts_split = split_timestamp(write_ts);
+            let read_ts_split = split_timestamp(read_ts);
+            let write_ts_split = split_timestamp(write_ts);
 
-        //     let comparison_set = compiled_circuit
-        //         .memory_queries_timestamp_comparison_aux_vars
-        //         .get_unchecked(access_idx);
-        //     let borrow_place = *comparison_set;
+            let comparison_set = compiled_circuit
+                .aux_layout_data
+                .shuffle_ram_timestamp_comparison_aux_vars
+                .get_unchecked(access_idx);
+            let GKRAddress::BaseLayerWitness(borrow_place) = comparison_set.intermediate_borrow
+            else {
+                unreachable!()
+            };
 
-        //     // this - next is with borrow
-        //     let (((_aux_low, _aux_high), intermediate_borrow), final_borrow) =
-        //         timestamp_sub(read_ts_split, write_ts_split);
-        //     assert!(
-        //         final_borrow,
-        //         "failed to compare memory access timestamps at row {} for access {}: read is {}, write is {}. Cycle timestamp is {}",
-        //         absolute_row_idx,
-        //         access_idx,
-        //         read_ts,
-        //         write_ts,
-        //         cycle_ts,
-        //     );
+            // this - next is with borrow
+            let (((_aux_low, _aux_high), intermediate_borrow), _final_borrow) =
+                timestamp_sub(read_ts_split, write_ts_split);
+            assert!(
+                _final_borrow,
+                "failed to compare memory access timestamps at row {} for access {}: read is {}, write is {}. Cycle timestamp is {}",
+                proxy.absolute_row_idx,
+                access_idx,
+                read_ts,
+                write_ts,
+                cycle_ts,
+            );
 
-        //     write_boolean_value_into_columns(
-        //         ColumnSet::new(borrow_place.offset(), 1),
-        //         intermediate_borrow,
-        //         witness_row,
-        //     );
-        // }
+            proxy.write_boolean_value_into_columns::<false>(borrow_place, intermediate_borrow);
+        }
     }
     #[cfg(feature = "profiling")]
     PROFILING_TABLE.with_borrow_mut(|el| {
@@ -429,9 +418,13 @@ pub(crate) unsafe fn evaluate_memory_witness_for_executor_family_inner<
     proxy: &mut ColumnMajorWitnessProxy<'a, O, F>,
     compiled_circuit: &GKRCircuitArtifact<F>,
 ) {
-    process_machine_state_assuming_preprocessed_decoder::<F, O, false>(proxy, compiled_circuit);
+    gkr_process_machine_state_assuming_preprocessed_decoder::<F, O, false>(
+        proxy,
+        compiled_circuit,
+        &mut [],
+    );
 
-    process_shuffle_ram_accesses_in_executor_family::<F, O, false>(proxy, compiled_circuit);
+    gkr_process_shuffle_ram_accesses_in_executor_family::<F, O, false>(proxy, compiled_circuit);
 
     // we can skip producing any other witness values, because none of them are placed into memory trace
 }

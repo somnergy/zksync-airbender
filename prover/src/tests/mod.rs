@@ -187,6 +187,8 @@ mod delegation_test;
 mod keccak_test;
 mod unrolled;
 
+mod gkr;
+
 #[cfg(test)]
 mod lde_tests;
 

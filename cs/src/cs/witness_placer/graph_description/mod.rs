@@ -488,6 +488,13 @@ impl<F: PrimeField> WitnessGraphCreator<F> {
         let mut conditionally_resolved_variables = BTreeMap::new();
         let mut conditional_with_unconditional_overwrites = BTreeSet::new();
 
+        for var in self.variables_considered_assigned.iter() {
+            assert!(
+                var.is_placeholder() == false,
+                "placeholder variable is in the list of considered resolved"
+            );
+        }
+
         for (idx, el) in self.values.iter().enumerate() {
             let variable = Variable(idx as u64);
             if self.variables_considered_assigned.contains(&variable) {
@@ -751,7 +758,20 @@ impl<F: PrimeField> WitnessGraphCreator<F> {
         }
 
         assert!(unresolved_variables.is_empty());
-        assert_eq!(resolved_variables.len(), total_vars);
+        if resolved_variables.len() != total_vars {
+            let mut t = resolved_variables.clone();
+            for i in 0..total_vars {
+                let var = Variable(i as u64);
+                if t.remove(&var) == false {
+                    println!("resolved variables do not containt variable {:?}", var);
+                }
+            }
+            println!(
+                "Variables {:?} are in resolved, but are not in the initial set",
+                t
+            );
+            panic!("Total number of resolved variables is not the one expected");
+        }
 
         // now we can do SSA
 
@@ -1538,7 +1558,9 @@ impl<F: PrimeField> WitnessPlacer<F> for WitnessGraphCreator<F> {
         }
     }
 
+    #[track_caller]
     fn assume_assigned(&mut self, variable: Variable) {
+        assert!(variable.is_placeholder() == false);
         self.variables_considered_assigned.insert(variable);
     }
 
@@ -1559,12 +1581,19 @@ impl<F: PrimeField> WitnessPlacer<F> for WitnessGraphCreator<F> {
             .insert(decoder_data.imm[0]);
         self.variables_considered_assigned
             .insert(decoder_data.imm[1]);
-        self.variables_considered_assigned
-            .insert(decoder_data.funct3);
+        if decoder_data.funct3.is_placeholder() == false {
+            self.variables_considered_assigned
+                .insert(decoder_data.funct3);
+        }
         if let Some(funct7) = decoder_data.funct7 {
             self.variables_considered_assigned.insert(funct7);
         }
-        self.variables_considered_assigned
-            .insert(decoder_data.circuit_family_extra_mask);
+        if decoder_data.circuit_family_extra_mask.is_placeholder() == false {
+            self.variables_considered_assigned
+                .insert(decoder_data.circuit_family_extra_mask);
+        }
+        for var in decoder_data.circuit_family_mask_bits.iter() {
+            self.variables_considered_assigned.insert(*var);
+        }
     }
 }

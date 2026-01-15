@@ -4,6 +4,7 @@ use core::ops::Range;
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 mod columns;

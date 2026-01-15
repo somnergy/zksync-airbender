@@ -299,9 +299,18 @@ impl<F: PrimeField> WitnessPlacer<F> for CSDebugWitnessEvaluator<F> {
             self.assign_u8(funct7, &entry.funct7.unwrap());
         }
         assert!(entry.opcode_family_bits <= 1 << (F::CHAR_BITS - 1));
-        self.assign_field(
-            decoder_data.circuit_family_extra_mask,
-            &F::from_u64_unchecked(entry.opcode_family_bits as u64),
-        );
+        if decoder_data.circuit_family_extra_mask.is_placeholder() == false {
+            assert!(decoder_data.circuit_family_mask_bits.is_empty());
+            self.assign_field(
+                decoder_data.circuit_family_extra_mask,
+                &F::from_u64_unchecked(entry.opcode_family_bits as u64),
+            );
+        } else {
+            let mut t = entry.opcode_family_bits;
+            for bit in decoder_data.circuit_family_mask_bits.iter() {
+                self.assign_mask(*bit, &(t & 1 > 0));
+                t >>= 1;
+            }
+        }
     }
 }

@@ -4,10 +4,17 @@
 
 use crate::cs::circuit::CircuitOutput;
 use crate::definitions::gkr::GKRMemoryLayout;
+use crate::definitions::gkr::GKRWitnessLayout;
+use crate::definitions::Degree1Constraint;
+use crate::definitions::Degree2Constraint;
 use crate::definitions::GKRAddress;
+use crate::definitions::Variable;
 use crate::definitions::REGISTER_SIZE;
 use crate::gkr_compiler::graph::GraphHolder;
+use crate::gkr_compiler::layout::GKRAuxLayoutData;
 use crate::gkr_compiler::layout::GKRLayerDescription;
+use crate::one_row_compiler::gkr::NoFieldLinearRelation;
+use crate::one_row_compiler::gkr::NoFieldVectorLookupRelation;
 use common_constants::*;
 use field::PrimeField;
 use std::collections::*;
@@ -50,7 +57,18 @@ pub struct GKRCircuitArtifact<F: PrimeField> {
     pub layers: Vec<GKRLayerDescription>,
 
     pub memory_layout: GKRMemoryLayout,
+    pub witness_layout: GKRWitnessLayout,
     pub scratch_space_size: usize,
+    pub placement_data: BTreeMap<Variable, GKRAddress>,
+    pub generic_lookup_tables_width: usize,
+    pub tables_ids_in_generic_lookups: bool,
+
+    pub degree_2_constraints: Vec<Degree2Constraint<F>>,
+    pub degree_1_constraints: Vec<Degree1Constraint<F>>,
+
+    pub variable_names: BTreeMap<Variable, String>,
+
+    pub aux_layout_data: GKRAuxLayoutData,
     _marker: core::marker::PhantomData<F>,
 }
 
@@ -202,21 +220,6 @@ impl NoFieldSpecialMemoryContributionRelation {
         result.extend(self.value.map(|el| GKRAddress::BaseLayerMemory(el)));
 
         result
-    }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct NoFieldLinearRelation {
-    pub linear_terms: Box<[(u64, GKRAddress)]>,
-    pub constant: u64,
-}
-
-impl NoFieldLinearRelation {
-    pub fn from_single_input(input: GKRAddress) -> Self {
-        Self {
-            linear_terms: vec![(1, input)].into_boxed_slice(),
-            constant: 0,
-        }
     }
 }
 
@@ -550,9 +553,6 @@ impl NoFieldGKRRelation {
         }
     }
 }
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct NoFieldVectorLookupRelation(Box<[NoFieldLinearRelation]>);
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum NoFieldGKRCacheRelation {

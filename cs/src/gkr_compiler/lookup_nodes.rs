@@ -31,14 +31,8 @@ pub enum LookupDenominator {
 }
 
 #[derive(Clone, Hash, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct LookupInputRelation<F: PrimeField, const TOTAL_WIDTH: usize> {
-    #[serde(bound(
-        deserialize = "arrayvec::ArrayVec<Degree1Constraint<F>, TOTAL_WIDTH>: serde::Deserialize<'de>"
-    ))]
-    #[serde(bound(
-        serialize = "arrayvec::ArrayVec<Degree1Constraint<F>, TOTAL_WIDTH>: serde::Serialize"
-    ))]
-    pub inputs: arrayvec::ArrayVec<Degree1Constraint<F>, TOTAL_WIDTH>,
+pub struct LookupInputRelation<F: PrimeField> {
+    pub inputs: Vec<Degree1Constraint<F>>,
 }
 
 // This is just a logical holder of what is a rational pair itself. It's not a node, but can add itself or pair of
@@ -184,7 +178,23 @@ impl LookupRationalPair {
                 LookupNumerator::Negative(multiplicity),
                 LookupDenominator::VectorSetup(setup),
             ) => {
-                todo!();
+                let node = LookupMaskedWitnessMinusSetupInputNode {
+                    mask: var,
+                    input: input.clone(),
+                    multiplicity,
+                    setup,
+                };
+                let ([num, den], rel) = node.add_at_layer(graph, output_layer);
+
+                let r = Self {
+                    num: LookupNumerator::Positive(num),
+                    num_node: Some(num),
+                    den: LookupDenominator::Explicit(den),
+                    den_node: Some(den),
+                    lookup_type,
+                };
+
+                (r, rel)
             }
             (
                 LookupNumerator::Identity,

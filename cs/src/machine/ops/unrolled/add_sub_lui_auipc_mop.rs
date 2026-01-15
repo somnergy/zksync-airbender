@@ -524,6 +524,23 @@ mod test {
             24,
         );
 
-        serialize_to_file(&gkr_compiled, "add_sub_lui_auipc_mop_gkr.json");
+        serialize_to_file(
+            &gkr_compiled,
+            "add_sub_lui_auipc_mop_preprocessed_layout_gkr.json",
+        );
+    }
+
+    #[test]
+    fn compile_add_sub_lui_auipc_mop_gkr_witness_graph() {
+        use ::field::Mersenne31Field;
+
+        let ssa_forms = dump_ssa_witness_eval_form_for_unrolled_circuit::<Mersenne31Field>(
+            &|cs| add_sub_lui_auipc_mop_table_addition_fn(cs),
+            &|cs| add_sub_lui_auipc_mop_circuit_with_preprocessed_bytecode_for_gkr(cs),
+        );
+        serialize_to_file(
+            &ssa_forms,
+            "add_sub_lui_auipc_mop_preprocessed_ssa_gkr.json",
+        );
     }
 }

@@ -90,6 +90,9 @@ pub enum Placeholder {
     DelegationIndirectAccessVariableOffset {
         variable_index: usize,
     },
+    ExecutorFamilyMaskBit {
+        bit: usize,
+    },
 }
 
 impl std::fmt::Display for Placeholder {
@@ -259,6 +262,9 @@ impl quote::ToTokens for Placeholder {
             }
             Placeholder::DelegationIndirectAccessVariableOffset { variable_index } => {
                 quote! { Placeholder::DelegationIndirectAccessVariableOffset( variable_index: #variable_index ) }
+            }
+            Placeholder::ExecutorFamilyMaskBit { bit } => {
+                quote! { Placeholder::ExecutorFamilyMaskBit( bit: #bit ) }
             }
             a @ _ => {
                 panic!("unsupported {:?}", a);

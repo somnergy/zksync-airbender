@@ -82,11 +82,9 @@ impl RamQuery {
 // NOTE: to sort lazy init addresses we will materialize intermediate subtraction values to avoid extending
 // lookup expressions to span >1 row
 
-#[derive(Clone, Copy, Hash, Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Hash, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RamAuxComparisonSet {
-    pub aux_low_high: [GKRAddress; 2],
     pub intermediate_borrow: GKRAddress,
-    pub final_borrow: GKRAddress,
 }
 
 #[derive(Clone, Copy, Hash, Debug, serde::Serialize, serde::Deserialize)]

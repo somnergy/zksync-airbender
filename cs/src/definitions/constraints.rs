@@ -29,6 +29,15 @@ pub enum BoundaryConstraintLocation {
 #[derive(
     Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
 )]
+pub struct Degree2Constraint<F: PrimeField> {
+    pub quadratic_terms: Box<[(F, Variable, Variable)]>,
+    pub linear_terms: Box<[(F, Variable)]>,
+    pub constant_term: F,
+}
+
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct CompiledDegree2Constraint<F: PrimeField> {
     pub quadratic_terms: Box<[(F, ColumnAddress, ColumnAddress)]>,
     pub linear_terms: Box<[(F, ColumnAddress)]>,

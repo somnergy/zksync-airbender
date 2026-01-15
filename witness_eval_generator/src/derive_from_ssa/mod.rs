@@ -5,8 +5,9 @@ use cs::cs::witness_placer::graph_description::{
     BoolNodeExpression, Expression, FieldNodeExpression, FixedWidthIntegerNodeExpression,
     RawExpression,
 };
-use cs::definitions::ColumnAddress;
 use cs::definitions::Variable;
+use cs::definitions::{ColumnAddress, GKRAddress};
+use cs::gkr_compiler::GKRCircuitArtifact;
 use cs::one_row_compiler::CompiledCircuitArtifact;
 use cs::one_row_compiler::slice_to_token_array;
 use proc_macro2::*;
@@ -441,6 +442,105 @@ pub fn derive_from_ssa(
     }
 }
 
+pub fn derive_from_gkr_ssa<F: PrimeField + ToTokens>(
+    ssa: &[Vec<RawExpression<F>>],
+    gkr_layout: &GKRCircuitArtifact<F>,
+    perform_assignments_to_memory: bool,
+) -> TokenStream {
+    let num_lookup_mappings = gkr_layout.witness_layout.generic_lookups.len();
+
+    let witness_proxy_ident = Ident::new("witness_proxy", Span::call_site());
+    let witness_placer_ident = Ident::new("W", Span::call_site());
+    let field_ident = Ident::new("Mersenne31Field", Span::call_site());
+    let mut layout = BTreeMap::new();
+    for (var, pos) in gkr_layout.placement_data.iter() {
+        match pos {
+            GKRAddress::BaseLayerMemory(offset) => {
+                layout.insert(*var, ColumnAddress::MemorySubtree(*offset));
+            }
+            GKRAddress::BaseLayerWitness(offset) => {
+                layout.insert(*var, ColumnAddress::WitnessSubtree(*offset));
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+
+    let mut individual_fns_stream = TokenStream::new();
+    let mut external_caller_stream = TokenStream::new();
+
+    for (fn_idx, eval_fn) in ssa.iter().enumerate() {
+        // quickly check that if all outputs are into memory, then we can skip such cases
+        if perform_assignments_to_memory == false {
+            let mut can_skip = true;
+            for expr in eval_fn.iter() {
+                if let RawExpression::WriteVariable { into_variable, .. } = expr {
+                    let place = layout[into_variable];
+                    match place {
+                        ColumnAddress::MemorySubtree(..) => {}
+                        _ => {
+                            can_skip = false;
+                            break;
+                        }
+                    }
+                }
+                if let RawExpression::PerformLookup { .. } = expr {
+                    // we can not skip it as we will need to count multiplicity
+                    can_skip = false;
+                    break;
+                }
+            }
+
+            if can_skip {
+                continue;
+            }
+        }
+
+        let inline_tag = if eval_fn.len() >= INLINING_LIMIT {
+            quote! {}
+        } else {
+            quote! {#[inline(always)]}
+        };
+
+        let mut generator = SSAGenerator::<F>::new(
+            &witness_proxy_ident,
+            &witness_placer_ident,
+            &layout,
+            num_lookup_mappings,
+            perform_assignments_to_memory,
+        );
+
+        for el in eval_fn.iter() {
+            generator.add_expression(el);
+        }
+
+        let ident = Ident::new(&format!("eval_fn_{}", fn_idx), Span::call_site());
+        let generated_stream = generator.stream;
+        let substream = quote! {
+            #[allow(unused_variables)]
+            #inline_tag
+            fn #ident<'a, 'b: 'a, W: WitnessTypeSet<#field_ident>, P: WitnessProxy<#field_ident, W> + 'b>(witness_proxy: &'a mut P) where W::Field: Copy, W::Mask: Copy, W::U32: Copy, W::U16: Copy, W::U8: Copy, W::I32: Copy {
+                #generated_stream
+            }
+        };
+        individual_fns_stream.extend(substream);
+
+        external_caller_stream.extend(quote! {
+            #ident(witness_proxy);
+        })
+    }
+
+    quote! {
+        #individual_fns_stream
+
+        #[allow(dead_code)]
+        pub fn evaluate_witness_fn<'a, 'b: 'a, W: WitnessTypeSet<#field_ident>, P: WitnessProxy<#field_ident, W> + 'b>(witness_proxy: &'a mut P) where W::Field: Copy, W::Mask: Copy, W::U32: Copy, W::U16: Copy, W::U8: Copy, W::I32: Copy {
+            #external_caller_stream
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -511,6 +611,33 @@ mod test {
             let full_stream = derive_from_ssa(&compiled_graph, &compiled_circuit, false);
 
             std::fs::File::create(&format!("../prover/{}_generated.rs", prefix))
+                .unwrap()
+                .write_all(&full_stream.to_string().as_bytes())
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn gen_for_unrolled_gkr_tests() {
+        for prefix in [
+            "add_sub_lui_auipc_mop_preprocessed",
+            // "jump_branch_slt_preprocessed",
+            // "shift_binop_csrrw_preprocessed",
+            // "load_store_preprocessed",
+            // "word_only_load_store_preprocessed",
+            // "subword_only_load_store_preprocessed",
+            // "mul_div_preprocessed",
+            // "mul_div_unsigned_preprocessed",
+            // "inits_and_teardowns_preprocessed",
+            // "reduced_machine_preprocessed",
+        ] {
+            let compiled_circuit: GKRCircuitArtifact<Mersenne31Field> =
+                deserialize_from_file(&format!("../cs/{}_layout_gkr.json", prefix));
+            let compiled_graph: Vec<Vec<RawExpression<Mersenne31Field>>> =
+                deserialize_from_file(&format!("../cs/{}_ssa_gkr.json", prefix));
+            let full_stream = derive_from_gkr_ssa(&compiled_graph, &compiled_circuit, false);
+
+            std::fs::File::create(&format!("../prover/{}_generated_gkr.rs", prefix))
                 .unwrap()
                 .write_all(&full_stream.to_string().as_bytes())
                 .unwrap();

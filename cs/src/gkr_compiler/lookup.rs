@@ -17,8 +17,13 @@ pub(crate) fn layout_width_1_lookup_expressions<F: PrimeField>(
     variable_names: &mut HashMap<Variable, String>,
     lookup_type: &str,
     lookup: LookupType,
-) -> (Variable, LookupRationalPair, NoFieldGKRRelation) {
-    layout_lookup_expressions::<F, 1>(
+) -> (
+    Variable,
+    LookupRationalPair,
+    NoFieldGKRRelation,
+    Vec<NoFieldLinearRelation>,
+) {
+    let (a, b, c, rels) = layout_lookup_expressions::<F, true>(
         graph,
         expressions
             .into_iter()
@@ -35,24 +40,41 @@ pub(crate) fn layout_width_1_lookup_expressions<F: PrimeField>(
         lookup_type,
         None,
         lookup,
-    )
+        1,
+        false,
+    );
+
+    let rels = rels
+        .into_iter()
+        .map(|el| {
+            assert_eq!(el.0.len(), 1);
+
+            el.0[0].clone()
+        })
+        .collect();
+
+    (a, b, c, rels)
 }
 
-fn lookup_input_node_from_expr<F: PrimeField, const TOTAL_WIDTH: usize>(
+fn lookup_input_node_from_expr<F: PrimeField, const SINGLE_COLUMN: bool>(
     expr: &(Vec<LookupInput<F>>, LookupQueryTableTypeExt<F>),
-) -> LookupInputRelation<F, TOTAL_WIDTH> {
+    total_width: usize,
+    expect_table_id: bool,
+) -> LookupInputRelation<F> {
     let (expr, table_type) = expr;
-    if TOTAL_WIDTH == 1 {
+    if SINGLE_COLUMN {
+        assert!(expect_table_id == false);
+        assert_eq!(total_width, 1);
         assert_eq!(expr.len(), 1);
         assert_eq!(
             *table_type,
             LookupQueryTableTypeExt::Constant(TableType::DynamicPlaceholder)
         );
     } else {
-        assert!(expr.len() + 1 <= TOTAL_WIDTH)
+        assert!(expr.len() <= total_width)
     }
 
-    let mut inputs = arrayvec::ArrayVec::new();
+    let mut inputs = Vec::new();
 
     for el in expr.iter() {
         match el {
@@ -73,7 +95,7 @@ fn lookup_input_node_from_expr<F: PrimeField, const TOTAL_WIDTH: usize>(
             }
         }
     }
-    if TOTAL_WIDTH > 1 {
+    if SINGLE_COLUMN == false && expect_table_id {
         assert_ne!(
             *table_type,
             LookupQueryTableTypeExt::Constant(TableType::DynamicPlaceholder)
@@ -111,10 +133,18 @@ fn lookup_input_node_from_expr<F: PrimeField, const TOTAL_WIDTH: usize>(
         }
     }
 
+    assert!(
+        inputs.len() <= total_width,
+        "expression {:?} was compiled into {} terms, but expected total width is {}",
+        expr,
+        inputs.len(),
+        total_width
+    );
+
     LookupInputRelation { inputs }
 }
 
-pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>(
+pub(crate) fn layout_lookup_expressions<F: PrimeField, const SINGLE_COLUMN: bool>(
     graph: &mut GKRGraph,
     expressions: Vec<(Vec<LookupInput<F>>, LookupQueryTableTypeExt<F>)>,
     num_variables: &mut u64,
@@ -123,12 +153,46 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
     lookup_type: &str,
     decoder_lookup: Option<(Variable, Vec<LookupInput<F>>)>,
     lookup: LookupType,
-) -> (Variable, LookupRationalPair, NoFieldGKRRelation) {
+    total_width: usize,
+    expect_table_id: bool,
+) -> (
+    Variable,
+    LookupRationalPair,
+    NoFieldGKRRelation,
+    Vec<NoFieldVectorLookupRelation>,
+) {
+    let mut initial_relations = vec![];
+
+    for rel in expressions.iter() {
+        let input =
+            lookup_input_node_from_expr::<F, SINGLE_COLUMN>(rel, total_width, expect_table_id);
+        let input = lookup_input_into_relation::<F, SINGLE_COLUMN>(&input, &*graph);
+        initial_relations.push(input);
+    }
+    // if let Some(decoder_lookup) = decoder_lookup {
+    //     let (decoder_predicate_var, decoder_lookup) = decoder_lookup;
+    //     let decoder_predicate = graph.get_address_for_variable(decoder_predicate_var);
+    //     let input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+    //         &(
+    //             decoder_lookup,
+    //             LookupQueryTableTypeExt::Constant(TableType::Decoder),
+    //         ),
+    //         total_width,
+    //         expect_table_id,
+    //     );
+    //     let input = lookup_input_into_relation::<F, SINGLE_COLUMN>(&input, &*graph);
+    //     assert_eq!(input.0.len(), graph.setup_addresses(lookup).len());
+    //     initial_relations.push(input);
+    // }
+
     println!(
         "In total of {} lookups of type {}",
         expressions.len(),
         lookup_type
     );
+    if decoder_lookup.is_some() {
+        println!("Decoder lookup is present");
+    }
 
     // create multiplicity
     let multiplicity_var = Variable(*num_variables);
@@ -142,14 +206,15 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
         graph.layout_witness_subtree_multiple_variables([multiplicity_var], all_variables_to_place);
 
     for (expr, table_type) in expressions.iter() {
-        if TOTAL_WIDTH == 1 {
+        if SINGLE_COLUMN {
+            assert_eq!(total_width, 1);
             assert_eq!(expr.len(), 1);
             assert_eq!(
                 *table_type,
                 LookupQueryTableTypeExt::Constant(TableType::DynamicPlaceholder)
             );
         } else {
-            assert!(expr.len() + 1 <= TOTAL_WIDTH)
+            assert!(expr.len() <= total_width);
         }
     }
 
@@ -164,24 +229,28 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             {
                 let (decoder_predicate_var, decoder_lookup) = decoder_lookup;
                 let decoder_predicate = graph.get_address_for_variable(decoder_predicate_var);
-                let input = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&(
-                    decoder_lookup,
-                    LookupQueryTableTypeExt::Constant(TableType::Decoder),
-                ));
-                let input = lookup_input_into_relation(&input, &*graph);
+                let input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &(
+                        decoder_lookup,
+                        LookupQueryTableTypeExt::Constant(TableType::Decoder),
+                    ),
+                    total_width,
+                    expect_table_id,
+                );
+                let input = lookup_input_into_relation::<F, SINGLE_COLUMN>(&input, &*graph);
                 assert_eq!(input.0.len(), graph.setup_addresses(lookup).len());
 
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Positive(decoder_predicate),
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(input),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(input),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Negative(multiplicity_pos),
                     num_node: None,
-                    den: vector_or_single_setup::<TOTAL_WIDTH>(graph, lookup),
+                    den: vector_or_single_setup::<SINGLE_COLUMN>(graph, lookup),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -190,7 +259,7 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
                 if expressions.is_empty() {
-                    return (multiplicity_var, next_pair, rel);
+                    return (multiplicity_var, next_pair, rel, initial_relations);
                 }
 
                 initial_reduction_layer_nodes.push((next_pair, rel));
@@ -200,21 +269,29 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             assert_eq!(expressions.len() % 2, 0);
             for [a, b] in expressions.as_chunks::<2>().0 {
                 // We will take 2 inputs with "1" in the numerator, and some witness in denominator
-                let a = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&a);
-                let b = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&b);
-                let a = lookup_input_into_relation(&a, &*graph);
-                let b = lookup_input_into_relation(&b, &*graph);
+                let a = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &a,
+                    total_width,
+                    expect_table_id,
+                );
+                let b = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &b,
+                    total_width,
+                    expect_table_id,
+                );
+                let a = lookup_input_into_relation::<F, SINGLE_COLUMN>(&a, &*graph);
+                let b = lookup_input_into_relation::<F, SINGLE_COLUMN>(&b, &*graph);
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(a),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(a),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(b),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(b),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -229,21 +306,25 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             let (first, expressions) = expressions.split_at(1);
             let first = &first[0];
             {
-                let input = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(first);
-                let input = lookup_input_into_relation(&input, &*graph);
+                let input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    first,
+                    total_width,
+                    expect_table_id,
+                );
+                let input = lookup_input_into_relation::<F, SINGLE_COLUMN>(&input, &*graph);
                 assert_eq!(input.0.len(), graph.setup_addresses(lookup).len());
 
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(input),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(input),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Negative(multiplicity_pos),
                     num_node: None,
-                    den: vector_or_single_setup::<TOTAL_WIDTH>(graph, lookup),
+                    den: vector_or_single_setup::<SINGLE_COLUMN>(graph, lookup),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -252,7 +333,7 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
                 if expressions.is_empty() {
-                    return (multiplicity_var, next_pair, rel);
+                    return (multiplicity_var, next_pair, rel, initial_relations);
                 }
 
                 initial_reduction_layer_nodes.push((next_pair, rel));
@@ -260,21 +341,29 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
 
             assert_eq!(expressions.len() % 2, 0);
             for [a, b] in expressions.as_chunks::<2>().0 {
-                let a = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&a);
-                let b = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&b);
-                let a = lookup_input_into_relation(&a, &*graph);
-                let b = lookup_input_into_relation(&b, &*graph);
+                let a = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &a,
+                    total_width,
+                    expect_table_id,
+                );
+                let b = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &b,
+                    total_width,
+                    expect_table_id,
+                );
+                let a = lookup_input_into_relation::<F, SINGLE_COLUMN>(&a, &*graph);
+                let b = lookup_input_into_relation::<F, SINGLE_COLUMN>(&b, &*graph);
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(a),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(a),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(b),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(b),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -291,24 +380,28 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             {
                 let (decoder_predicate_var, decoder_lookup) = decoder_lookup;
                 let decoder_predicate = graph.get_address_for_variable(decoder_predicate_var);
-                let input = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&(
-                    decoder_lookup,
-                    LookupQueryTableTypeExt::Constant(TableType::Decoder),
-                ));
-                let input = lookup_input_into_relation(&input, &*graph);
+                let input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &(
+                        decoder_lookup,
+                        LookupQueryTableTypeExt::Constant(TableType::Decoder),
+                    ),
+                    total_width,
+                    expect_table_id,
+                );
+                let input = lookup_input_into_relation::<F, SINGLE_COLUMN>(&input, &*graph);
                 assert_eq!(input.0.len(), graph.setup_addresses(lookup).len());
 
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Positive(decoder_predicate),
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(input),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(input),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Negative(multiplicity_pos),
                     num_node: None,
-                    den: vector_or_single_setup::<TOTAL_WIDTH>(graph, lookup),
+                    den: vector_or_single_setup::<SINGLE_COLUMN>(graph, lookup),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -317,7 +410,7 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
                     LookupRationalPair::accumulate_pair_into_graph((a, b), graph, placement_layer);
 
                 if expressions.is_empty() {
-                    return (multiplicity_var, next_pair, rel);
+                    return (multiplicity_var, next_pair, rel, initial_relations);
                 }
 
                 initial_reduction_layer_nodes.push((next_pair, rel));
@@ -326,21 +419,29 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             // and continue over all other pairs
             assert_eq!(expressions.len() % 2, 1);
             for [a, b] in expressions.as_chunks::<2>().0 {
-                let a = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&a);
-                let b = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&b);
-                let a = lookup_input_into_relation(&a, &*graph);
-                let b = lookup_input_into_relation(&b, &*graph);
+                let a = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &a,
+                    total_width,
+                    expect_table_id,
+                );
+                let b = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &b,
+                    total_width,
+                    expect_table_id,
+                );
+                let a = lookup_input_into_relation::<F, SINGLE_COLUMN>(&a, &*graph);
+                let b = lookup_input_into_relation::<F, SINGLE_COLUMN>(&b, &*graph);
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(a),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(a),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(b),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(b),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -351,12 +452,17 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             }
             {
                 let last_input = expressions.as_chunks::<2>().1[0].clone();
-                let last_input = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&last_input);
-                let last_input = lookup_input_into_relation(&last_input, &*graph);
+                let last_input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &last_input,
+                    total_width,
+                    expect_table_id,
+                );
+                let last_input =
+                    lookup_input_into_relation::<F, SINGLE_COLUMN>(&last_input, &*graph);
                 let last_input = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: copy_single_base_input_or_materialize_vector::<TOTAL_WIDTH>(last_input),
+                    den: copy_single_base_input_or_materialize_vector::<SINGLE_COLUMN>(last_input),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -372,20 +478,24 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             let (first, expressions) = expressions.split_at(1);
             let first = &first[0];
             {
-                let input = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(first);
-                let input = lookup_input_into_relation(&input, &*graph);
+                let input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    first,
+                    total_width,
+                    expect_table_id,
+                );
+                let input = lookup_input_into_relation::<F, SINGLE_COLUMN>(&input, &*graph);
 
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(input),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(input),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Negative(multiplicity_pos),
                     num_node: None,
-                    den: vector_or_single_setup::<TOTAL_WIDTH>(graph, lookup),
+                    den: vector_or_single_setup::<SINGLE_COLUMN>(graph, lookup),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -398,21 +508,29 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
 
             assert_eq!(expressions.len() % 2, 1);
             for [a, b] in expressions.as_chunks::<2>().0 {
-                let a = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&a);
-                let b = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&b);
-                let a = lookup_input_into_relation(&a, &*graph);
-                let b = lookup_input_into_relation(&b, &*graph);
+                let a = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &a,
+                    total_width,
+                    expect_table_id,
+                );
+                let b = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &b,
+                    total_width,
+                    expect_table_id,
+                );
+                let a = lookup_input_into_relation::<F, SINGLE_COLUMN>(&a, &*graph);
+                let b = lookup_input_into_relation::<F, SINGLE_COLUMN>(&b, &*graph);
                 let a = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(a),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(a),
                     den_node: None,
                     lookup_type: lookup,
                 };
                 let b = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: vector_or_single_input::<TOTAL_WIDTH>(b),
+                    den: vector_or_single_input::<SINGLE_COLUMN>(b),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -423,12 +541,17 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
             }
             {
                 let last_input = expressions.as_chunks::<2>().1[0].clone();
-                let last_input = lookup_input_node_from_expr::<F, TOTAL_WIDTH>(&last_input);
-                let last_input = lookup_input_into_relation(&last_input, &*graph);
+                let last_input = lookup_input_node_from_expr::<F, SINGLE_COLUMN>(
+                    &last_input,
+                    total_width,
+                    expect_table_id,
+                );
+                let last_input =
+                    lookup_input_into_relation::<F, SINGLE_COLUMN>(&last_input, &*graph);
                 let last_input = LookupRationalPair {
                     num: lookup_nodes::LookupNumerator::Identity,
                     num_node: None,
-                    den: copy_single_base_input_or_materialize_vector::<TOTAL_WIDTH>(last_input),
+                    den: copy_single_base_input_or_materialize_vector::<SINGLE_COLUMN>(last_input),
                     den_node: None,
                     lookup_type: lookup,
                 };
@@ -455,7 +578,7 @@ pub(crate) fn layout_lookup_expressions<F: PrimeField, const TOTAL_WIDTH: usize>
     loop {
         if current_layer.len() == 1 {
             let (last_pair, rel) = current_layer.pop().unwrap();
-            return (multiplicity_var, last_pair, rel);
+            return (multiplicity_var, last_pair, rel, initial_relations);
         }
 
         placement_layer += 1;

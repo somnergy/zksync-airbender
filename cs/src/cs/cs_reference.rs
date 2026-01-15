@@ -84,7 +84,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
 
     #[track_caller]
     fn add_variable(&mut self) -> Variable {
-        // if self.no_index_assigned == 42 {
+        // if self.no_index_assigned == 11 {
         //     panic!("debug");
         // }
         let location = std::panic::Location::caller();
@@ -93,6 +93,9 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
     }
 
     fn add_named_variable(&mut self, name: &str) -> Variable {
+        // if self.no_index_assigned == 11 {
+        //     panic!("debug on named variable {}", name);
+        // }
         let variable = Variable(self.no_index_assigned);
         self.no_index_assigned += 1;
 
@@ -814,6 +817,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
                 funct3: self.add_variable(),
                 funct7: Some(self.add_variable()),
                 circuit_family_extra_mask: self.add_variable(),
+                circuit_family_mask_bits: Vec::new(),
                 _marker: std::marker::PhantomData,
             },
             circuit_family: self.add_variable(),
@@ -892,6 +896,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
                 Some(self.add_variable())
             },
             circuit_family_extra_mask: self.add_variable(),
+            circuit_family_mask_bits: Vec::new(),
             _marker: std::marker::PhantomData,
         };
 
@@ -932,12 +937,12 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
         // we can also attach initial witness here - we need initial PC and decoder
 
         if ASSUME_PREPROCESSED_DECODER_TABLE {
+            let t = decoder_data.clone();
             let value_fn = move |placer: &mut Self::WitnessPlacer| {
                 let initial_pc_value = placer.get_oracle_u32(Placeholder::PcInit);
                 placer.assign_u32_from_u16_parts(pc, &initial_pc_value);
 
-                let decoder_data = decoder_data;
-                placer.spec_decoder_relation(pc, &decoder_data);
+                placer.spec_decoder_relation(pc, &t);
 
                 // let decoded_data = placer.spec_decoder_table_lookup(&initial_pc_value);
                 // placer.assign_u8(decoder_data.rs1_index, &decoded_data.rs1_index);
@@ -1016,6 +1021,12 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
         // Same for timestamps - those are incremented with a proper range check in the execution circuits
         let initial_timestamp: [Variable; NUM_TIMESTAMP_COLUMNS_FOR_RAM] =
             std::array::from_fn(|i| self.add_named_variable(&format!("initial_ts[{}]", i)));
+        initial_timestamp.iter().enumerate().for_each(|(i, el)| {
+            self.require_invariant(
+                *el,
+                Invariant::Substituted((Placeholder::OpcodeFamilyCycleInitialTimestamp, i)),
+            )
+        });
 
         let cycle_start_state = MachineCycleStartOrEndState {
             pc: initial_pc,
@@ -1036,7 +1047,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
         use crate::constraint::Term;
         self.add_constraint((Term::from(execute) - Term::from(1u64)) * Term::from(execute));
 
-        let decoder_data: DecoderData<F> = DecoderData {
+        let mut decoder_data: DecoderData<F> = DecoderData {
             rs1_index: self.add_named_variable("rs1 index from decoder"),
             rs2_index: self.add_named_variable("rs2 index from decoder"),
             rd_index: self.add_named_variable("rd index from decoder"),
@@ -1051,6 +1062,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
             },
             funct7: None,
             circuit_family_extra_mask: Variable::placeholder_variable(),
+            circuit_family_mask_bits: Vec::new(),
             _marker: std::marker::PhantomData,
         };
 
@@ -1087,16 +1099,30 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
         let mut circuit_family_bitmask = Vec::with_capacity(family_bitmask_size);
         for i in 0..family_bitmask_size {
             let bitmask_el = self.add_named_boolean_variable(&format!("family_bit[{}]", i));
+            self.require_invariant(
+                bitmask_el.get_variable().unwrap(),
+                Invariant::Substituted((Placeholder::ExecutorFamilyMaskBit { bit: i }, 0)),
+            );
             circuit_family_bitmask.push(bitmask_el.get_variable().unwrap());
         }
 
+        decoder_data.circuit_family_mask_bits = circuit_family_bitmask.clone();
+
+        let t = circuit_family_bitmask.clone();
+        let value_fn = move |placer: &mut Self::WitnessPlacer| {
+            for el in t.iter() {
+                placer.assume_assigned(*el);
+            }
+        };
+        self.set_values(value_fn);
+
         // we can also attach initial witness here - we need initial PC and decoder
+        let t = decoder_data.clone();
         let value_fn = move |placer: &mut Self::WitnessPlacer| {
             let initial_pc_value = placer.get_oracle_u32(Placeholder::PcInit);
             placer.assign_u32_from_u16_parts(initial_pc, &initial_pc_value);
 
-            let decoder_data = decoder_data;
-            placer.spec_decoder_relation(initial_pc, &decoder_data);
+            placer.spec_decoder_relation(initial_pc, &t);
         };
         self.set_values(value_fn);
 
@@ -1111,6 +1137,12 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
 
         let final_timestamp: [Variable; NUM_TIMESTAMP_COLUMNS_FOR_RAM] =
             std::array::from_fn(|i| self.add_named_variable(&format!("final_ts[{}]", i)));
+        final_timestamp.iter().enumerate().for_each(|(i, el)| {
+            self.require_invariant(
+                *el,
+                Invariant::Substituted((Placeholder::OpcodeFamilyCycleFinalTimestamp, i)),
+            )
+        });
 
         let cycle_end_state = MachineCycleStartOrEndState {
             pc: final_pc,

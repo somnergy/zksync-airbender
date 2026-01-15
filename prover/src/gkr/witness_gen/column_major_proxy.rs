@@ -5,7 +5,7 @@ use cs::cs::witness_placer::scalar_witness_type_set::ScalarWitnessTypeSet;
 use cs::one_row_compiler::timestamp_scalar_into_column_values;
 use cs::utils::split_u32_into_pair_u16;
 use cs::{cs::oracle::Oracle, tables::TableDriver};
-use field::{Field, Mersenne31Field, PrimeField};
+use field::{Mersenne31Field, PrimeField};
 
 // NOTE: very unsafe
 
@@ -15,7 +15,7 @@ pub struct ColumnMajorWitnessProxy<'a, O: Oracle<F> + 'a, F: PrimeField = Mersen
     pub(crate) scratch_space: Box<[F]>,
     pub(crate) table_driver: &'a TableDriver<F>,
     pub(crate) multiplicity_counting_scratch: &'a mut [u32],
-    pub(crate) lookup_mapping_rows_starts: &'a mut [*mut u32],
+    pub(crate) lookup_mapping_rows_starts: Box<[*mut u32]>,
     pub(crate) oracle: &'a O,
     pub(crate) absolute_row_idx: usize,
 }
@@ -316,7 +316,12 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> WitnessProxy<F, ScalarWitnessTypeSet<
 
     #[inline(always)]
     fn set_memory_place(&mut self, idx: usize, value: F) {
-        debug_assert!(idx < self.memory_rows_starts.len());
+        debug_assert!(
+            idx < self.memory_rows_starts.len(),
+            "trying to access memory column {}, while only {} columns exist",
+            idx,
+            self.memory_rows_starts.len()
+        );
         unsafe {
             self.memory_rows_starts.get_unchecked_mut(idx).write(value);
         }
@@ -324,7 +329,12 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> WitnessProxy<F, ScalarWitnessTypeSet<
 
     #[inline(always)]
     fn set_witness_place(&mut self, idx: usize, value: F) {
-        debug_assert!(idx < self.witness_rows_starts.len());
+        debug_assert!(
+            idx < self.witness_rows_starts.len(),
+            "trying to access witness column {}, while only {} columns exist",
+            idx,
+            self.witness_rows_starts.len()
+        );
         unsafe {
             self.witness_rows_starts.get_unchecked_mut(idx).write(value);
         }

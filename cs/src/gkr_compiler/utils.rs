@@ -437,10 +437,13 @@ pub(crate) fn mem_permutation_expr_into_cached_expr(
     NoFieldGKRCacheRelation::MemoryTuple(rel)
 }
 
-pub(crate) fn lookup_input_into_relation<F: PrimeField, const TOTAL_WIDTH: usize>(
-    lookup: &LookupInputRelation<F, TOTAL_WIDTH>,
+pub(crate) fn lookup_input_into_relation<F: PrimeField, const SINGLE_COLUMN: bool>(
+    lookup: &LookupInputRelation<F>,
     graph: &dyn GraphHolder,
 ) -> NoFieldVectorLookupRelation {
+    if SINGLE_COLUMN {
+        assert_eq!(lookup.inputs.len(), 1);
+    }
     let mut dst = vec![];
     for relation in lookup.inputs.iter() {
         let mut t = vec![];
@@ -457,17 +460,19 @@ pub(crate) fn lookup_input_into_relation<F: PrimeField, const TOTAL_WIDTH: usize
     NoFieldVectorLookupRelation(dst.into_boxed_slice())
 }
 
-pub(crate) fn lookup_input_into_cached_expr<F: PrimeField, const TOTAL_WIDTH: usize>(
-    lookup: &LookupInputRelation<F, TOTAL_WIDTH>,
+pub(crate) fn lookup_input_into_cached_expr<F: PrimeField, const SINGLE_COLUMN: bool>(
+    lookup: &LookupInputRelation<F>,
     graph: &dyn GraphHolder,
 ) -> NoFieldGKRCacheRelation {
-    NoFieldGKRCacheRelation::VectorizedLookup(lookup_input_into_relation(lookup, graph))
+    NoFieldGKRCacheRelation::VectorizedLookup(lookup_input_into_relation::<F, SINGLE_COLUMN>(
+        lookup, graph,
+    ))
 }
 
-pub(crate) fn vector_or_single_input<const TOTAL_WIDTH: usize>(
+pub(crate) fn vector_or_single_input<const SINGLE_COLUMN: bool>(
     input: NoFieldVectorLookupRelation,
 ) -> LookupDenominator {
-    if TOTAL_WIDTH == 1 {
+    if SINGLE_COLUMN {
         assert_eq!(input.0.len(), 1);
         lookup_nodes::LookupDenominator::UseInput(input.0[0].clone())
     } else {
@@ -475,11 +480,11 @@ pub(crate) fn vector_or_single_input<const TOTAL_WIDTH: usize>(
     }
 }
 
-pub(crate) fn vector_or_single_setup<const TOTAL_WIDTH: usize>(
+pub(crate) fn vector_or_single_setup<const SINGLE_COLUMN: bool>(
     graph: &dyn GraphHolder,
     lookup_type: LookupType,
 ) -> LookupDenominator {
-    if TOTAL_WIDTH == 1 {
+    if SINGLE_COLUMN {
         assert!(
             lookup_type == LookupType::RangeCheck16
                 || lookup_type == LookupType::TimestampRangeCheck
@@ -497,10 +502,10 @@ pub(crate) fn vector_or_single_setup<const TOTAL_WIDTH: usize>(
     }
 }
 
-pub(crate) fn copy_single_base_input_or_materialize_vector<const TOTAL_WIDTH: usize>(
+pub(crate) fn copy_single_base_input_or_materialize_vector<const SINGLE_COLUMN: bool>(
     input: NoFieldVectorLookupRelation,
 ) -> LookupDenominator {
-    if TOTAL_WIDTH == 1 {
+    if SINGLE_COLUMN {
         assert_eq!(input.0.len(), 1);
         if input.0[0].constant == 0
             && input.0[0].linear_terms.len() == 1

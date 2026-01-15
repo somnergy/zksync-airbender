@@ -377,14 +377,35 @@ pub struct OneStepConstraintsEvaluationNode<F: PrimeField> {
 pub(crate) fn layout_constraints_on_single_layer<F: PrimeField>(
     graph: &mut GKRGraph,
     constraints: Vec<(Constraint<F>, bool)>,
-) {
+) -> (Vec<Degree2Constraint<F>>, Vec<Degree1Constraint<F>>) {
     const PLACEMENT_LAYER: usize = 1;
 
     let mut quadratic_parts = vec![];
     let mut linear_parts = vec![];
     let mut constant_parts = vec![];
+
+    let mut compiled_quadratic = vec![];
+    let mut compiled_linear = vec![];
+
     for (c, _) in constraints.into_iter() {
         let (q, l, c) = c.split_max_quadratic();
+
+        if q.is_empty() {
+            assert!(l.is_empty() == false);
+            let compiled = Degree1Constraint {
+                linear_terms: l.clone().into_boxed_slice(),
+                constant_term: c,
+            };
+            compiled_linear.push(compiled);
+        } else {
+            let compiled = Degree2Constraint {
+                quadratic_terms: q.clone().into_boxed_slice(),
+                linear_terms: l.clone().into_boxed_slice(),
+                constant_term: c,
+            };
+            compiled_quadratic.push(compiled);
+        }
+
         quadratic_parts.push(q);
         linear_parts.push(l);
         constant_parts.push(c);
@@ -397,6 +418,8 @@ pub(crate) fn layout_constraints_on_single_layer<F: PrimeField>(
     };
 
     node.add_at_layer(graph, PLACEMENT_LAYER);
+
+    (compiled_quadratic, compiled_linear)
 }
 
 impl<F: PrimeField> GKRGate for OneStepConstraintsEvaluationNode<F> {

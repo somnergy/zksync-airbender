@@ -1,13 +1,11 @@
-use std::ops::Range;
-
-use crate::gkr_compiler::graph::{GKRGraph, GraphHolder};
+use crate::gkr_compiler::graph::GKRGraph;
+use crate::one_row_compiler::gkr::RamAuxComparisonSet;
 
 use super::*;
 
-pub struct GKRLayout {
-    pub layered_relations: Vec<Vec<NoFieldGKRRelation>>,
-    pub layered_cached_relations: Vec<Vec<NoFieldGKRCacheRelation>>,
-    pub base_layer_vars_participation_in_layers: BTreeMap<GKRAddress, Vec<usize>>, // transitive via cached relations
+#[derive(Clone, Hash, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct GKRAuxLayoutData {
+    pub shuffle_ram_timestamp_comparison_aux_vars: Vec<RamAuxComparisonSet>,
 }
 
 #[serde_with::serde_as]
@@ -78,6 +76,8 @@ impl GKRGraph {
 
             'outer: for rel in relations.iter() {
                 if rel == &grand_product_outputs[0].1 || rel == &grand_product_outputs[1].1 {
+                    // we expect at least 4 grand product contributions for cycle,
+                    // so no caching can happen here
                     assert!(rel.cached_addresses().is_empty());
                     let artifact = GateArtifacts {
                         output_layer: layer,
@@ -88,7 +88,22 @@ impl GKRGraph {
                 }
                 for (k, (_, el)) in lookup_outputs.iter() {
                     if el == rel {
-                        assert!(rel.cached_addresses().is_empty());
+                        if layer > 1 {
+                            assert!(rel.cached_addresses().is_empty());
+                        } else {
+                            for cached in rel.cached_addresses().into_iter() {
+                                let GKRAddress::Cached { layer: l, offset } = cached else {
+                                    unreachable!();
+                                };
+                                assert_eq!(l, layer);
+                                let relation = cached_relations_at_layer[offset].clone();
+                                descr.cached_relations.insert(cached, relation);
+                            }
+                            for claim in rel.created_claims().into_iter() {
+                                base_layer_polys_to_open_for_caches.remove(&claim);
+                            }
+                        }
+
                         let artifact = GateArtifacts {
                             output_layer: layer,
                             enforced_relation: rel.clone(),

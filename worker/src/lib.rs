@@ -362,6 +362,7 @@ impl Worker {
         }
     }
 
+    #[track_caller]
     pub fn get_geometry(&self, work_size: usize) -> WorkerGeometry {
         Self::get_geometry_for_num_cores(self.num_cores, work_size)
     }
@@ -450,6 +451,7 @@ impl Worker {
         result
     }
 
+    #[track_caller]
     pub fn scope<'a, F, R>(&self, work_size: usize, f: F) -> R
     where
         F: FnOnce(&rayon::Scope<'a>, WorkerGeometry) -> R,

@@ -89,7 +89,118 @@ impl<F: PrimeField> GKRCompiler<F> {
         let mut boolean_vars = boolean_vars;
         let mut num_variables = num_of_variables as u64;
 
-        let mut graph = GKRGraph::new(10);
+        // quickly compute generic lookup table width
+
+        let (range_check_16_expressions, mut generic_lookups) =
+            super::range_check_exprs::split_range_check_exprs_from_compiler(
+                &range_check_expressions,
+            );
+        let total_lookups_for_range_checks_16 =
+            (range_check_16_expressions.len() as u64) * trace_len as u64;
+        assert!(total_lookups_for_range_checks_16 < F::CHARACTERISTICS, "total number of range-check-16 lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
+
+        let mut expect_table_id_for_generic_lookup = false;
+
+        let (generic_lookup_width, decoder_lookup_pair) = {
+            // and then all lookups from circuit + decoder are "generic" ones
+            for lookup in lookups.iter() {
+                let LookupQuery { row, table } = lookup.clone();
+                generic_lookups.push((row.to_vec(), table));
+            }
+
+            let mut decoder_lookup_pair = None;
+            let mut decoder_table_width;
+            // and decoder - we tightly pack it, and will need to do the same in the setup generator
+            {
+                // pub pc: [F; 2],
+                // pub rs1_index: F,
+                // pub rs2_index: F,
+                // pub rd_index: F,
+                // pub rd_is_zero: F,
+                // pub imm: [F; REGISTER_SIZE],
+                // pub funct3: F,
+                // pub circuit_family_extra_mask: F,
+
+                let mut decoder_lookup_trivial_vars = vec![];
+                decoder_lookup_trivial_vars.extend(executor_machine_state.cycle_start_state.pc);
+                decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rs1_index]);
+                decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rs2_index]);
+                decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rd_index]);
+                decoder_lookup_trivial_vars
+                    .extend([executor_machine_state.decoder_data.rd_is_zero]);
+                decoder_lookup_trivial_vars.extend(executor_machine_state.decoder_data.imm);
+                decoder_table_width = 2 + 1 + 1 + 1 + 1 + REGISTER_SIZE;
+
+                if executor_machine_state.decoder_data.funct3.is_placeholder() == false {
+                    decoder_lookup_trivial_vars
+                        .extend([executor_machine_state.decoder_data.funct3]);
+                    decoder_table_width += 1;
+                }
+
+                let mut decoder_lookup: Vec<_> = decoder_lookup_trivial_vars
+                    .into_iter()
+                    .map(|el| LookupInput::<F>::Variable(el))
+                    .collect();
+                if circuit_family_bitmask.is_empty() {
+                    // nothing
+                } else {
+                    decoder_table_width += 1;
+                    if circuit_family_bitmask.len() == 1 {
+                        // just variable itself
+                        decoder_lookup.push(LookupInput::<F>::Variable(circuit_family_bitmask[0]));
+                    } else {
+                        // constraint
+                        assert!(circuit_family_bitmask.len() < F::CHAR_BITS);
+                        let mut mask_constraint = Constraint::empty();
+                        for (i, var) in circuit_family_bitmask.iter().enumerate() {
+                            mask_constraint += Term::from((F::from_u64_unchecked(1 << i), *var));
+                        }
+                        mask_constraint.normalize();
+                        let (_, linear_terms, _) = mask_constraint.split_max_quadratic();
+                        decoder_lookup.push(LookupInput::Expression {
+                            linear_terms,
+                            constant_coeff: F::ZERO,
+                        });
+                    }
+                }
+                decoder_lookup_pair = Some((executor_machine_state.execute, decoder_lookup));
+            }
+
+            let total_generic_lookups = (generic_lookups.len() as u64
+                + decoder_lookup_pair.is_some() as u64)
+                * trace_len as u64;
+            assert!(total_generic_lookups < F::CHARACTERISTICS, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
+
+            let max_width_without_decoder = generic_lookups
+                .iter()
+                .map(|el| el.0.len())
+                .max()
+                .unwrap_or(0);
+            let decoder_width = if let Some(decoder_lookup) = decoder_lookup_pair.as_ref() {
+                decoder_lookup.1.len()
+            } else {
+                0
+            };
+
+            let generic_lookup_width = if decoder_width > 0 && max_width_without_decoder > 0 {
+                // account for table ID
+                expect_table_id_for_generic_lookup = true;
+                core::cmp::max(decoder_width, max_width_without_decoder) + 1
+            } else {
+                core::cmp::max(decoder_width, max_width_without_decoder)
+            };
+
+            println!(
+                "Generic lookup total tables in setup: {}",
+                generic_lookup_width
+            );
+
+            assert!(generic_lookup_width >= decoder_table_width);
+
+            (generic_lookup_width, decoder_lookup_pair)
+        };
+
+        let mut graph = GKRGraph::new(generic_lookup_width);
 
         let mut all_variables_to_place = BTreeSet::new();
         for variable_idx in 0..num_variables {
@@ -355,96 +466,6 @@ impl<F: PrimeField> GKRCompiler<F> {
             timestamp_range_check_expressions_to_compile.len() as u64 * trace_len as u64;
         assert!(total_timestamp_range_check_lookups < F::CHARACTERISTICS, "total number of timestamp range check lookups in circuit is {} that is larger that field characteristics {}", total_timestamp_range_check_lookups, F::CHARACTERISTICS);
 
-        // Then 16-bit range checks
-        let (range_check_16_expressions, mut generic_lookups) =
-            super::range_check_exprs::split_range_check_exprs_from_compiler(
-                &range_check_expressions,
-            );
-
-        let total_lookups_for_range_checks_16 =
-            (range_check_16_expressions.len() as u64) * trace_len as u64;
-        assert!(total_lookups_for_range_checks_16 < F::CHARACTERISTICS, "total number of range-check-16 lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
-
-        // and then all lookups from circuit + decoder are "generic" ones
-
-        for lookup in lookups.iter() {
-            let LookupQuery { row, table } = lookup.clone();
-            generic_lookups.push((row.to_vec(), table));
-        }
-
-        let mut decoder_lookup_pair = None;
-        // and decoder - we tightly pack it, and will need to do the same in the setup generator
-        {
-            // pub pc: [F; 2],
-            // pub rs1_index: F,
-            // pub rs2_index: F,
-            // pub rd_index: F,
-            // pub rd_is_zero: F,
-            // pub imm: [F; REGISTER_SIZE],
-            // pub funct3: F,
-            // pub circuit_family_extra_mask: F,
-
-            let mut decoder_lookup_trivial_vars = vec![];
-            decoder_lookup_trivial_vars.extend(executor_machine_state.cycle_start_state.pc);
-            decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rs1_index]);
-            decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rs2_index]);
-            decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rd_index]);
-            decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.rd_is_zero]);
-            decoder_lookup_trivial_vars.extend(executor_machine_state.decoder_data.imm);
-            if executor_machine_state.decoder_data.funct3.is_placeholder() == false {
-                decoder_lookup_trivial_vars.extend([executor_machine_state.decoder_data.funct3]);
-            }
-            let mut decoder_lookup: Vec<_> = decoder_lookup_trivial_vars
-                .into_iter()
-                .map(|el| LookupInput::<F>::Variable(el))
-                .collect();
-            if circuit_family_bitmask.is_empty() {
-                // nothing
-            } else {
-                if circuit_family_bitmask.len() == 1 {
-                    // just variable itself
-                    decoder_lookup.push(LookupInput::<F>::Variable(circuit_family_bitmask[0]));
-                } else {
-                    // constraint
-                    assert!(circuit_family_bitmask.len() < F::CHAR_BITS);
-                    let mut mask_constraint = Constraint::empty();
-                    for (i, var) in circuit_family_bitmask.iter().enumerate() {
-                        mask_constraint += Term::from((F::from_u64_unchecked(1 << i), *var));
-                    }
-                    mask_constraint.normalize();
-                    let (_, linear_terms, _) = mask_constraint.split_max_quadratic();
-                    decoder_lookup.push(LookupInput::Expression {
-                        linear_terms,
-                        constant_coeff: F::ZERO,
-                    });
-                }
-            }
-            decoder_lookup_pair = Some((executor_machine_state.execute, decoder_lookup));
-            // generic_lookups.push((
-            //     decoder_lookup,
-            //     LookupQueryTableType::Constant(TableType::Decoder),
-            // ));
-        }
-
-        let total_generic_lookups = (generic_lookups.len() as u64
-            + decoder_lookup_pair.is_some() as u64)
-            * trace_len as u64;
-        assert!(total_generic_lookups < F::CHARACTERISTICS, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
-
-        let mut max_width = generic_lookups
-            .iter()
-            .map(|el| el.0.len())
-            .max()
-            .unwrap_or(0);
-        if let Some(decoder_lookup) = decoder_lookup_pair.as_ref() {
-            max_width = std::cmp::max(max_width, decoder_lookup.1.len());
-        }
-        if max_width > 0 {
-            // account for table ID
-            max_width += 1;
-        }
-        println!("Generic lookup total tables in setup: {}", max_width);
-
         // for all boolean vars we add booleanity constraint here
 
         for boolean in boolean_vars.iter() {
@@ -569,6 +590,9 @@ impl<F: PrimeField> GKRCompiler<F> {
         if push_via_constraints_into_witness {
             // place all variables to place into witness, and push constraints back
             for (v, c) in variables_from_constraints.into_iter() {
+                // NOTE: defining constraint doesn't have a variable in itself
+                let mut c = c;
+                c -= v.into();
                 assert!(all_variables_to_place.contains(&v));
                 constraints.push((c, true));
             }
@@ -595,18 +619,29 @@ impl<F: PrimeField> GKRCompiler<F> {
 
         let mut lookup_outputs = BTreeMap::new();
 
+        let mut range_check_16_multiplicity = None;
+        let mut timestamp_multiplicity = None;
+        let mut generic_lookup_multiplicity = None;
+
+        let mut range_check_16_lookups_compiled = vec![];
+        let mut timestamp_range_check_lookups_compiled = vec![];
+        let mut generic_lookups_compiled = vec![];
+
         // placing lookup is move involved
         {
             if range_check_16_expressions.len() > 0 {
-                let (_multiplicity, final_pair, final_rel) = layout_width_1_lookup_expressions(
-                    &mut graph,
-                    range_check_16_expressions,
-                    &mut num_variables,
-                    &mut all_variables_to_place,
-                    &mut variable_names,
-                    "range check 16",
-                    LookupType::RangeCheck16,
-                );
+                let (multiplicity, final_pair, final_rel, initial_rels) =
+                    layout_width_1_lookup_expressions(
+                        &mut graph,
+                        range_check_16_expressions,
+                        &mut num_variables,
+                        &mut all_variables_to_place,
+                        &mut variable_names,
+                        "range check 16",
+                        LookupType::RangeCheck16,
+                    );
+                range_check_16_multiplicity = Some(multiplicity);
+                range_check_16_lookups_compiled = initial_rels;
 
                 lookup_outputs.insert(
                     LookupType::RangeCheck16,
@@ -618,15 +653,19 @@ impl<F: PrimeField> GKRCompiler<F> {
             }
 
             if timestamp_range_check_expressions_to_compile.len() > 0 {
-                let (_multiplicity, final_pair, final_rel) = layout_width_1_lookup_expressions(
-                    &mut graph,
-                    timestamp_range_check_expressions_to_compile,
-                    &mut num_variables,
-                    &mut all_variables_to_place,
-                    &mut variable_names,
-                    "timestamp range check",
-                    LookupType::TimestampRangeCheck,
-                );
+                let (multiplicity, final_pair, final_rel, initial_rels) =
+                    layout_width_1_lookup_expressions(
+                        &mut graph,
+                        timestamp_range_check_expressions_to_compile,
+                        &mut num_variables,
+                        &mut all_variables_to_place,
+                        &mut variable_names,
+                        "timestamp range check",
+                        LookupType::TimestampRangeCheck,
+                    );
+                timestamp_multiplicity = Some(multiplicity);
+                timestamp_range_check_lookups_compiled = initial_rels;
+
                 lookup_outputs.insert(
                     LookupType::TimestampRangeCheck,
                     (
@@ -636,21 +675,27 @@ impl<F: PrimeField> GKRCompiler<F> {
                 );
             }
 
-            if generic_lookups.len() > 0 {
+            if generic_lookups.len() > 0 || decoder_lookup_pair.is_some() {
                 let generic_lookups = generic_lookups
                     .into_iter()
                     .map(|el| (el.0, LookupQueryTableTypeExt::from_simple(el.1)))
                     .collect();
-                let (_multiplicity, final_pair, final_rel) = layout_lookup_expressions::<F, 10>(
-                    &mut graph,
-                    generic_lookups,
-                    &mut num_variables,
-                    &mut all_variables_to_place,
-                    &mut variable_names,
-                    "generic lookup",
-                    decoder_lookup_pair,
-                    LookupType::Generic,
-                );
+                let (multiplicity, final_pair, final_rel, initial_rels) =
+                    layout_lookup_expressions::<F, false>(
+                        &mut graph,
+                        generic_lookups,
+                        &mut num_variables,
+                        &mut all_variables_to_place,
+                        &mut variable_names,
+                        "generic lookup",
+                        decoder_lookup_pair,
+                        LookupType::Generic,
+                        generic_lookup_width,
+                        expect_table_id_for_generic_lookup,
+                    );
+                generic_lookup_multiplicity = Some(multiplicity);
+                generic_lookups_compiled = initial_rels;
+
                 lookup_outputs.insert(
                     LookupType::Generic,
                     (
@@ -666,7 +711,8 @@ impl<F: PrimeField> GKRCompiler<F> {
         // - then we compute execute * (quadratic + \sum linears + \sum constants
         // let _ = layout_constraints(&mut graph, constraints, executor_machine_state.execute);
 
-        let _ = layout_constraints_on_single_layer(&mut graph, constraints);
+        let (degree_2_constraints, degree_1_constraints) =
+            layout_constraints_on_single_layer(&mut graph, constraints);
 
         // let graphviz_string = graph.make_graphviz(&variable_names);
         // println!("{}", &graphviz_string);
@@ -763,16 +809,11 @@ impl<F: PrimeField> GKRCompiler<F> {
             } else {
                 None
             };
-            let circuit_family_extra_mask = if circuit_family_bitmask.is_empty() {
-                None
-            } else {
-                if circuit_family_bitmask.len() == 1 {
-                    // just variable itself
-                    Some(graph.get_address_for_variable(circuit_family_bitmask[0]))
-                } else {
-                    None
-                }
-            };
+            let mut circuit_family_mask_bits = vec![];
+            for el in circuit_family_bitmask.iter() {
+                let pos = graph.get_address_for_variable(*el);
+                circuit_family_mask_bits.push(pos);
+            }
 
             let (decoder_witness_is_in_memory, (rd_is_zero, imm_low, imm_high, funct3)) =
                 match (rd_is_zero, imm_low, imm_high, funct3) {
@@ -809,7 +850,7 @@ impl<F: PrimeField> GKRCompiler<F> {
                 rs1_index,
                 rs2_index,
                 rd_index,
-                circuit_family_extra_mask,
+                circuit_family_mask_bits: circuit_family_mask_bits.into_boxed_slice(),
                 decoder_witness_is_in_memory,
                 rd_is_zero,
                 imm: [imm_low, imm_high],
@@ -825,6 +866,50 @@ impl<F: PrimeField> GKRCompiler<F> {
             decoder_input: Some(decoder_input),
         };
 
+        let GKRAddress::BaseLayerWitness(multiplicities_columns_for_range_check_16) =
+            graph.get_address_for_variable(range_check_16_multiplicity.expect("is some"))
+        else {
+            unreachable!()
+        };
+        let GKRAddress::BaseLayerWitness(multiplicities_columns_for_timestamp_range_check) =
+            graph.get_address_for_variable(timestamp_multiplicity.expect("is some"))
+        else {
+            unreachable!()
+        };
+        let GKRAddress::BaseLayerWitness(multiplicities_columns_for_generic_lookup) =
+            graph.get_address_for_variable(generic_lookup_multiplicity.expect("is some"))
+        else {
+            unreachable!()
+        };
+
+        let mut placement_data = BTreeMap::new();
+        placement_data.extend(graph.base_layer_memory.iter().map(|(k, v)| (*k, *v)));
+        placement_data.extend(graph.base_layer_witness.iter().map(|(k, v)| (*k, *v)));
+
+        let witness_layout = GKRWitnessLayout {
+            multiplicities_columns_for_range_check_16,
+            multiplicities_columns_for_timestamp_range_check,
+            multiplicities_columns_for_generic_lookup: multiplicities_columns_for_generic_lookup
+                ..multiplicities_columns_for_generic_lookup + 1,
+            generic_lookups: generic_lookups_compiled,
+            range_check_16_lookup_expressions: range_check_16_lookups_compiled,
+            timestamp_range_check_lookup_expressions: timestamp_range_check_lookups_compiled,
+            total_width: graph.base_layer_witness.len(),
+        };
+
+        let aux_layout_data = {
+            let shuffle_ram_timestamp_comparison_aux_vars = shuffle_ram_augmented_sets
+                .iter()
+                .map(|(_, el)| RamAuxComparisonSet {
+                    intermediate_borrow: graph.get_address_for_variable(el.intermediate_borrow),
+                })
+                .collect();
+
+            GKRAuxLayoutData {
+                shuffle_ram_timestamp_comparison_aux_vars,
+            }
+        };
+
         GKRCircuitArtifact {
             trace_len,
             table_offsets,
@@ -832,7 +917,19 @@ impl<F: PrimeField> GKRCompiler<F> {
             offset_for_decoder_table,
             layers,
             memory_layout,
+            witness_layout,
             scratch_space_size,
+            placement_data,
+            generic_lookup_tables_width: generic_lookup_width,
+            tables_ids_in_generic_lookups: expect_table_id_for_generic_lookup,
+
+            degree_2_constraints,
+            degree_1_constraints,
+
+            variable_names: BTreeMap::from_iter(variable_names.into_iter()),
+
+            aux_layout_data,
+
             _marker: std::marker::PhantomData,
         }
     }

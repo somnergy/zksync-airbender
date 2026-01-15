@@ -1,0 +1,279 @@
+use cs::gkr_compiler::GKRCircuitArtifact;
+
+use crate::gkr::witness_gen::family_circuits::{GKRFullWitnessTrace, GKRMemoryOnlyWitnessTrace};
+
+use super::*;
+
+use std::alloc::Allocator;
+
+mod family_circuits;
+
+pub(crate) fn ensure_memory_trace_consistency<F: PrimeField>(
+    memory_trace: &GKRMemoryOnlyWitnessTrace<F, impl Allocator + Clone, impl Allocator + Clone>,
+    witness_trace: &GKRFullWitnessTrace<F, impl Allocator + Clone, impl Allocator + Clone>,
+) {
+    assert_eq!(
+        memory_trace.column_major_trace.len(),
+        witness_trace.column_major_memory_trace.len()
+    );
+    for column in 0..memory_trace.column_major_trace.len() {
+        let from_mem = &memory_trace.column_major_trace[column];
+        let from_wit = &witness_trace.column_major_memory_trace[column];
+
+        assert_eq!(from_mem.len(), from_wit.len());
+        assert!(from_mem.len().is_power_of_two());
+        for row in 0..from_mem.len() {
+            assert_eq!(
+                from_mem[row], from_wit[row],
+                "diverged for column {}, row {}",
+                column, row
+            );
+        }
+    }
+}
+
+pub fn check_satisfied<F: PrimeField, A: GoodAllocator, B: GoodAllocator>(
+    compiled_circuit: &GKRCircuitArtifact<F>,
+    full_trace: &GKRFullWitnessTrace<F, A, B>,
+) -> bool {
+    let trace_len = full_trace.column_major_memory_trace[0].len();
+    assert!(trace_len.is_power_of_two());
+    for p in full_trace.column_major_memory_trace.iter() {
+        assert_eq!(p.len(), trace_len);
+    }
+    for p in full_trace.column_major_witness_trace.iter() {
+        assert_eq!(p.len(), trace_len);
+    }
+    for row in 0..trace_len {
+        let row_satisfied = check_satisfied_row(compiled_circuit, full_trace, row);
+        if row_satisfied == false {
+            println!("Unsatisfied at row {}", row);
+            return false;
+        }
+    }
+
+    true
+}
+
+fn evaluate_linear_constraint<F: PrimeField, A: GoodAllocator, B: GoodAllocator>(
+    compiled_circuit: &GKRCircuitArtifact<F>,
+    full_trace: &GKRFullWitnessTrace<F, A, B>,
+    absolute_row_idx: usize,
+    constraint_idx: usize,
+) -> F {
+    let constraint = &compiled_circuit.degree_1_constraints[constraint_idx];
+    let mut result = constraint.constant_term;
+    for (c, a) in constraint.linear_terms.iter() {
+        let mut t = *c;
+        let a = match compiled_circuit.placement_data[a] {
+            GKRAddress::BaseLayerMemory(offset) => {
+                full_trace.column_major_memory_trace[offset][absolute_row_idx]
+            }
+            GKRAddress::BaseLayerWitness(offset) => {
+                full_trace.column_major_witness_trace[offset][absolute_row_idx]
+            }
+            _ => {
+                return F::ZERO;
+            }
+        };
+        t.mul_assign(&a);
+        result.add_assign(&t);
+    }
+
+    result
+}
+
+fn evaluate_quadratic_constraint<F: PrimeField, A: GoodAllocator, B: GoodAllocator>(
+    compiled_circuit: &GKRCircuitArtifact<F>,
+    full_trace: &GKRFullWitnessTrace<F, A, B>,
+    absolute_row_idx: usize,
+    constraint_idx: usize,
+) -> F {
+    let constraint = &compiled_circuit.degree_2_constraints[constraint_idx];
+    let mut result = constraint.constant_term;
+    for (c, a, b) in constraint.quadratic_terms.iter() {
+        let mut t = *c;
+        let a = match compiled_circuit.placement_data[a] {
+            GKRAddress::BaseLayerMemory(offset) => {
+                full_trace.column_major_memory_trace[offset][absolute_row_idx]
+            }
+            GKRAddress::BaseLayerWitness(offset) => {
+                full_trace.column_major_witness_trace[offset][absolute_row_idx]
+            }
+            _ => {
+                return F::ZERO;
+            }
+        };
+        let b = match compiled_circuit.placement_data[b] {
+            GKRAddress::BaseLayerMemory(offset) => {
+                full_trace.column_major_memory_trace[offset][absolute_row_idx]
+            }
+            GKRAddress::BaseLayerWitness(offset) => {
+                full_trace.column_major_witness_trace[offset][absolute_row_idx]
+            }
+            _ => {
+                return F::ZERO;
+            }
+        };
+        t.mul_assign(&a);
+        t.mul_assign(&b);
+        result.add_assign(&t);
+    }
+
+    for (c, a) in constraint.linear_terms.iter() {
+        let mut t = *c;
+        let a = match compiled_circuit.placement_data[a] {
+            GKRAddress::BaseLayerMemory(offset) => {
+                full_trace.column_major_memory_trace[offset][absolute_row_idx]
+            }
+            GKRAddress::BaseLayerWitness(offset) => {
+                full_trace.column_major_witness_trace[offset][absolute_row_idx]
+            }
+            _ => {
+                return F::ZERO;
+            }
+        };
+        t.mul_assign(&a);
+        result.add_assign(&t);
+    }
+
+    result
+}
+
+fn read_value<F: PrimeField, A: GoodAllocator, B: GoodAllocator>(
+    full_trace: &GKRFullWitnessTrace<F, A, B>,
+    absolute_row_idx: usize,
+    pos: GKRAddress,
+) -> F {
+    match pos {
+        GKRAddress::BaseLayerMemory(offset) => {
+            full_trace.column_major_memory_trace[offset][absolute_row_idx]
+        }
+        GKRAddress::BaseLayerWitness(offset) => {
+            full_trace.column_major_witness_trace[offset][absolute_row_idx]
+        }
+        _ => {
+            return F::ZERO;
+        }
+    }
+}
+
+pub fn check_satisfied_row<F: PrimeField, A: GoodAllocator, B: GoodAllocator>(
+    compiled_circuit: &GKRCircuitArtifact<F>,
+    full_trace: &GKRFullWitnessTrace<F, A, B>,
+    absolute_row_idx: usize,
+) -> bool {
+    // we only check constraints and not tables
+    for idx in 0..compiled_circuit.degree_1_constraints.len() {
+        let eval_result =
+            evaluate_linear_constraint(compiled_circuit, full_trace, absolute_row_idx, idx);
+        if eval_result != F::ZERO {
+            println!(
+                "Unsatisfied at row {}, linear constraint {:?}",
+                absolute_row_idx, &compiled_circuit.degree_1_constraints[idx]
+            );
+            let constraint = &compiled_circuit.degree_1_constraints[idx];
+            for (_, a) in constraint.linear_terms.iter() {
+                let pos = compiled_circuit.placement_data[a];
+                if let Some(name) = compiled_circuit.variable_names.get(a) {
+                    println!(
+                        "Variable {:?} `{}` (position {:?}) = {:?}",
+                        a,
+                        name,
+                        pos,
+                        read_value(full_trace, absolute_row_idx, pos)
+                    );
+                } else {
+                    println!(
+                        "Variable {:?} (position {:?}) = {:?}",
+                        a,
+                        pos,
+                        read_value(full_trace, absolute_row_idx, pos)
+                    );
+                }
+            }
+            return false;
+        }
+    }
+    for idx in 0..compiled_circuit.degree_2_constraints.len() {
+        let eval_result =
+            evaluate_quadratic_constraint(compiled_circuit, full_trace, absolute_row_idx, idx);
+        if eval_result != F::ZERO {
+            println!(
+                "Unsatisfied at row {}, quadratic constraint {:?}",
+                absolute_row_idx, &compiled_circuit.degree_2_constraints[idx]
+            );
+            let constraint = &compiled_circuit.degree_2_constraints[idx];
+            for (_, a, b) in constraint.quadratic_terms.iter() {
+                for a in [a, b] {
+                    let pos = compiled_circuit.placement_data[a];
+                    if let Some(name) = compiled_circuit.variable_names.get(a) {
+                        println!(
+                            "Variable {:?} `{}` (position {:?}) = {:?}",
+                            a,
+                            name,
+                            pos,
+                            read_value(full_trace, absolute_row_idx, pos)
+                        );
+                    } else {
+                        println!(
+                            "Variable {:?} (position {:?}) = {:?}",
+                            a,
+                            pos,
+                            read_value(full_trace, absolute_row_idx, pos)
+                        );
+                    }
+                }
+            }
+            for (_, a) in constraint.linear_terms.iter() {
+                let pos = compiled_circuit.placement_data[a];
+                if let Some(name) = compiled_circuit.variable_names.get(a) {
+                    println!(
+                        "Variable {:?} `{}` (position {:?}) = {:?}",
+                        a,
+                        name,
+                        pos,
+                        read_value(full_trace, absolute_row_idx, pos)
+                    );
+                } else {
+                    println!(
+                        "Variable {:?} (position {:?}) = {:?}",
+                        a,
+                        pos,
+                        read_value(full_trace, absolute_row_idx, pos)
+                    );
+                }
+            }
+            return false;
+        }
+    }
+
+    true
+}
+
+mod add_sub_lui_auipc_mod {
+    use crate::gkr::witness_gen::column_major_proxy::ColumnMajorWitnessProxy;
+    use crate::unrolled::NonMemoryCircuitOracle;
+    use crate::witness_proxy::WitnessProxy;
+    use ::cs::cs::placeholder::Placeholder;
+    use ::cs::cs::witness_placer::WitnessTypeSet;
+    use ::cs::cs::witness_placer::{
+        WitnessComputationCore, WitnessComputationalField, WitnessComputationalI32,
+        WitnessComputationalInteger, WitnessComputationalU16, WitnessComputationalU32,
+        WitnessComputationalU8, WitnessMask,
+    };
+    use ::field::Mersenne31Field;
+    use cs::cs::witness_placer::scalar_witness_type_set::ScalarWitnessTypeSet;
+
+    include!("../../../add_sub_lui_auipc_mop_preprocessed_generated_gkr.rs");
+
+    pub fn witness_eval_fn<'a, 'b>(
+        proxy: &'_ mut ColumnMajorWitnessProxy<'a, NonMemoryCircuitOracle<'b>, Mersenne31Field>,
+    ) {
+        let fn_ptr = evaluate_witness_fn::<
+            ScalarWitnessTypeSet<Mersenne31Field, true>,
+            ColumnMajorWitnessProxy<'a, NonMemoryCircuitOracle<'b>, Mersenne31Field>,
+        >;
+        (fn_ptr)(proxy);
+    }
+}
