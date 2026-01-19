@@ -19,6 +19,9 @@ pub trait LazyPolyFolder<'a, F: PrimeField> {
         repeated: bool,
     ) -> Self;
 
+    fn get_intermediate_only(&mut self, index: usize) -> F {
+        self.get_triple(index).2
+    }
     fn get_triple(&mut self, index: usize) -> (F, F, F);
     fn size(&self) -> usize;
 }

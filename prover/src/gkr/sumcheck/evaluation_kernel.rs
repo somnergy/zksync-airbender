@@ -5,11 +5,17 @@ use field::FieldExtension;
 use super::*;
 
 pub trait BatchGKRRelation<F: PrimeField, E: FieldExtension<F> + PrimeField> {
-    type FirstStep: BatchGKREvaluationKernel<F, E>;
-    fn prepare_first_step<'a>(&self, storage: &'a mut PolysStorage<F, E>) -> Self::FirstStep;
+    type FirstStep<'a>: BatchGKREvaluationKernel<F, E>
+    where
+        Self: 'a;
+    fn prepare_first_step<'a>(&'a self, storage: &'a mut PolysStorage<F, E>)
+        -> Self::FirstStep<'a>;
 
-    type NextSteps: BatchGKREvaluationKernel<F, E>;
-    fn prepare_next_steps<'a>(&self, storage: &'a mut PolysStorage<F, E>) -> Self::NextSteps;
+    type NextSteps<'a>: BatchGKREvaluationKernel<F, E>
+    where
+        Self: 'a;
+    fn prepare_next_steps<'a>(&'a self, storage: &'a mut PolysStorage<F, E>)
+        -> Self::NextSteps<'a>;
 }
 
 pub trait BatchGKREvaluationKernel<F: PrimeField, E: FieldExtension<F> + PrimeField> {
@@ -26,11 +32,33 @@ pub struct SameSizeProductGKRRelation {
     pub cached_sources: [GKRAddress; 2],
 }
 
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField> BatchGKRRelation<F, E>
+    for SameSizeProductGKRRelation
+{
+    type FirstStep<'a> = SameSizeProductEvaluationKernelFirstStep<'a, F, E>;
+    fn prepare_first_step<'a>(
+        &'a self,
+        storage: &'a mut PolysStorage<F, E>,
+    ) -> Self::FirstStep<'a> {
+        todo!()
+    }
+
+    type NextSteps<'a> = SameSizeProductEvaluationKernelFirstStep<'a, F, E>;
+    fn prepare_next_steps<'a>(
+        &'a self,
+        storage: &'a mut PolysStorage<F, E>,
+    ) -> Self::NextSteps<'a> {
+        todo!()
+    }
+}
+
 pub struct SameSizeProductEvaluationKernelFirstStep<
     'a,
     F: PrimeField,
     E: FieldExtension<F> + PrimeField,
 > {
+    // TODO: if we will also add an access to inputs themselves, then we can avoid recomputing
+    // f0_l * f0_r and f1_l * f1_r below
     lhs: FirstStepInExtensionLazyFolder<'a, E>,
     rhs: FirstStepInExtensionLazyFolder<'a, E>,
     _marker: core::marker::PhantomData<F>,
@@ -48,6 +76,8 @@ impl<'a, F: PrimeField, E: FieldExtension<F> + PrimeField> BatchGKREvaluationKer
     ) {
         let mut index = index_offset;
         for i in 0..num_steps {
+            // TODO: use access to original polys to avoid re-computation of multiplication,
+            // and only access via self.lhs.get_intermediate_only(index);
             let (f0_l, f1_l, t_l) = self.lhs.get_triple(index);
             let (f0_r, f1_r, t_r) = self.rhs.get_triple(index);
 
