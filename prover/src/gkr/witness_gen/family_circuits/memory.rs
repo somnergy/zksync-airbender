@@ -198,20 +198,18 @@ pub(crate) unsafe fn gkr_process_machine_state_assuming_preprocessed_decoder<
         .get_u32_witness_from_placeholder(Placeholder::PcInit, proxy.absolute_row_idx);
     proxy.write_u32_value_into_columns::<true>(machine_state.initial_state.pc, initial_pc);
 
-    proxy.write_timestamp_placeholder_into_columns(
-        machine_state.initial_state.timestamp,
+    let initial_ts = proxy.oracle.get_timestamp_witness_from_placeholder(
         Placeholder::OpcodeFamilyCycleInitialTimestamp,
+        proxy.absolute_row_idx,
     );
+    proxy.write_timestamp_value_into_columns(machine_state.initial_state.timestamp, initial_ts);
+
     // final state
     proxy.write_u32_placeholder_into_columns::<true>(
         machine_state.final_state.pc,
         Placeholder::PcFin,
     );
 
-    let initial_ts = proxy.oracle.get_timestamp_witness_from_placeholder(
-        Placeholder::OpcodeFamilyCycleInitialTimestamp,
-        proxy.absolute_row_idx,
-    );
     let (final_ts, _intermediate_carry) = timestamp_increment(initial_ts);
     debug_assert!(
         final_ts <= (1 << (TIMESTAMP_COLUMNS_NUM_BITS * (NUM_TIMESTAMP_COLUMNS_FOR_RAM as u32)))
@@ -275,6 +273,8 @@ pub(crate) unsafe fn gkr_process_machine_state_assuming_preprocessed_decoder<
                 let idx = (initial_pc / 4) as usize;
                 generic_lookup_multiplicities[idx + compiled_circuit.offset_for_decoder_table] += 1;
             }
+        } else {
+            todo!();
         }
     }
 

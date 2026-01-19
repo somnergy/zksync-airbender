@@ -571,7 +571,7 @@ impl Mersenne31FieldVectorized {
 }
 
 impl BaseField for Mersenne31FieldVectorized {
-    const QUADRATIC_NON_RESIDUE: Mersenne31FieldVectorized =
+    const NON_RESIDUE: Mersenne31FieldVectorized =
         Mersenne31FieldVectorized([Mersenne31Field::MINUS_ONE; WIDTH]);
 
     fn mul_by_non_residue(elem: &mut Self) {

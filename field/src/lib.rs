@@ -24,6 +24,8 @@ pub mod field;
 pub mod field_like;
 pub mod quartic;
 
+pub mod baby_bear;
+
 #[cfg(feature = "proc_macro_ops")]
 mod proc_macro_ops;
 

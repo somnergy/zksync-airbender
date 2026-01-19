@@ -1,93 +1,53 @@
-// SPDX-License-Identifier: MIT OR Apache-2.0
-// Portions derived from Plonky3 and adapted by Matter Labs.
-// © 2024 Polygon Labs – original; © 2025 Matter Labs - adapted for RISC-V.
+// Quadratic extension for BabyBear. Uses v^2 - 11 = 0
 
-use super::*;
+use super::base::BabyBearField;
+use crate::field::{Field, FieldExtension, PrimeField};
 use core::ops::{Add, Mul, Sub};
 
 #[cfg(not(target_arch = "riscv32"))]
 #[derive(Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(C, align(8))]
-pub struct Mersenne31Complex {
-    pub c0: Mersenne31Field,
-    pub c1: Mersenne31Field,
+pub struct BabyBearExt2 {
+    pub c0: BabyBearField,
+    pub c1: BabyBearField,
 }
 
 #[cfg(target_arch = "riscv32")]
 #[derive(Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(C)]
-pub struct Mersenne31Complex {
-    pub c0: Mersenne31Field,
-    pub c1: Mersenne31Field,
+pub struct BabyBearExt2 {
+    pub c0: BabyBearField,
+    pub c1: BabyBearField,
 }
 
 const _: () = const {
-    assert!(core::mem::size_of::<Mersenne31Complex>() == 2 * core::mem::size_of::<u32>());
+    assert!(core::mem::size_of::<BabyBearExt2>() == 2 * core::mem::size_of::<u32>());
 
     #[cfg(not(target_arch = "riscv32"))]
-    assert!(core::mem::align_of::<Mersenne31Complex>() == 8);
+    assert!(core::mem::align_of::<BabyBearExt2>() == 8);
 
     #[cfg(target_arch = "riscv32")]
-    assert!(core::mem::align_of::<Mersenne31Complex>() == 4);
+    assert!(core::mem::align_of::<BabyBearExt2>() == 4);
 
     ()
 };
 
-impl Mersenne31Complex {
-    pub const TWO_ADIC_GENERATOR: Self = Self {
-        c0: Mersenne31Field::new(311014874),
-        c1: Mersenne31Field::new(1584694829),
-    };
-
-    // enumerated such that TWO_ADICITY_GENERATORS[domain size log2] is a generator for the corresponding size
-    pub const TWO_ADICITY_GENERATORS: [Self; 31 + 1] = const {
-        let mut result = [Self::ZERO; 31 + 1];
-        let mut current = Self::TWO_ADIC_GENERATOR;
-        let mut i = 0;
-        while i < 31 {
-            result[31 - i] = current;
-            current.square_impl();
-            i += 1;
-        }
-
-        result[0] = current;
-
-        result
-    };
-
-    pub const TWO_ADICITY_GENERATORS_INVERSED: [Self; 31 + 1] = const {
-        let mut result = [Self::ZERO; 31 + 1];
-        let mut i = 0;
-        while i < 32 {
-            result[i] = Self::TWO_ADICITY_GENERATORS[i].inverse_impl().unwrap();
-            i += 1;
-        }
-
-        result
-    };
-
-    pub const fn new(real: Mersenne31Field, imag: Mersenne31Field) -> Self {
+impl BabyBearExt2 {
+    pub const fn new(real: BabyBearField, imag: BabyBearField) -> Self {
         Self { c0: real, c1: imag }
     }
 
-    pub fn real_part(&self) -> Mersenne31Field {
+    pub fn real_part(&self) -> BabyBearField {
         self.c0
     }
 
-    pub fn imag_part(&self) -> Mersenne31Field {
+    pub fn imag_part(&self) -> BabyBearField {
         self.c1
     }
 
     pub fn conjugate(&'_ mut self) -> &'_ mut Self {
         self.c1.negate();
         self
-    }
-
-    pub fn div_2exp_u64(&self, exp: u64) -> Self {
-        Self::new(
-            self.real_part().div_2exp_u64(exp),
-            self.imag_part().div_2exp_u64(exp),
-        )
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
@@ -132,10 +92,8 @@ impl Mersenne31Complex {
         self.c1.sub_assign_impl(&v0);
         self.c1.sub_assign_impl(&v1);
         self.c0 = v0;
-        // Same - we can subtract instead
-        // Mersenne31Field::mul_by_non_residue_impl(&mut v1);
-        // self.c0.add_assign_impl(&v1);
-        self.c0.sub_assign_impl(&v1);
+        BabyBearField::mul_by_non_residue_impl(&mut v1);
+        self.c0.add_assign_impl(&v1);
 
         self
     }
@@ -145,7 +103,9 @@ impl Mersenne31Complex {
     pub const fn mul_assign_impl(&'_ mut self, other: &Self) -> &'_ mut Self {
         // here our optimization goal is just minimal number of ops,
         // so we go schoolbook
-        // (a + i * b) * (c + i * d) = (ac - bd) + i * (ad + bc)
+        // v^2 - nr == 0
+        // (a + v * b) * (c + v * d) = (ac + nr * bd) + nr * (ad + bc)
+
         let mut v0 = self.c0;
         v0.mul_assign_impl(&other.c0);
         let mut v1 = self.c1;
@@ -157,7 +117,8 @@ impl Mersenne31Complex {
         v10.mul_assign_impl(&other.c0);
 
         self.c0 = v0;
-        self.c0.sub_assign_impl(&v1);
+        BabyBearField::mul_by_non_residue_impl(&mut v1);
+        self.c0.add_assign_impl(&v1);
 
         self.c1 = v01;
         self.c1.add_assign_impl(&v10);
@@ -171,11 +132,9 @@ impl Mersenne31Complex {
         let mut v0 = self.c0;
         v0.sub_assign_impl(&self.c1);
         let mut v3 = self.c0;
-        // t0 only happens here, and instead of multiplying by non-residue and subtracting, we can just add
-        // let mut t0: Mersenne31Field = self.c1;
-        // Mersenne31Field::mul_by_non_residue_impl(&mut t0);
-        // v3.sub_assign_impl(&t0);
-        v3.add_assign_impl(&self.c1);
+        let mut t0: BabyBearField = self.c1;
+        BabyBearField::mul_by_non_residue_impl(&mut t0);
+        v3.sub_assign_impl(&t0);
         let mut v2 = self.c0;
         v2.mul_assign_impl(&self.c1);
         v0.mul_assign_impl(&v3);
@@ -184,10 +143,8 @@ impl Mersenne31Complex {
         self.c1 = v2;
         self.c1.double_impl();
         self.c0 = v0;
-        // Same - we can subtract instead
-        // Mersenne31Field::mul_by_non_residue_impl(&mut v2);
-        // self.c0.add_assign_impl(&v2);
-        self.c0.sub_assign_impl(&v2);
+        BabyBearField::mul_by_non_residue_impl(&mut v2);
+        self.c0.add_assign_impl(&v2);
 
         self
     }
@@ -197,7 +154,8 @@ impl Mersenne31Complex {
     pub(crate) const fn square_impl(&mut self) -> &mut Self {
         // here our optimization goal is just minimal number of ops,
         // so we go schoolbook
-        // (a + i * b) ^ 2 = (a^2 - b^2) + i * 2 * ab
+        // v^2 - nr = 0
+        // (a + v * b) ^ 2 = (a^2 + nr * b^2) + v * 2 * ab
 
         let mut v0 = self.c0;
         v0.mul_assign_impl(&self.c0);
@@ -209,7 +167,8 @@ impl Mersenne31Complex {
         cross.mul_assign_impl(&self.c1);
 
         self.c0 = v0;
-        self.c0.sub_assign_impl(&v1);
+        BabyBearField::mul_by_non_residue_impl(&mut v1);
+        self.c0.add_assign_impl(&v1);
 
         self.c1 = cross;
         self.c1.double_impl();
@@ -240,7 +199,7 @@ impl Mersenne31Complex {
         v1.square_impl();
         // v0 = v0 - beta * v1
         let mut v1_by_nonresidue = v1;
-        Mersenne31Field::mul_by_non_residue_impl(&mut v1_by_nonresidue);
+        BabyBearField::mul_by_non_residue_impl(&mut v1_by_nonresidue);
         v0.sub_assign_impl(&v1_by_nonresidue);
         match v0.inverse_impl() {
             Some(inversed) => {
@@ -258,46 +217,46 @@ impl Mersenne31Complex {
     }
 }
 
-impl core::cmp::PartialEq for Mersenne31Complex {
+impl core::cmp::PartialEq for BabyBearExt2 {
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
     fn eq(&self, other: &Self) -> bool {
         self.c0 == other.c0 && self.c1 == other.c1
     }
 }
 
-impl core::cmp::Eq for Mersenne31Complex {}
+impl core::cmp::Eq for BabyBearExt2 {}
 
-impl core::default::Default for Mersenne31Complex {
+impl core::default::Default for BabyBearExt2 {
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
     fn default() -> Self {
         Self {
-            c0: Mersenne31Field::ZERO,
-            c1: Mersenne31Field::ZERO,
+            c0: BabyBearField::ZERO,
+            c1: BabyBearField::ZERO,
         }
     }
 }
 
-impl Rand for Mersenne31Complex {
-    fn random_element<R: Rng + ?Sized>(rng: &mut R) -> Self {
+impl crate::Rand for BabyBearExt2 {
+    fn random_element<R: rand::Rng + ?Sized>(rng: &mut R) -> Self {
         Self {
-            c0: Mersenne31Field::random_element(rng),
-            c1: Mersenne31Field::random_element(rng),
+            c0: BabyBearField::random_element(rng),
+            c1: BabyBearField::random_element(rng),
         }
     }
 }
 
-impl Field for Mersenne31Complex {
+impl Field for BabyBearExt2 {
     const ZERO: Self = Self {
-        c0: Mersenne31Field::ZERO,
-        c1: Mersenne31Field::ZERO,
+        c0: BabyBearField::ZERO,
+        c1: BabyBearField::ZERO,
     };
 
     const ONE: Self = Self {
-        c0: Mersenne31Field::ONE,
-        c1: Mersenne31Field::ZERO,
+        c0: BabyBearField::ONE,
+        c1: BabyBearField::ZERO,
     };
 
-    type CharField = Mersenne31Field;
+    type CharField = BabyBearField;
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
     fn is_zero(&self) -> bool {
@@ -358,7 +317,7 @@ impl Field for Mersenne31Complex {
     }
 }
 
-impl Add for Mersenne31Complex {
+impl Add for BabyBearExt2 {
     type Output = Self;
     #[cfg_attr(not(feature = "no_inline"), inline)]
     fn add(self, rhs: Self) -> Self {
@@ -368,7 +327,7 @@ impl Add for Mersenne31Complex {
     }
 }
 
-impl Mul for Mersenne31Complex {
+impl Mul for BabyBearExt2 {
     type Output = Self;
     #[cfg_attr(not(feature = "no_inline"), inline)]
     fn mul(self, rhs: Self) -> Self {
@@ -378,17 +337,17 @@ impl Mul for Mersenne31Complex {
     }
 }
 
-impl Mul<Mersenne31Field> for Mersenne31Complex {
+impl Mul<BabyBearField> for BabyBearExt2 {
     type Output = Self;
     #[cfg_attr(not(feature = "no_inline"), inline)]
-    fn mul(self, rhs: Mersenne31Field) -> Self {
+    fn mul(self, rhs: BabyBearField) -> Self {
         let mut lhs = self;
         lhs.mul_assign_by_base(&rhs);
         lhs
     }
 }
 
-impl Sub for Mersenne31Complex {
+impl Sub for BabyBearExt2 {
     type Output = Self;
     #[cfg_attr(not(feature = "no_inline"), inline)]
     fn sub(self, rhs: Self) -> Self {
@@ -398,51 +357,44 @@ impl Sub for Mersenne31Complex {
     }
 }
 
-impl BaseField<2> for Mersenne31Complex {
-    // 2 + i is non-residue
-    const NON_RESIDUE: Mersenne31Complex = Mersenne31Complex {
-        c0: Mersenne31Field::TWO,
-        c1: Mersenne31Field::ONE,
+// for F4 = F2(F2) extension
+impl crate::BaseField<2> for BabyBearExt2 {
+    // (0, 1) is non-residue
+    const NON_RESIDUE: BabyBearExt2 = BabyBearExt2 {
+        c0: BabyBearField::ZERO,
+        c1: BabyBearField::ONE,
     };
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
     fn mul_by_non_residue(elem: &mut Self) {
-        // (a + b * i)(2 + i) = (2 * a - b) + (2 * b + a)i
-        let (a, b) = (elem.c0, elem.c1);
-        let mut real = a;
-        real.double();
-        real.sub_assign(&b);
+        // (a + b * v)(0 + v) = b * v^2 + a * v
+        let (c1, mut c0) = (elem.c0, elem.c1);
+        BabyBearField::mul_by_non_residue_impl(&mut c0);
 
-        let mut imag = b;
-        imag.double();
-        imag.add_assign(&a);
-
-        elem.c0 = real;
-        elem.c1 = imag;
+        elem.c0 = c0;
+        elem.c1 = c1;
     }
 }
 
-impl TwoAdicField for Mersenne31Complex {
-    const TWO_ADICITY: usize = 31;
+// for F6 = F3(F2) extension
+impl crate::BaseField<3> for BabyBearExt2 {
+    // (1, 1) is non-residue
+    const NON_RESIDUE: BabyBearExt2 = BabyBearExt2 {
+        c0: BabyBearField::TWO,
+        c1: BabyBearField::ONE,
+    };
 
-    fn two_adic_generator() -> Self {
-        // element of order p+1 - generator of cicrcle group
-        Self {
-            c0: Mersenne31Field::new(311014874),
-            c1: Mersenne31Field::new(1584694829),
-        }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn mul_by_non_residue(elem: &mut Self) {
+        // (a + b * v)(1 + v) = a + b * v^2 + (a + b) * v
+        let (c0, mut c1) = (elem.c0, elem.c1);
+        elem.c1.add_assign(&c0);
+        BabyBearField::mul_by_non_residue_impl(&mut c1);
+        elem.c0.add_assign(&c1);
     }
-
-    fn two_adic_group_order() -> usize {
-        1 << 31
-    }
-
-    const TWO_ADICITY_GENERATORS: &[Self] = &Self::TWO_ADICITY_GENERATORS;
-
-    const TWO_ADICITY_GENERATORS_INVERSED: &[Self] = &Self::TWO_ADICITY_GENERATORS_INVERSED;
 }
 
-impl core::fmt::Debug for Mersenne31Complex {
+impl core::fmt::Debug for BabyBearExt2 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
@@ -453,7 +405,7 @@ impl core::fmt::Debug for Mersenne31Complex {
     }
 }
 
-impl core::fmt::Display for Mersenne31Complex {
+impl core::fmt::Display for BabyBearExt2 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
@@ -464,32 +416,32 @@ impl core::fmt::Display for Mersenne31Complex {
     }
 }
 
-impl FieldExtension<Mersenne31Field> for Mersenne31Complex {
+impl FieldExtension<BabyBearField> for BabyBearExt2 {
     const DEGREE: usize = 2;
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn mul_assign_by_base(&mut self, elem: &Mersenne31Field) -> &mut Self {
+    fn mul_assign_by_base(&mut self, elem: &BabyBearField) -> &mut Self {
         self.c0.mul_assign(elem);
         self.c1.mul_assign(elem);
         self
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn into_coeffs_in_base(self) -> [Mersenne31Field; 2] {
+    fn into_coeffs_in_base(self) -> [BabyBearField; 2] {
         let Self { c0, c1 } = self;
 
         [c0, c1]
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_base_coeffs_array(coefs: &[Mersenne31Field; 2]) -> Self {
+    fn from_base_coeffs_array(coefs: &[BabyBearField; 2]) -> Self {
         Self {
             c0: coefs[0],
             c1: coefs[1],
         }
     }
 
-    fn from_coeffs_in_base(coeffs: &[Mersenne31Field]) -> Self {
+    fn from_coeffs_in_base(coeffs: &[BabyBearField]) -> Self {
         Self {
             c0: coeffs[0],
             c1: coeffs[1],
@@ -497,7 +449,7 @@ impl FieldExtension<Mersenne31Field> for Mersenne31Complex {
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_coeffs_in_base_ref(coeffs: &[&Mersenne31Field]) -> Self {
+    fn from_coeffs_in_base_ref(coeffs: &[&BabyBearField]) -> Self {
         Self {
             c0: *coeffs[0],
             c1: *coeffs[1],
@@ -505,40 +457,40 @@ impl FieldExtension<Mersenne31Field> for Mersenne31Complex {
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_coeffs_in_base_iter<I: Iterator<Item = Mersenne31Field>>(mut coefs_iter: I) -> Self {
+    fn from_coeffs_in_base_iter<I: Iterator<Item = BabyBearField>>(mut coefs_iter: I) -> Self {
         Self {
             c0: coefs_iter.next().unwrap(),
             c1: coefs_iter.next().unwrap(),
         }
     }
 
-    fn coeffs_in_base(&self) -> &[Mersenne31Field] {
+    fn coeffs_in_base(&self) -> &[BabyBearField] {
         // todo!();
-        unsafe { core::slice::from_raw_parts(self.c0.0 as *const Mersenne31Field, 2) }
+        unsafe { core::slice::from_raw_parts(self.c0.0 as *const BabyBearField, 2) }
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn add_assign_base(&mut self, elem: &Mersenne31Field) -> &mut Self {
+    fn add_assign_base(&mut self, elem: &BabyBearField) -> &mut Self {
         self.c0.add_assign(elem);
         self
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn sub_assign_base(&mut self, elem: &Mersenne31Field) -> &mut Self {
+    fn sub_assign_base(&mut self, elem: &BabyBearField) -> &mut Self {
         self.c0.sub_assign(elem);
         self
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_base(elem: Mersenne31Field) -> Self {
+    fn from_base(elem: BabyBearField) -> Self {
         Self {
             c0: elem,
-            c1: Mersenne31Field::ZERO,
+            c1: BabyBearField::ZERO,
         }
     }
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn get_coef_mut(&mut self, _idx: usize) -> &mut Mersenne31Field {
+    fn get_coef_mut(&mut self, _idx: usize) -> &mut BabyBearField {
         todo!();
     }
 }

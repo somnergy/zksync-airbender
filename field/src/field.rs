@@ -116,11 +116,11 @@ pub trait PrimeField: Field {
 }
 
 // this field can be used as base field for quadratic extension
-pub trait BaseField: Field {
-    const QUADRATIC_NON_RESIDUE: Self;
+pub trait BaseField<const N: usize>: Field {
+    const NON_RESIDUE: Self;
 
     fn mul_by_non_residue(elem: &mut Self) {
-        elem.mul_assign(&Self::QUADRATIC_NON_RESIDUE);
+        elem.mul_assign(&Self::NON_RESIDUE);
     }
 }
 
@@ -211,6 +211,10 @@ pub trait TwoAdicField: Field {
 
     #[must_use]
     fn two_adic_group_order() -> usize;
+
+    const TWO_ADICITY_GENERATORS: &[Self];
+
+    const TWO_ADICITY_GENERATORS_INVERSED: &[Self];
 }
 
 impl<F: PrimeField> Rand for F {

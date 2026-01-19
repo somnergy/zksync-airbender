@@ -66,9 +66,9 @@ impl Rand for Mersenne31ComplexVectorized {
     }
 }
 
-impl BaseField for Mersenne31ComplexVectorized {
+impl BaseField<2> for Mersenne31ComplexVectorized {
     // 2 + i is non-residue
-    const QUADRATIC_NON_RESIDUE: Mersenne31ComplexVectorized = Mersenne31ComplexVectorized {
+    const NON_RESIDUE: Mersenne31ComplexVectorized = Mersenne31ComplexVectorized {
         c0: Mersenne31FieldVectorized([Mersenne31Field::TWO; WIDTH]),
         c1: Mersenne31FieldVectorized([Mersenne31Field::ONE; WIDTH]),
     };

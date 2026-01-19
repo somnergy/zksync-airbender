@@ -555,8 +555,8 @@ impl PrimeField for Mersenne31Field {
     }
 }
 
-impl BaseField for Mersenne31Field {
-    const QUADRATIC_NON_RESIDUE: Mersenne31Field = Mersenne31Field::MINUS_ONE;
+impl BaseField<2> for Mersenne31Field {
+    const NON_RESIDUE: Mersenne31Field = Mersenne31Field::MINUS_ONE;
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
     fn mul_by_non_residue(elem: &mut Self) {

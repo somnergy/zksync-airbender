@@ -583,10 +583,11 @@ pub(crate) unsafe fn gkr_count_special_multiplicities_for_executor_family<
     #[cfg(feature = "profiling")]
     let t = std::time::Instant::now();
 
-    for range_check_expression in compiled_circuit
+    for (idx, range_check_expression) in compiled_circuit
         .witness_layout
         .range_check_16_lookup_expressions
         .iter()
+        .enumerate()
     {
         let value = evaluate_linear_relation(range_check_expression, &*proxy);
         assert!(
@@ -597,6 +598,10 @@ pub(crate) unsafe fn gkr_count_special_multiplicities_for_executor_family<
             value
         );
         let index = value.as_u64_reduced() as usize;
+        debug_assert!(idx < range_check_16_chunk.len());
+        range_check_16_chunk
+            .get_unchecked_mut(idx)
+            .write(index as u16);
         *range_check_16_multiplicieties.get_unchecked_mut(index) += 1;
     }
 
@@ -629,7 +634,7 @@ pub(crate) unsafe fn gkr_count_special_multiplicities_for_executor_family<
         .timestamp_range_check_lookup_expressions;
     assert!(timestamp_range_check_relations.len() % 2 == 0);
 
-    for range_check_expression in timestamp_range_check_relations.iter() {
+    for (idx, range_check_expression) in timestamp_range_check_relations.iter().enumerate() {
         let value = evaluate_linear_relation(range_check_expression, &*proxy);
         assert!(
             value.as_u64_reduced() < (1u64 << TIMESTAMP_COLUMNS_NUM_BITS),
@@ -639,6 +644,10 @@ pub(crate) unsafe fn gkr_count_special_multiplicities_for_executor_family<
             absolute_row_idx,
         );
         let index = value.as_u64_reduced() as usize;
+        debug_assert!(idx < timestamp_range_check_chunk.len());
+        timestamp_range_check_chunk
+            .get_unchecked_mut(idx)
+            .write(index as u32);
         *timestamp_range_check_multiplicieties.get_unchecked_mut(index) += 1;
     }
 
@@ -679,7 +688,9 @@ unsafe fn gkr_postprocess_multiplicities<
 
         // write them column_major
         unsafe {
-            let offset = 0;
+            let offset = compiled_circuit
+                .witness_layout
+                .multiplicities_columns_for_range_check_16;
             let dst = &mut exec_trace.column_major_witness_trace[offset];
             assert_eq!(dst.len(), trace_len);
             assert!(trace_len >= 1 << 16);
@@ -720,7 +731,9 @@ unsafe fn gkr_postprocess_multiplicities<
 
         // write them column_major
         unsafe {
-            let offset = 0usize;
+            let offset = compiled_circuit
+                .witness_layout
+                .multiplicities_columns_for_timestamp_range_check;
             let dst = &mut exec_trace.column_major_witness_trace[offset];
             assert_eq!(dst.len(), trace_len);
             assert!(trace_len >= 1 << TIMESTAMP_COLUMNS_NUM_BITS);

@@ -98,6 +98,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
         let [offset_low, offset_high] = placeholder_columns;
         let (low, high) = split_u32_into_pair_u16(value);
 
+        // if USE_MEMORY == false && self.absolute_row_idx == 0 && (offset_low == 0 || offset_high == 0) {
+        //     panic!("debug");
+        // }
+
         if USE_MEMORY {
             debug_assert!(offset_low < self.memory_rows_starts.len());
             debug_assert!(offset_high < self.memory_rows_starts.len());
@@ -146,6 +150,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
         column: usize,
         value: u16,
     ) {
+        // if USE_MEMORY == false && self.absolute_row_idx == 0 && column == 0 {
+        //     panic!("debug");
+        // }
+
         if USE_MEMORY {
             debug_assert!(column < self.memory_rows_starts.len());
             unsafe {
@@ -184,6 +192,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
         column: usize,
         value: u8,
     ) {
+        // if USE_MEMORY == false && self.absolute_row_idx == 0 && column == 0 {
+        //     panic!("debug");
+        // }
+
         if USE_MEMORY {
             debug_assert!(column < self.memory_rows_starts.len());
             unsafe {
@@ -222,6 +234,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
         column: usize,
         value: bool,
     ) {
+        // if USE_MEMORY == false && self.absolute_row_idx == 0 && column == 0 {
+        //     panic!("debug");
+        // }
+
         if USE_MEMORY {
             debug_assert!(column < self.memory_rows_starts.len());
             unsafe {
@@ -245,6 +261,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
         column: usize,
         value: F,
     ) {
+        // if USE_MEMORY == false && self.absolute_row_idx == 0 && column == 0 {
+        //     panic!("debug");
+        // }
+
         if USE_MEMORY {
             debug_assert!(column < self.memory_rows_starts.len());
             unsafe {
