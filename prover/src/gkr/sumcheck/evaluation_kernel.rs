@@ -22,6 +22,10 @@ pub trait BatchGKRRelation<F: PrimeField, E: FieldExtension<F> + PrimeField> {
     ) -> Self::NextSteps<'a>;
 }
 
+pub struct EvaluationQuasiPtr<T: Send + Sync>(pub *mut T);
+
+unsafe impl<T: Send + Sync> Send for EvaluationQuasiPtr<T> {}
+
 pub trait BatchGKREvaluationKernel<F: PrimeField, E: FieldExtension<F> + PrimeField> {
     fn evaluate_in_batched_mode(
         &mut self,

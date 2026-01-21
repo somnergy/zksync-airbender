@@ -1,7 +1,9 @@
 use field::PrimeField;
 use std::mem::MaybeUninit;
 
+pub mod access_and_fold;
 pub mod evaluation_kernel;
+pub mod evaluation_kernels;
 pub mod storage;
 
 // for notations: if we have a poly p(x0, x1, x2, x3, ...) then x0 is the most signinicant bit in the
