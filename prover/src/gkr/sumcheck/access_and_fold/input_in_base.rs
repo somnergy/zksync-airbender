@@ -1,0 +1,221 @@
+use super::*;
+
+pub struct BaseFieldPoly<F: PrimeField>{
+    values: Box<[F]>,
+}
+
+pub struct BaseFieldPolySource<F: PrimeField> {
+    start: *mut F,
+    next_layer_size: usize,
+}
+
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationFormStorage<F, E, BaseFieldRepresentation<F>> for BaseFieldPolySource<F> {
+    fn dummy() -> Self {
+        Self {
+            start: null_mut(),
+            next_layer_size: 0,
+        }
+    }
+    #[inline(always)]
+    fn get_collapse_context(&self) -> &<BaseFieldRepresentation<F> as EvaluationRepresentation<F, E>>::CollapseContext {
+        &()
+    }
+    #[inline(always)]
+    fn get_f0_and_f1_minus_f0(&self, index: usize) -> [BaseFieldRepresentation<F>; 2] {
+        debug_assert!(index < self.next_layer_size);
+        unsafe {
+            let f0 = self.start.add(index).read();
+            let mut f1_minus_f0 = self.start.add(self.next_layer_size + index).read();
+            f1_minus_f0.sub_assign(&f0);
+
+            [BaseFieldRepresentation(f0), BaseFieldRepresentation(f1_minus_f0)]
+        }
+    }
+}
+
+pub struct BaseFieldPolySourceAfterOneFolding<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+    base_input_start: *mut F,
+    base_layer_half_size: usize,
+    next_layer_size: usize,
+    first_folding_challenge_and_squared: (E, E),
+}
+
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationFormStorage<F, E, BaseFieldFoldedOnceRepresentation<F>> for BaseFieldPolySourceAfterOneFolding<F, E> {
+    fn dummy() -> Self {
+        Self {
+            base_input_start: null_mut(),
+            first_folding_challenge_and_squared: (E::ZERO, E::ZERO),
+            base_layer_half_size: 0,
+            next_layer_size: 0,
+        }
+    }
+    #[inline(always)]
+    fn get_collapse_context(&self) -> &<BaseFieldFoldedOnceRepresentation<F> as EvaluationRepresentation<F, E>>::CollapseContext {
+        &self.first_folding_challenge_and_squared
+    }
+    #[inline(always)]
+    fn get_f0_and_f1_minus_f0(&self, index: usize) -> [BaseFieldFoldedOnceRepresentation<F>; 2] {
+        // our representation is "lazy" - it is a poly over `r` with coefficients f'(X) = (f(0, X), f(1, X) - f(0, X)).
+        // Now we need to output:
+        // - f'(0, Y) = (f(0, 0, Y), f(1, 0, Y) - f(0, 0, Y))
+        // - f'(1, Y) - f'(0, Y) = (f(0, 1, Y) - f(0, 0, Y),  f(1, 1, Y) - f(0, 1, Y) - (f(1, 0, Y) - f(0, 0, Y)))
+        // we take a decision to trade memory consumption for speed, and so we access input array at 4 values and recompute
+        debug_assert!(index < self.next_layer_size);
+        unsafe {
+            // we take computation 
+            let f00 = self.base_input_start.add(index).read();
+            let f01 = self.base_input_start.add(self.next_layer_size + index).read();
+            let f10 = self.base_input_start.add(self.base_layer_half_size + index).read();
+            let f11 = self.base_input_start.add(self.base_layer_half_size + self.next_layer_size + index).read();
+            let f0_c0 = f00;
+            let mut f0_c1 = f10;
+            f0_c1.sub_assign(&f00);
+
+            let mut f1_c0 = f01;
+            f1_c0.sub_assign(&f00);
+            let mut f1_c1 = f11;
+            f1_c1.sub_assign(&f01);
+            f1_c1.sub_assign(&f0_c0);
+
+            [BaseFieldFoldedOnceRepresentation::new(f0_c0, f0_c1), BaseFieldFoldedOnceRepresentation::new(f1_c0, f1_c1)]
+        }
+    }
+}
+
+pub struct BaseFieldPolyIntermediateFoldingStorage<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+    continuous_buffer: Box<[MaybeUninit<E>]>,
+    size_after_two_folds: usize,
+    _marker: core::marker::PhantomData<F>,
+}
+
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField> BaseFieldPolyIntermediateFoldingStorage<F, E> {
+    pub fn new_for_base_poly_size(base_poly_size: usize) -> Self {
+        assert!(base_poly_size.is_power_of_two());
+        assert!(base_poly_size > 4);
+        let size_after_two_folds = base_poly_size / 4;
+        let buffer_size = size_after_two_folds * 2; // coarse
+        let continuous_buffer = Box::new_uninit_slice(buffer_size);
+        Self {
+            continuous_buffer,
+            size_after_two_folds,
+            _marker: core::marker::PhantomData
+        }
+    }
+
+    pub fn pointers_for_sumcheck_accessor_step(&mut self, step: usize) -> (*mut E, *mut E) {
+        unsafe {
+            assert!(step >= 2);
+            let mut input_offset = self.continuous_buffer.as_mut_ptr();
+            let mut input_size = self.size_after_two_folds;
+            let mut next_step_offset = input_offset.add(input_size);
+            for _ in 2..step {
+                input_offset = next_step_offset;
+                input_size /= 2;
+                next_step_offset = next_step_offset.add(input_size);
+                
+            }
+
+            (input_offset.cast(), next_step_offset.cast())
+        }
+    }
+
+}
+
+pub struct BaseFieldPolySourceTwoFoldings<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+    base_input_start: *mut F,
+    this_layer_cache_start: *mut E,
+    next_layer_start: *mut E,
+    base_layer_half_size: usize,
+    base_quarter_size: usize,
+    next_layer_size: usize,
+    first_folding_challenge: E,
+    second_folding_challenge: E,
+    first_access: bool,
+}
+
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationFormStorage<F, E, ExtensionFieldRepresentation<F, E>> for BaseFieldPolySourceTwoFoldings<F, E> {
+    fn dummy() -> Self {
+        Self {
+            base_input_start: null_mut(),
+            this_layer_cache_start: null_mut(),
+            next_layer_start: null_mut(),
+            base_layer_half_size: 0,
+            base_quarter_size: 0,
+            next_layer_size: 0,
+            first_folding_challenge: E::ZERO,
+            second_folding_challenge: E::ZERO,
+            first_access: false,
+        }
+    }
+    #[inline(always)]
+    fn get_collapse_context(&self) -> &<ExtensionFieldRepresentation<F, E> as EvaluationRepresentation<F, E>>::CollapseContext {
+        &()
+    }
+    #[inline(always)]
+    fn get_f0_and_f1_minus_f0(&self, index: usize) -> [ExtensionFieldRepresentation<F, E>; 2] {
+        // our representation is "lazy" - it is a poly over `r` with coefficients f'(X) = (f(0, X), f(1, X) - f(0, X)).
+        // Now we need to output:
+        // - f'(0, Y) = (f(0, 0, Y), f(1, 0, Y) - f(0, 0, Y))
+        // - f'(1, Y) - f'(0, Y) = (f(0, 1, Y) - f(0, 0, Y),  f(1, 1, Y) - f(0, 1, Y) - (f(1, 0, Y) - f(0, 0, Y)))
+        // we take a decision to trade memory consumption for speed, and so we access input array at 4 values and recompute
+        debug_assert!(index < self.next_layer_size);
+        unsafe {
+            if self.first_access {
+                let t = [index, index + self.next_layer_size].map(|index| {
+                        // we take computation 
+                        let f00 = self.base_input_start.add(index).read();
+                        let f01 = self.base_input_start.add(self.base_quarter_size + index).read();
+                        let f10 = self.base_input_start.add(self.base_layer_half_size + index).read();
+                        let f11 = self.base_input_start.add(self.base_layer_half_size + self.base_quarter_size + index).read();
+                        let f0_c0 = f00;
+                        let mut f0_c1 = f10;
+                        f0_c1.sub_assign(&f00);
+
+                        let mut f1_c0 = f01;
+                        f1_c0.sub_assign(&f00);
+                        let mut f1_c1 = f11;
+                        f1_c1.sub_assign(&f01);
+                        f1_c1.sub_assign(&f0_c0);
+
+                        let mut f0 = self.first_folding_challenge;
+                        f0.mul_assign_by_base(&f0_c1);
+                        f0.add_assign_base(&f0_c0);
+
+                        let mut f1_minus_f0 = self.first_folding_challenge;
+                        f1_minus_f0.mul_assign_by_base(&f1_c1);
+                        f1_minus_f0.add_assign_base(&f1_c0);
+
+                        (f0, f1_minus_f0)
+                });
+                let [f0, f1] = t.map(|(f0, f1_minus_f0)| {
+                    let mut result = self.second_folding_challenge;
+                    result.mul_assign(&f1_minus_f0);
+                    result.sub_assign(&f0);
+
+                    result
+                });
+
+                // we do not want to recompute f0 and f1, so we want to memorize f0, and write f1 - f0 into next poly cache
+                self.this_layer_cache_start.add(index).write(f0);
+                self.this_layer_cache_start.add(self.next_layer_size + index).write(f1);
+
+                let mut f1_minus_f0 = f1;
+                f1_minus_f0.sub_assign(&f0);
+
+                self.next_layer_start.add(index).write(f1_minus_f0);
+                [
+                    ExtensionFieldRepresentation {value: f0, _marker: core::marker::PhantomData },
+                    ExtensionFieldRepresentation {value: f1_minus_f0, _marker: core::marker::PhantomData }
+                ]
+            } else {
+                let f0 = self.this_layer_cache_start.add(index).read();
+                let f1_minus_f0 = self.next_layer_start.add(index).read();
+
+                [
+                    ExtensionFieldRepresentation {value: f0, _marker: core::marker::PhantomData },
+                    ExtensionFieldRepresentation {value: f1_minus_f0, _marker: core::marker::PhantomData }
+                ]
+            }
+        }
+    }
+}

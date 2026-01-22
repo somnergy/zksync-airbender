@@ -25,15 +25,15 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<
         F::ZERO
     }
     #[inline(always)]
-    fn collapse_for_batch_eval(self, ctx: &Self::CollapseContext, challenge: &E) -> E {
+    fn collapse_for_batch_eval(self, _ctx: &Self::CollapseContext, _challenge: &E) -> E {
         E::ZERO
     }
     #[inline(always)]
-    fn repr_add_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, other: &Self) {}
+    fn repr_add_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, _other: &Self) {}
     #[inline(always)]
-    fn repr_sub_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, other: &Self) {}
+    fn repr_sub_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, _other: &Self) {}
     #[inline(always)]
-    fn repr_mul_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, other: &Self) {}
+    fn repr_mul_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, _other: &Self) {}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -191,6 +191,7 @@ pub trait EvaluationFormStorage<
     R: EvaluationRepresentation<F, E>,
 >
 {
+    fn dummy() -> Self;
     fn get_collapse_context(&self) -> &R::CollapseContext;
     fn get_f0_and_f1_minus_f0(&self, index: usize) -> [R; 2];
 }
@@ -198,6 +199,9 @@ pub trait EvaluationFormStorage<
 impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R: EvaluationRepresentation<F, E>>
     EvaluationFormStorage<F, E, R> for ()
 {
+    fn dummy() -> Self {
+        ()
+    }
     #[inline(always)]
     fn get_collapse_context(&self) -> &R::CollapseContext {
         unreachable!()
@@ -228,8 +232,8 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> SumcheckAccumulatorDst<F,
 pub trait BatchSumcheckEvaluationKernel<
     F: PrimeField,
     E: FieldExtension<F> + PrimeField,
-    R0: EvaluationRepresentation<F, E>,
-    R1: EvaluationRepresentation<F, E>,
+    R0: EvaluationRepresentation<F, E>, // inputs in the base field at the first sumcheck step
+    R1: EvaluationRepresentation<F, E>, // inputs already in the extension field at the first sumcheck step
 >
 {
     fn evaluate<

@@ -12,27 +12,27 @@ pub struct SameSizeProductGKRRelation {
 pub struct SameSizeProductGKRRelationKernel<
     F: PrimeField,
     E: FieldExtension<F> + PrimeField,
-    R0: EvaluationRepresentation<F, E>,
+    R: EvaluationRepresentation<F, E>,
 > {
-    _marker: core::marker::PhantomData<(F, E, R0)>,
+    _marker: core::marker::PhantomData<(F, E, R)>,
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R0: EvaluationRepresentation<F, E>>
-    BatchSumcheckEvaluationKernel<F, E, R0, ()> for SameSizeProductGKRRelationKernel<F, E, R0>
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R: EvaluationRepresentation<F, E>>
+    BatchSumcheckEvaluationKernel<F, E, (), R> for SameSizeProductGKRRelationKernel<F, E, R>
 {
     fn evaluate<
-        S0: EvaluationFormStorage<F, E, R0>,
-        S1: EvaluationFormStorage<F, E, ()>,
+        S0: EvaluationFormStorage<F, E, ()>,
+        S1: EvaluationFormStorage<F, E, R>,
         const FIRST_ROUND: bool,
     >(
         &self,
         index: usize,
-        r0_sources: &[S0],
+        _r0_sources: &[S0],
         r1_sources: &[S1],
         batch_challenge: &E,
     ) -> [E; 2] {
         unsafe {
-            let [lhs, rhs] = r0_sources
+            let [lhs, rhs] = r1_sources
                 .as_chunks::<2>()
                 .0
                 .iter()

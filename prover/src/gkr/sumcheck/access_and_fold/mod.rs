@@ -1,6 +1,29 @@
-use std::mem::MaybeUninit;
+use std::ptr::null_mut;
+use std::{collections::BTreeMap, mem::MaybeUninit};
 
+use cs::definitions::GKRAddress;
 use field::{FieldExtension, PrimeField};
+use crate::gkr::sumcheck::evaluation_kernels::BaseFieldRepresentation;
+use crate::gkr::sumcheck::evaluation_kernels::EvaluationFormStorage;
+use crate::gkr::sumcheck::evaluation_kernels::EvaluationRepresentation;
+use crate::gkr::sumcheck::evaluation_kernels::BaseFieldFoldedOnceRepresentation;
+use crate::gkr::sumcheck::evaluation_kernels::ExtensionFieldRepresentation;
+
+pub mod input_in_base;
+
+pub use self::input_in_base::*;
+
+pub struct GKRLayerSource<F: PrimeField, E: FieldExtension<F> + PrimeField>{
+    pub layer_idx: usize,
+    pub base_field_inputs: BTreeMap<GKRAddress, BaseFieldPoly<F>>,
+    pub extension_field_inputs: BTreeMap<GKRAddress, ExtensionFieldPoly<F, E>>,
+    pub intermediate_storage_for_folder_base_field_inputs: BTreeMap<GKRAddress, BaseFieldPolyIntermediateFoldingStorage<F, E>>,
+}
+
+pub struct ExtensionFieldPoly<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+    values: Box<[E]>,
+    _marker: core::marker::PhantomData<F>,
+}
 
 // when we will perform sumchecks, we need temporary storage for folded versions. We assume same size of such
 // "scratch space" for both the case if input poly is in the base field, or is in the extension,

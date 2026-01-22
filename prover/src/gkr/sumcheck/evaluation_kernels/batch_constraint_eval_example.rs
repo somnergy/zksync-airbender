@@ -95,18 +95,18 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R0: EvaluationRepresentat
     }
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R0: EvaluationRepresentation<F, E>>
-    BatchSumcheckEvaluationKernel<F, E, R0, ()> for BatchConstraintEvalGKRRelationKernel<F, E, R0>
+impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R: EvaluationRepresentation<F, E>>
+    BatchSumcheckEvaluationKernel<F, E, R, ()> for BatchConstraintEvalGKRRelationKernel<F, E, R>
 {
     fn evaluate<
-        S0: EvaluationFormStorage<F, E, R0>,
+        S0: EvaluationFormStorage<F, E, R>,
         S1: EvaluationFormStorage<F, E, ()>,
         const FIRST_ROUND: bool,
     >(
         &self,
         index: usize,
         r0_sources: &[S0],
-        r1_sources: &[S1],
+        _r1_sources: &[S1],
         batch_challenge: &E,
     ) -> [E; 2] {
         unsafe {
