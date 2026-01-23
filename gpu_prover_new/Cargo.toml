@@ -1,0 +1,33 @@
+[package]
+name = "gpu_prover_new"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+build = "build/main.rs"
+
+[dependencies]
+field = { workspace = true }
+
+era_cudart = "0.154"
+era_cudart_sys = "0.154"
+
+[build-dependencies]
+cmake = "0.1"
+era_cudart_sys = "0.154"
+
+[dev-dependencies]
+env_logger = "0.11"
+era_criterion_cuda = "0.2"
+criterion = "0.5"
+itertools = "0.14"
+rand = "0.9"
+serial_test = "3"
+
+[[bench]]
+name = "field"
+harness = false
