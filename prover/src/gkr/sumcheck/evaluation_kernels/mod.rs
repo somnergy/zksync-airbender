@@ -1,14 +1,16 @@
+use std::collections::BTreeMap;
+
 use crate::gkr::sumcheck::access_and_fold::GKRStorage;
 use cs::definitions::GKRAddress;
-use field::{FieldExtension, PrimeField};
+use field::{Field, FieldExtension, PrimeField};
 pub mod batch_constraint_eval_example;
 pub mod trivial_product_in_extension;
 
-pub trait EvaluationRepresentation<F: PrimeField, E: FieldExtension<F> + PrimeField>:
+pub trait EvaluationRepresentation<F: PrimeField, E: FieldExtension<F> + Field>:
     'static + Clone + Copy + core::fmt::Debug + Send + Sync
 {
     type CollapseContext: 'static + Clone + Copy + core::fmt::Debug + Send + Sync;
-    type CollapsedForm: PrimeField;
+    type CollapsedForm: Field;
     fn collapse(self, ctx: &Self::CollapseContext) -> Self::CollapsedForm;
 
     fn collapse_for_batch_eval(self, ctx: &Self::CollapseContext, challenge: &E) -> E;
@@ -18,7 +20,7 @@ pub trait EvaluationRepresentation<F: PrimeField, E: FieldExtension<F> + PrimeFi
     fn repr_mul_assign<const ASSUME_NO_PRODUCTS_BEFORE: bool>(&mut self, other: &Self);
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<F, E> for () {
+impl<F: PrimeField, E: FieldExtension<F> + Field> EvaluationRepresentation<F, E> for () {
     type CollapseContext = ();
     type CollapsedForm = F;
     #[inline(always)]
@@ -40,7 +42,7 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<
 #[derive(Clone, Copy, Debug)]
 pub struct BaseFieldRepresentation<F: PrimeField>(pub(crate) F);
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<F, E>
+impl<F: PrimeField, E: FieldExtension<F> + Field> EvaluationRepresentation<F, E>
     for BaseFieldRepresentation<F>
 {
     type CollapseContext = ();
@@ -87,7 +89,7 @@ impl<F: PrimeField> BaseFieldFoldedOnceRepresentation<F> {
     }
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<F, E>
+impl<F: PrimeField, E: FieldExtension<F> + Field> EvaluationRepresentation<F, E>
     for BaseFieldFoldedOnceRepresentation<F>
 {
     type CollapseContext = (E, E);
@@ -142,12 +144,12 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ExtensionFieldRepresentation<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+pub struct ExtensionFieldRepresentation<F: PrimeField, E: FieldExtension<F> + Field> {
     pub(crate) value: E,
     pub(crate) _marker: core::marker::PhantomData<F>,
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> ExtensionFieldRepresentation<F, E> {
+impl<F: PrimeField, E: FieldExtension<F> + Field> ExtensionFieldRepresentation<F, E> {
     #[inline(always)]
     pub fn new(value: E) -> Self {
         Self {
@@ -155,9 +157,13 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> ExtensionFieldRepresentat
             _marker: core::marker::PhantomData,
         }
     }
+    #[inline(always)]
+    pub fn into_value(self) -> E {
+        self.value
+    }
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<F, E>
+impl<F: PrimeField, E: FieldExtension<F> + Field> EvaluationRepresentation<F, E>
     for ExtensionFieldRepresentation<F, E>
 {
     type CollapseContext = ();
@@ -188,22 +194,39 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> EvaluationRepresentation<
 
 pub trait EvaluationFormStorage<
     F: PrimeField,
-    E: FieldExtension<F> + PrimeField,
+    E: FieldExtension<F> + Field,
     R: EvaluationRepresentation<F, E>,
 >
 {
     fn dummy() -> Self;
     fn get_collapse_context(&self) -> &R::CollapseContext;
+    #[inline(always)]
     fn get_f0_only(&self, index: usize) -> R {
         self.get_f0_and_f1_minus_f0(index)[0]
     }
+    #[inline(always)]
     fn get_f1_minus_f0_only(&self, index: usize) -> R {
         self.get_f0_and_f1_minus_f0(index)[1]
     }
-    fn get_f0_and_f1_minus_f0(&self, index: usize) -> [R; 2];
+    fn get_f0_and_f1(&self, index: usize) -> [R; 2];
+    #[inline(always)]
+    fn get_f0_and_f1_minus_f0(&self, index: usize) -> [R; 2] {
+        let [f0, mut f1_minus_f0] = self.get_f0_and_f1(index);
+        f1_minus_f0.repr_sub_assign::<true>(&f0);
+
+        [f0, f1_minus_f0]
+    }
+    #[inline(always)]
+    fn get_two_points<const EXPLICIT_FORM: bool>(&self, index: usize) -> [R; 2] {
+        if EXPLICIT_FORM {
+            self.get_f0_and_f1(index)
+        } else {
+            self.get_f0_and_f1_minus_f0(index)
+        }
+    }
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R: EvaluationRepresentation<F, E>>
+impl<F: PrimeField, E: FieldExtension<F> + Field, R: EvaluationRepresentation<F, E>>
     EvaluationFormStorage<F, E, R> for ()
 {
     fn dummy() -> Self {
@@ -214,32 +237,26 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField, R: EvaluationRepresentati
         unreachable!()
     }
     #[inline(always)]
-    fn get_f0_and_f1_minus_f0(&self, _index: usize) -> [R; 2] {
+    fn get_f0_and_f1(&self, _index: usize) -> [R; 2] {
         unreachable!()
     }
 }
 
-pub struct SumcheckAccumulatorDst<F: PrimeField, E: FieldExtension<F> + PrimeField> {
-    pub(crate) dest: *mut [E; 2],
-    pub(crate) _marker: core::marker::PhantomData<F>,
-}
+// pub struct SumcheckAccumulatorDst<F: PrimeField, E: FieldExtension<F> + Field> {
+//     pub(crate) dest: *mut [E; 2],
+//     pub(crate) _marker: core::marker::PhantomData<F>,
+// }
 
-unsafe impl<F: PrimeField, E: FieldExtension<F> + PrimeField> Send
-    for SumcheckAccumulatorDst<F, E>
-{
-}
+// unsafe impl<F: PrimeField, E: FieldExtension<F> + Field> Send for SumcheckAccumulatorDst<F, E> {}
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> SumcheckAccumulatorDst<F, E> {
-    #[inline(always)]
-    pub(crate) fn get_dst(&self, index: usize) -> &mut [E; 2] {
-        unsafe { self.dest.add(index).as_mut_unchecked() }
-    }
-}
+// impl<F: PrimeField, E: FieldExtension<F> + Field> SumcheckAccumulatorDst<F, E> {
+//     #[inline(always)]
+//     pub(crate) fn get_dst(&self, index: usize) -> &mut [E; 2] {
+//         unsafe { self.dest.add(index).as_mut_unchecked() }
+//     }
+// }
 
-pub trait SingleInputTypeBatchSumcheckEvaluationKernel<
-    F: PrimeField,
-    E: FieldExtension<F> + PrimeField,
->
+pub trait SingleInputTypeBatchSumcheckEvaluationKernel<F: PrimeField, E: FieldExtension<F> + Field>
 {
     fn evaluate_first_round<
         R0: EvaluationRepresentation<F, E>,
@@ -250,13 +267,17 @@ pub trait SingleInputTypeBatchSumcheckEvaluationKernel<
         &self,
         index: usize,
         r0_sources: &[S0],
-        output_sources: &[SOUT],
+        _output_sources: &[SOUT],
         batch_challenge: &E,
     ) -> [E; 2] {
-        self.evaluate::<R0, S0>(index, r0_sources, batch_challenge)
+        self.evaluate::<R0, S0, false>(index, r0_sources, batch_challenge)
     }
 
-    fn evaluate<R0: EvaluationRepresentation<F, E>, S0: EvaluationFormStorage<F, E, R0>>(
+    fn evaluate<
+        R0: EvaluationRepresentation<F, E>,
+        S0: EvaluationFormStorage<F, E, R0>,
+        const EXPLICIT_FORM: bool,
+    >(
         &self,
         index: usize,
         r0_sources: &[S0],
@@ -264,11 +285,7 @@ pub trait SingleInputTypeBatchSumcheckEvaluationKernel<
     ) -> [E; 2];
 }
 
-pub trait TwoInputTypesBatchSumcheckEvaluationKernel<
-    F: PrimeField,
-    E: FieldExtension<F> + PrimeField,
->
-{
+pub trait TwoInputTypesBatchSumcheckEvaluationKernel<F: PrimeField, E: FieldExtension<F> + Field> {
     fn evaluate_first_round<
         R0: EvaluationRepresentation<F, E>,
         S0: EvaluationFormStorage<F, E, R0>,
@@ -284,7 +301,7 @@ pub trait TwoInputTypesBatchSumcheckEvaluationKernel<
         _output_sources: &[SOUT],
         batch_challenge: &E,
     ) -> [E; 2] {
-        self.evaluate::<R0, S0, R1, S1>(index, r0_sources, r1_sources, batch_challenge)
+        self.evaluate::<R0, S0, R1, S1, false>(index, r0_sources, r1_sources, batch_challenge)
     }
 
     fn evaluate<
@@ -292,6 +309,7 @@ pub trait TwoInputTypesBatchSumcheckEvaluationKernel<
         S0: EvaluationFormStorage<F, E, R0>,
         R1: EvaluationRepresentation<F, E>,
         S1: EvaluationFormStorage<F, E, R1>,
+        const EXPLICIT_FORM: bool,
     >(
         &self,
         index: usize,
@@ -301,14 +319,15 @@ pub trait TwoInputTypesBatchSumcheckEvaluationKernel<
     ) -> [E; 2];
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct GKRInputs {
-    inputs_in_base: Vec<GKRAddress>,
-    inputs_in_extension: Vec<GKRAddress>,
-    outputs_in_base: Vec<GKRAddress>,
-    outputs_in_extension: Vec<GKRAddress>,
+    pub inputs_in_base: Vec<GKRAddress>,
+    pub inputs_in_extension: Vec<GKRAddress>,
+    pub outputs_in_base: Vec<GKRAddress>,
+    pub outputs_in_extension: Vec<GKRAddress>,
 }
 
-pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + Field> {
     fn get_inputs(&self) -> GKRInputs;
     fn evaluate_over_storage(
         &self,
@@ -317,12 +336,14 @@ pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + PrimeField> {
         batch_challenge: &E,
         folding_challenges: &[E],
         accumulator: &mut [[E; 2]],
+        total_sumcheck_rounds: usize,
+        last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
     );
 }
 
 pub fn evaluate_single_input_kernel_with_base_inputs<
     F: PrimeField,
-    E: FieldExtension<F> + PrimeField,
+    E: FieldExtension<F> + Field,
     K: SingleInputTypeBatchSumcheckEvaluationKernel<F, E>,
 >(
     kernel: &K,
@@ -332,6 +353,8 @@ pub fn evaluate_single_input_kernel_with_base_inputs<
     batch_challenge: &E,
     folding_challenges: &[E],
     accumulator: &mut [[E; 2]],
+    total_sumcheck_rounds: usize,
+    last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
 ) {
     // parallelize eventually
     match step {
@@ -364,20 +387,29 @@ pub fn evaluate_single_input_kernel_with_base_inputs<
                 }
             } else {
                 for index in 0..accumulator.len() {
-                    let value =
-                        kernel.evaluate::<_, _>(index, &sources.base_field_inputs, batch_challenge);
+                    let value = kernel.evaluate::<_, _, false>(
+                        index,
+                        &sources.base_field_inputs,
+                        batch_challenge,
+                    );
                     for i in 0..2 {
                         accumulator[index][i].add_assign(&value[i]);
                     }
                 }
             }
         }
+        i if i + 1 == total_sumcheck_rounds => {
+            todo!();
+        }
         1 => {
             let sources = storage.select_for_second_round(inputs, folding_challenges);
             assert!(sources.base_field_inputs.is_empty());
             for index in 0..accumulator.len() {
-                let value =
-                    kernel.evaluate::<_, _>(index, &sources.base_field_inputs, batch_challenge);
+                let value = kernel.evaluate::<_, _, false>(
+                    index,
+                    &sources.base_field_inputs,
+                    batch_challenge,
+                );
                 for i in 0..2 {
                     accumulator[index][i].add_assign(&value[i]);
                 }
@@ -394,7 +426,7 @@ pub fn evaluate_single_input_kernel_with_base_inputs<
 
 pub fn evaluate_single_input_kernel_with_extension_inputs<
     F: PrimeField,
-    E: FieldExtension<F> + PrimeField,
+    E: FieldExtension<F> + Field,
     K: SingleInputTypeBatchSumcheckEvaluationKernel<F, E>,
 >(
     kernel: &K,
@@ -404,6 +436,8 @@ pub fn evaluate_single_input_kernel_with_extension_inputs<
     batch_challenge: &E,
     folding_challenges: &[E],
     accumulator: &mut [[E; 2]],
+    total_sumcheck_rounds: usize,
+    last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
 ) {
     // parallelize eventually
     match step {
@@ -425,7 +459,7 @@ pub fn evaluate_single_input_kernel_with_extension_inputs<
                 }
             } else {
                 for index in 0..accumulator.len() {
-                    let value = kernel.evaluate::<_, _>(
+                    let value = kernel.evaluate::<_, _, false>(
                         index,
                         &sources.extension_field_inputs,
                         batch_challenge,
@@ -435,12 +469,18 @@ pub fn evaluate_single_input_kernel_with_extension_inputs<
                     }
                 }
             }
+            // for input in sources.extension_field_inputs.iter() {
+            //     dbg!(input.current_values());
+            // }
+            // for output in sources.extension_field_outputs.iter() {
+            //     dbg!(output.current_values());
+            // }
         }
-        1.. => {
+        i if i + 1 == total_sumcheck_rounds => {
             let sources = storage.select_for_second_round(inputs, folding_challenges);
             assert!(sources.base_field_inputs.is_empty());
             for index in 0..accumulator.len() {
-                let value = kernel.evaluate::<_, _>(
+                let value = kernel.evaluate::<_, _, true>(
                     index,
                     &sources.extension_field_inputs,
                     batch_challenge,
@@ -449,12 +489,32 @@ pub fn evaluate_single_input_kernel_with_extension_inputs<
                     accumulator[index][i].add_assign(&value[i]);
                 }
             }
+            println!("COLLECTING LAST LAYER VALUES");
+
+            for source in sources.extension_field_inputs.iter() {
+                dbg!(source.current_values());
+            }
+
+            // Fill the storage
+            sources.collect_last_values(inputs, last_evaluations);
         }
-        2 => {
-            todo!()
-        }
-        3.. => {
-            todo!()
+        1.. => {
+            let sources = storage.select_for_second_round(inputs, folding_challenges);
+            assert!(sources.base_field_inputs.is_empty());
+            for index in 0..accumulator.len() {
+                let value = kernel.evaluate::<_, _, false>(
+                    index,
+                    &sources.extension_field_inputs,
+                    batch_challenge,
+                );
+                for i in 0..2 {
+                    accumulator[index][i].add_assign(&value[i]);
+                }
+            }
+            for source in sources.extension_field_inputs.iter() {
+                dbg!(source.previous_values());
+                dbg!(source.current_values());
+            }
         }
     }
 }

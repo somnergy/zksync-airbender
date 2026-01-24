@@ -1,0 +1,3 @@
+[evn]
+RUST_MIN_STACK = 100000000
+

@@ -9,13 +9,13 @@ pub struct SameSizeProductGKRRelation {
     pub output: GKRAddress,
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField> BatchedGKRKernel<F, E>
+impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
     for SameSizeProductGKRRelation
 {
     fn get_inputs(&self) -> GKRInputs {
         GKRInputs {
-            inputs_in_base: self.inputs.to_vec(),
-            inputs_in_extension: Vec::new(),
+            inputs_in_base: Vec::new(),
+            inputs_in_extension: self.inputs.to_vec(),
             outputs_in_base: Vec::new(),
             outputs_in_extension: vec![self.output],
         }
@@ -28,6 +28,8 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> BatchedGKRKernel<F, E>
         batch_challenge: &E,
         folding_challenges: &[E],
         accumulator: &mut [[E; 2]],
+        total_sumcheck_rounds: usize,
+        last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
     ) {
         let kernel = SameSizeProductGKRRelationKernel {
             _marker: core::marker::PhantomData,
@@ -41,17 +43,19 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField> BatchedGKRKernel<F, E>
             batch_challenge,
             folding_challenges,
             accumulator,
+            total_sumcheck_rounds,
+            last_evaluations,
         );
     }
 }
 
 // Assumes reordering of access implementors, to have lhs at 0 and rhs at 1
-pub struct SameSizeProductGKRRelationKernel<F: PrimeField, E: FieldExtension<F> + PrimeField> {
+pub struct SameSizeProductGKRRelationKernel<F: PrimeField, E: FieldExtension<F> + Field> {
     _marker: core::marker::PhantomData<(F, E)>,
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
-    SingleInputTypeBatchSumcheckEvaluationKernel<F, E> for SameSizeProductGKRRelationKernel<F, E>
+impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEvaluationKernel<F, E>
+    for SameSizeProductGKRRelationKernel<F, E>
 {
     fn evaluate_first_round<
         R0: EvaluationRepresentation<F, E>,
@@ -93,7 +97,11 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
         }
     }
 
-    fn evaluate<R0: EvaluationRepresentation<F, E>, S0: EvaluationFormStorage<F, E, R0>>(
+    fn evaluate<
+        R0: EvaluationRepresentation<F, E>,
+        S0: EvaluationFormStorage<F, E, R0>,
+        const EXPLICIT_FORM: bool,
+    >(
         &self,
         index: usize,
         r0_sources: &[S0],
@@ -107,8 +115,8 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
                 .next()
                 .unwrap_unchecked();
             let ctx = lhs.get_collapse_context();
-            let lhs = lhs.get_f0_and_f1_minus_f0(index);
-            let rhs = rhs.get_f0_and_f1_minus_f0(index);
+            let lhs = lhs.get_two_points::<EXPLICIT_FORM>(index);
+            let rhs = rhs.get_two_points::<EXPLICIT_FORM>(index);
             let mut result = [const { MaybeUninit::uninit() }; 2];
             for i in 0..2 {
                 let mut product = lhs[i];

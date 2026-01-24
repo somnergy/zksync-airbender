@@ -1,185 +1,129 @@
-use field::PrimeField;
+use field::{Field, FieldExtension, PrimeField};
 use std::mem::MaybeUninit;
 
 pub mod access_and_fold;
-pub mod evaluation_kernel;
+pub mod eq_poly;
 pub mod evaluation_kernels;
-pub mod storage;
+
+#[cfg(test)]
+mod tests;
 
 // for notations: if we have a poly p(x0, x1, x2, x3, ...) then x0 is the most signinicant bit in the
 // indexing of the array
 
-pub trait LazyPolyFolder<'a, F: PrimeField> {
-    type InputBuffer: Sized;
-    type Intermediate: Sized;
-    type NextStepLazyBuffer: Sized;
+pub fn output_univariate_monomial_form_max_quadratic<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+>(
+    folding_challenge_for_coordinate_form_previous_round: E,
+    previous_round_claim: E,
+    constant_coefficient_from_partial_sum: E,
+    quadratic_coefficient_from_partial_sum: E,
+) -> [E; 4] {
+    // part of the EQ poly that matches the coordiante being folded is (1 - prev_round) * (1 - X) + X * prev_round = X * (prev_round * 2 - 1) + (1 - prev_round)
 
-    fn construct(
-        input: Self::InputBuffer,
-        intermediate: Self::Intermediate,
-        next_step: Self::NextStepLazyBuffer,
-        repeated: bool,
-    ) -> Self;
+    let c = quadratic_coefficient_from_partial_sum;
+    let e = constant_coefficient_from_partial_sum;
 
-    fn get_intermediate_only(&mut self, index: usize) -> F {
-        self.get_triple(index).2
-    }
-    fn get_triple(&mut self, index: usize) -> (F, F, F);
-    fn size(&self) -> usize;
+    let mut b = E::ONE;
+    b.sub_assign(&folding_challenge_for_coordinate_form_previous_round);
+
+    let mut a = folding_challenge_for_coordinate_form_previous_round;
+    a.double();
+    a.sub_assign(&E::ONE);
+
+    let a_plus_b = folding_challenge_for_coordinate_form_previous_round;
+    let a_plus_b_inv = a_plus_b.inverse().expect("non-zero");
+
+    let mut be = b;
+    be.mul_assign(&e);
+
+    let mut d = previous_round_claim;
+    d.sub_assign(&be);
+    d.mul_assign(&a_plus_b_inv);
+    d.sub_assign(&c);
+    d.sub_assign(&e);
+
+    // and so we have (a * X + b) * (c * X^2 + d * X + e)
+
+    let c0 = be;
+
+    let c1 = {
+        let mut ae = a;
+        ae.mul_assign(&e);
+
+        let mut bd = b;
+        bd.mul_assign(&d);
+
+        let mut c1 = ae;
+        c1.add_assign(&bd);
+
+        c1
+    };
+
+    let c2 = {
+        let mut ad = a;
+        ad.mul_assign(&d);
+
+        let mut bc = b;
+        bc.mul_assign(&c);
+
+        let mut c2 = ad;
+        c2.add_assign(&bc);
+
+        c2
+    };
+
+    let mut c3 = a;
+    c3.mul_assign(&c);
+
+    [c0, c1, c2, c3]
 }
 
-pub struct FirstStepInExtensionLazyFolder<'a, F: PrimeField> {
-    input_evaluations: *const F,
-    next_step_buffer: *mut F,
-    half_size_offset: usize,
-    next_buffer_is_filled: bool,
-    _marker: core::marker::PhantomData<&'a ()>,
+pub fn evaluate_small_univariate_poly<F: PrimeField, E: FieldExtension<F> + Field>(
+    coeffs: &[E; 4],
+    point: &E,
+) -> E {
+    let mut result = coeffs[3];
+    for i in (0..3).rev() {
+        result.mul_assign(point);
+        result.add_assign(&coeffs[i]);
+    }
+    result
 }
 
-impl<'a, F: PrimeField> LazyPolyFolder<'a, F> for FirstStepInExtensionLazyFolder<'a, F> {
-    type InputBuffer = &'a [F];
-    type Intermediate = ();
-    type NextStepLazyBuffer = &'a mut [MaybeUninit<F>];
+#[inline(always)]
+pub fn evaluate_eq_poly_at_line<F: PrimeField, E: FieldExtension<F> + Field>(x: &E) -> [E; 2] {
+    let mut f0 = E::ONE;
+    f0.sub_assign(x);
 
-    fn construct(
-        input: Self::InputBuffer,
-        _intermediate: Self::Intermediate,
-        next_step: Self::NextStepLazyBuffer,
-        repeated: bool,
-    ) -> Self {
-        let size = input.len();
-        assert!(size.is_power_of_two());
-        let half_size_offset = size / 2;
-
-        Self {
-            input_evaluations: input.as_ptr(),
-            next_step_buffer: next_step.as_mut_ptr().cast(),
-            half_size_offset,
-            next_buffer_is_filled: repeated,
-            _marker: core::marker::PhantomData,
-        }
-    }
-
-    #[inline(always)]
-    fn get_triple(&mut self, index: usize) -> (F, F, F) {
-        debug_assert!(index < self.half_size_offset);
-        unsafe {
-            let f0 = self.input_evaluations.add(index).read();
-            let f1 = self
-                .input_evaluations
-                .add(self.half_size_offset + index)
-                .read();
-            let mut lazy_eval;
-            if self.next_buffer_is_filled {
-                lazy_eval = self.next_step_buffer.add(index).cast::<F>().read();
-            } else {
-                lazy_eval = f1;
-                lazy_eval.sub_assign(&f0);
-                self.next_step_buffer.add(index).write(lazy_eval);
-            }
-
-            (f0, f1, lazy_eval)
-        }
-    }
-
-    fn size(&self) -> usize {
-        self.half_size_offset * 2
-    }
+    [f0, *x]
 }
 
-pub struct NextStepsInExtensionLazyFolder<'a, F: PrimeField> {
-    previous_step_at_0_evaluations: *const F,
-    input_evaluations: *mut F,
-    next_step_buffer: *mut F,
-    half_size_offset: usize,
-    next_buffer_is_filled: bool,
-    folding_challenge: F,
-    _marker: core::marker::PhantomData<&'a ()>,
+pub fn evaluate_eq_poly<F: PrimeField, E: FieldExtension<F> + Field>(x: &E, y: &E) -> E {
+    let mut t0 = E::ONE;
+    t0.sub_assign(x);
+    let mut t1 = E::ONE;
+    t1.sub_assign(y);
+    t0.mul_assign(&t1);
+
+    let mut result = *x;
+    result.mul_assign(y);
+    result.add_assign(&t0);
+
+    result
 }
 
-impl<'a, F: PrimeField> LazyPolyFolder<'a, F> for NextStepsInExtensionLazyFolder<'a, F> {
-    type InputBuffer = (&'a mut [F], &'a [F]);
-    type Intermediate = F;
-    type NextStepLazyBuffer = &'a mut [MaybeUninit<F>];
-
-    fn construct(
-        input: Self::InputBuffer,
-        intermediate: Self::Intermediate,
-        next_step: Self::NextStepLazyBuffer,
-        repeated: bool,
-    ) -> Self {
-        let (this_step_lazy_buffer, previous_step_evals_at_0) = input;
-        let size = this_step_lazy_buffer.len();
-        assert!(size.is_power_of_two());
-        assert_eq!(size, previous_step_evals_at_0.len());
-        let half_size_offset = size / 2;
-
-        Self {
-            previous_step_at_0_evaluations: previous_step_evals_at_0.as_ptr(),
-            input_evaluations: this_step_lazy_buffer.as_mut_ptr(),
-            next_step_buffer: next_step.as_mut_ptr().cast(),
-            half_size_offset,
-            next_buffer_is_filled: repeated,
-            folding_challenge: intermediate,
-            _marker: core::marker::PhantomData,
-        }
+pub fn evaluate_multivariate_eq_poly<F: PrimeField, E: FieldExtension<F> + Field>(
+    x: &[E],
+    y: &[E],
+) -> E {
+    assert!(x.len() > 0);
+    assert_eq!(x.len(), y.len());
+    let mut result = evaluate_eq_poly::<F, E>(&x[0], &y[0]);
+    for i in 1..x.len() {
+        let t = evaluate_eq_poly::<F, E>(&x[i], &y[i]);
+        result.mul_assign(&t);
     }
-
-    #[inline(always)]
-    fn get_triple(&mut self, index: usize) -> (F, F, F) {
-        debug_assert!(index < self.half_size_offset);
-        unsafe {
-            if self.next_buffer_is_filled {
-                let f0 = self.input_evaluations.add(index).read();
-                let f1 = self
-                    .input_evaluations
-                    .add(self.half_size_offset + index)
-                    .read();
-                let lazy_eval = self.next_step_buffer.add(index).cast::<F>().read();
-                (f0, f1, lazy_eval)
-            } else {
-                // NOTE: in general we only need to materialize f0 for the next folding step, but
-                // as we do not yet differentiate if we will access this poly once or not, then we will also write down f(1) too for future
-                // repeated reads
-
-                // finish folding from the previous step. We expect f(1) - f(0) in the buffer, and need
-                // to finish computing f(0) + challenge * (f(1) - f(0))
-                let mut f0 = self.input_evaluations.add(index).cast::<F>().read();
-                f0.mul_assign(&self.folding_challenge);
-                f0.add_assign(
-                    self.previous_step_at_0_evaluations
-                        .add(index)
-                        .as_ref_unchecked(),
-                );
-                self.input_evaluations.add(index).write(f0);
-
-                let mut f1 = self
-                    .input_evaluations
-                    .add(self.half_size_offset + index)
-                    .cast::<F>()
-                    .read();
-                f1.mul_assign(&self.folding_challenge);
-                f1.add_assign(
-                    self.previous_step_at_0_evaluations
-                        .add(self.half_size_offset + index)
-                        .as_ref_unchecked(),
-                );
-                self.input_evaluations
-                    .add(self.half_size_offset + index)
-                    .write(f1);
-
-                let mut lazy_eval = f1;
-                lazy_eval.sub_assign(&f0);
-                self.next_step_buffer.add(index).write(lazy_eval);
-
-                (f0, f1, lazy_eval)
-            }
-        }
-    }
-
-    fn size(&self) -> usize {
-        self.half_size_offset * 2
-    }
+    result
 }
-
-// same ones would be needed for the case when we fold base layer poly

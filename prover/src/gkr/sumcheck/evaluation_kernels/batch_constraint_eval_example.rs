@@ -102,7 +102,11 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
         result
     }
 
-    fn evaluate<R0: EvaluationRepresentation<F, E>, S0: EvaluationFormStorage<F, E, R0>>(
+    fn evaluate<
+        R0: EvaluationRepresentation<F, E>,
+        S0: EvaluationFormStorage<F, E, R0>,
+        const EXPLICIT_FORM: bool,
+    >(
         &self,
         index: usize,
         r0_sources: &[S0],
@@ -111,8 +115,8 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
         let mut result = [E::ZERO; 2];
         let ctx = r0_sources[0].get_collapse_context();
         for ((a, b), challenge) in self.quadratic_parts.iter() {
-            let a = r0_sources[*a].get_f0_and_f1_minus_f0(index);
-            let b = r0_sources[*b].get_f0_and_f1_minus_f0(index);
+            let a = r0_sources[*a].get_two_points::<EXPLICIT_FORM>(index);
+            let b = r0_sources[*b].get_two_points::<EXPLICIT_FORM>(index);
             for i in 0..2 {
                 let mut t = a[i];
                 t.repr_mul_assign::<true>(&b[i]);
@@ -121,11 +125,13 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
             }
         }
         for (a, challenge) in self.linear_parts.iter() {
-            let a = r0_sources[*a].get_f0_and_f1_minus_f0(index);
+            let a = r0_sources[*a].get_f0_only(index);
             // and linear part doesn't contribute to quadratic coefficient
-            for i in 0..1 {
-                let contribution = a[i].collapse_for_batch_eval(ctx, challenge);
-                result[i].add_assign(&contribution);
+
+            // TODO: verify that it's also valid for the last explicit sumcheck round
+            {
+                let contribution = a.collapse_for_batch_eval(ctx, challenge);
+                result[0].add_assign(&contribution);
             }
         }
         result[0].mul_assign(batch_challenge);
