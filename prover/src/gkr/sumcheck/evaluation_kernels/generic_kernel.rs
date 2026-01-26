@@ -39,6 +39,11 @@ pub struct GKRInputs {
 pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + Field> {
     fn num_challenges(&self) -> usize;
     fn get_inputs(&self) -> GKRInputs;
+    fn evaluate_forward_over_storage(
+        &self,
+        storage: &mut GKRStorage<F, E>,
+        expected_output_layer: usize,
+    );
     fn evaluate_over_storage(
         &self,
         storage: &mut GKRStorage<F, E>,

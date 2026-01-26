@@ -25,6 +25,14 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         }
     }
 
+    fn evaluate_forward_over_storage(
+        &self,
+        storage: &mut GKRStorage<F, E>,
+        expected_output_layer: usize,
+    ) {
+        todo!();
+    }
+
     fn evaluate_over_storage(
         &self,
         storage: &mut GKRStorage<F, E>,
@@ -43,7 +51,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
             _marker: core::marker::PhantomData,
         };
         let inputs = <Self as BatchedGKRKernel<F, E>>::get_inputs(self);
-        evaluate_single_input_kernel_with_extension_inputs(
+
+        evaluate_single_input_type_fixed_in_out_kernel_with_extension_inputs(
             &kernel,
             &inputs,
             storage,
@@ -54,12 +63,37 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
             total_sumcheck_rounds,
             last_evaluations,
         );
+
+        // evaluate_single_input_kernel_with_extension_inputs(
+        //     &kernel,
+        //     &inputs,
+        //     storage,
+        //     step,
+        //     batch_challenges,
+        //     folding_challenges,
+        //     accumulator,
+        //     total_sumcheck_rounds,
+        //     last_evaluations,
+        // );
     }
 }
 
 // Assumes reordering of access implementors, to have lhs at 0 and rhs at 1
 pub struct SameSizeProductGKRRelationKernel<F: PrimeField, E: FieldExtension<F> + Field> {
     _marker: core::marker::PhantomData<(F, E)>,
+}
+
+impl<F: PrimeField, E: FieldExtension<F> + Field>
+    ExtensionFieldInOutFixedSizesEvaluationKernel<F, E, 2, 1>
+    for SameSizeProductGKRRelationKernel<F, E>
+{
+    #[inline(always)]
+    fn pointwise_eval(&self, input: &[ExtensionFieldRepresentation<F, E>; 2]) -> [E; 1] {
+        let [a, b] = input;
+        let mut a = *a;
+        a.repr_mul_assign::<false>(b);
+        [a.into_value()]
+    }
 }
 
 impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEvaluationKernel<F, E>

@@ -209,6 +209,8 @@ fn test_simple_product() {
                 &eq,
             );
 
+            dbg!([c0, c2]);
+
             let mut normalized_claim = claim;
             normalized_claim.mul_assign(
                 &last_eq_poly_prefactor_contribution

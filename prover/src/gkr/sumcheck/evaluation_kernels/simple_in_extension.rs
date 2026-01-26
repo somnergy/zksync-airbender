@@ -27,7 +27,7 @@ pub trait ExtensionFieldInOutFixedSizesEvaluationKernel<
                 let outputs = output_sources.each_ref().map(|el| el.get_f0_only(index));
                 let mut eval = batch_challenges[0];
                 eval.mul_assign(&outputs[0].into_value());
-                for i in 0..OUT {
+                for i in 1..OUT {
                     let mut t = batch_challenges[i];
                     t.mul_assign(&outputs[i].into_value());
                     eval.add_assign(&t);
@@ -39,7 +39,7 @@ pub trait ExtensionFieldInOutFixedSizesEvaluationKernel<
                 let evals = self.pointwise_eval(&sources);
                 let mut eval = batch_challenges[0];
                 eval.mul_assign(&evals[0]);
-                for i in 0..OUT {
+                for i in 1..OUT {
                     let mut t = batch_challenges[i];
                     t.mul_assign(&evals[i]);
                     eval.add_assign(&t);
@@ -78,7 +78,7 @@ pub trait ExtensionFieldInOutFixedSizesEvaluationKernel<
                 let evals = self.pointwise_eval(p);
                 let mut eval = batch_challenges[0];
                 eval.mul_assign(&evals[0]);
-                for i in 0..OUT {
+                for i in 1..OUT {
                     let mut t = batch_challenges[i];
                     t.mul_assign(&evals[i]);
                     eval.add_assign(&t);
