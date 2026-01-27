@@ -1,1 +1,1 @@
-#include "../../scripts/asm/asm_reduced.S"
+#include "../../../riscv_common/src/asm/start.s"

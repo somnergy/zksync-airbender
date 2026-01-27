@@ -11,6 +11,16 @@ extern uint32_t _eheap;
 // Boundaries of the stack
 extern uint32_t _sstack;
 extern uint32_t _estack;
+
+// Boundaries of the .data section (and it's part in ROM)
+extern uint32_t _sidata;
+extern uint32_t _sdata;
+extern uint32_t _edata;
+
+// Boundaries of the .rodata section
+extern uint32_t _sirodata;
+extern uint32_t _srodata;
+extern uint32_t _erodata;
 }
 
 extern "C" void eh_personality() {}
@@ -24,6 +34,29 @@ extern "C" uint32_t _machine_start_trap_rust(MachineTrapFrame*) __attribute__((s
 
 
 static constexpr uint32_t kModulus = 7919;
+
+static void copy_section(const uint8_t* src, uint8_t* dst, const uint8_t* end) {
+    while (dst < end) {
+        *dst++ = *src++;
+    }
+}
+
+static void init_memory() {
+    // Copy .rodata section from ROM to RAM
+    const uint8_t* sirodata = reinterpret_cast<const uint8_t*>(&_sirodata);
+    uint8_t* srodata = reinterpret_cast<uint8_t*>(&_srodata);
+    const uint8_t* erodata = reinterpret_cast<const uint8_t*>(&_erodata);
+    if (srodata < erodata) {
+        copy_section(sirodata, srodata, erodata);
+    }
+
+    // Copy .data section from ROM to RAM
+    uint8_t* sdata = reinterpret_cast<uint8_t*>(&_sdata);
+    const uint8_t* edata = reinterpret_cast<const uint8_t*>(&_edata);
+    if (sdata < edata) {
+        copy_section(reinterpret_cast<const uint8_t*>(&_sidata), sdata, edata);
+    }
+}
 
 [[noreturn]] static void workload() {
     uint32_t n = airbender::csr_read_word();
@@ -46,6 +79,7 @@ static constexpr uint32_t kModulus = 7919;
 }
 
 extern "C" [[noreturn]] void _start_rust() {
+    init_memory();
     workload();
 }
 

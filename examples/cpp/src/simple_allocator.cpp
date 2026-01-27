@@ -1,13 +1,19 @@
 #include <stdint.h>
 #include <stddef.h>
 
-const size_t MEMORY_POOL_SIZE = 1024 * 1024; // 1 MB
-char global_memory_pool[MEMORY_POOL_SIZE];
+extern "C" {
+extern uint32_t _sheap;
+extern uint32_t _eheap;
+}
+
 size_t allocated_bytes = 0;
 
 void* operator new(size_t size) {
-    if (allocated_bytes + size <= MEMORY_POOL_SIZE) {
-        void* ptr = global_memory_pool + allocated_bytes;
+    uint8_t* heap_begin = reinterpret_cast<uint8_t*>(&_sheap);
+    uint8_t* heap_end = reinterpret_cast<uint8_t*>(&_eheap);
+    size_t heap_size = static_cast<size_t>(heap_end - heap_begin);
+    if (allocated_bytes + size <= heap_size) {
+        void* ptr = heap_begin + allocated_bytes;
         allocated_bytes += size;
         return ptr;
     }

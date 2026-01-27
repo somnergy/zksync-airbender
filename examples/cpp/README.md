@@ -59,7 +59,7 @@ Other files that are provided:
 - [start.S](src/start.S) - expected initialization sequence for the application (e.g. `_start` function).
 - [airbender_csr.hpp](include/airbender_csr.hpp) - convenience wrappers for custom delegations provided by Airbender.
 - [quasi_uart.hpp](include/quasi_uart.hpp) - writer device, can be used for implementing debug logs.
-- [simple_allocator.cpp](src/simple_allocator.cpp) - most basic allocator imaginable.
+- [simple_allocator.cpp](src/simple_allocator.cpp) - basic bump allocator that utilizes the heap section defined by linker.
 - [memset.c](src/memset.c) - naive `memset` implementation, alternatively consider [assembly impl](../../riscv_common/src/asm/memset.s).
 
 
