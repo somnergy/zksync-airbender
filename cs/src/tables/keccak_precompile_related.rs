@@ -50,7 +50,7 @@ pub fn create_keccak_permutation_indices_table<F: PrimeField, const I: usize, co
     };
     let mut keys = Vec::with_capacity(1 << 12);
     for control_with_exe in 0..1 << 12 {
-        let key = [F::from_u64_unchecked(control_with_exe), F::ZERO, F::ZERO];
+        let key = [F::from_u32_unchecked(control_with_exe), F::ZERO, F::ZERO];
         keys.push(key);
     }
     let table_name = format!("Keccak Permutation Indices({I}, {J}) table");
@@ -60,7 +60,7 @@ pub fn create_keccak_permutation_indices_table<F: PrimeField, const I: usize, co
         table_name,
         1,
         |keys| {
-            let control_with_exe = keys[0].as_u64_reduced();
+            let control_with_exe = keys[0].as_u32_reduced();
             debug_assert!(control_with_exe < (1 << 12));
 
             let control = control_with_exe & 0b0111_1111_1111;
@@ -132,8 +132,8 @@ pub fn create_keccak_permutation_indices_table<F: PrimeField, const I: usize, co
                 _ => [0, 1, 2, 3, 4, 5], // THIS IS JUNK!!!!
             };
             let result = [
-                F::from_u64_unchecked(indices[I]),
-                F::from_u64_unchecked(indices[J]),
+                F::from_u32_unchecked(indices[I] as u32),
+                F::from_u32_unchecked(indices[J] as u32),
                 F::ZERO,
             ];
             (control as usize, result)
@@ -175,7 +175,7 @@ pub fn create_xor_special_keccak_iota_table<F: PrimeField>(id: u32) -> LookupTab
     let mut keys = Vec::with_capacity(1 << 16);
     for b in 0..1 << 8 {
         for a in 0..1 << 8 {
-            let key = [F::from_u64_unchecked(a), F::from_u64_unchecked(b), F::ZERO];
+            let key = [F::from_u32_unchecked(a), F::from_u32_unchecked(b), F::ZERO];
             keys.push(key);
         }
     }
@@ -186,8 +186,8 @@ pub fn create_xor_special_keccak_iota_table<F: PrimeField>(id: u32) -> LookupTab
         table_name,
         2,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            let b_control = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b_control = keys[1].as_u32_reduced();
             debug_assert!(a < (1 << 8) && b_control < (1 << 8));
 
             let round_if_iter0 = (b_control & 0b11111) as usize;
@@ -200,10 +200,10 @@ pub fn create_xor_special_keccak_iota_table<F: PrimeField>(id: u32) -> LookupTab
             } else {
                 0
             }; // THIS IS JUNK
-            let result = [F::from_u64_unchecked(a ^ b), F::ZERO, F::ZERO];
+            let result = [F::from_u32_unchecked(a ^ (b as u32)), F::ZERO, F::ZERO];
             ((a | b_control << 8) as usize, result)
         },
-        Some(|keys| (keys[0].as_u64_reduced() | keys[1].as_u64_reduced() << 8) as usize),
+        Some(|keys| (keys[0].as_u32_reduced() | keys[1].as_u32_reduced() << 8) as usize),
         id,
     )
 }
@@ -212,7 +212,7 @@ pub fn create_andn_table<F: PrimeField>(id: u32) -> LookupTable<F, 3> {
     let mut keys = Vec::with_capacity(1 << 16);
     for b in 0..1 << 8 {
         for a in 0..1 << 8 {
-            let key = [F::from_u64_unchecked(a), F::from_u64_unchecked(b), F::ZERO];
+            let key = [F::from_u32_unchecked(a), F::from_u32_unchecked(b), F::ZERO];
             keys.push(key);
         }
     }
@@ -223,15 +223,15 @@ pub fn create_andn_table<F: PrimeField>(id: u32) -> LookupTable<F, 3> {
         table_name,
         2,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
             debug_assert!(a < (1 << 8) && b < (1 << 8));
 
             let c = !a & b;
-            let result = [F::from_u64_unchecked(c), F::ZERO, F::ZERO];
+            let result = [F::from_u32_unchecked(c), F::ZERO, F::ZERO];
             ((a | b << 8) as usize, result)
         },
-        Some(|keys| (keys[0].as_u64_reduced() | keys[1].as_u64_reduced() << 8) as usize),
+        Some(|keys| (keys[0].as_u32_reduced() | keys[1].as_u32_reduced() << 8) as usize),
         id,
     )
 }
@@ -240,7 +240,7 @@ pub fn create_rotl_table<F: PrimeField>(id: u32) -> LookupTable<F, 3> {
     for rot_const in 0..16 {
         for word_u16 in 0..1 << 16 {
             let key = [
-                F::from_u64_unchecked(word_u16 | rot_const << 16),
+                F::from_u32_unchecked(word_u16 | rot_const << 16),
                 F::ZERO,
                 F::ZERO,
             ];
@@ -254,7 +254,7 @@ pub fn create_rotl_table<F: PrimeField>(id: u32) -> LookupTable<F, 3> {
         table_name,
         1,
         |keys| {
-            let input = keys[0].as_u64_reduced();
+            let input = keys[0].as_u32_reduced();
             debug_assert!(input < (1 << 20));
 
             let word_u16 = input as u16;
@@ -265,13 +265,13 @@ pub fn create_rotl_table<F: PrimeField>(id: u32) -> LookupTable<F, 3> {
                 word_u16.unbounded_shl(rot_const),
             );
             let result = [
-                F::from_u64_unchecked(left as u64),
-                F::from_u64_unchecked(right as u64),
+                F::from_u32_unchecked(left as u32),
+                F::from_u32_unchecked(right as u32),
                 F::ZERO,
             ];
             (input as usize, result)
         },
-        Some(|keys| keys[0].as_u64_reduced() as usize),
+        Some(|keys| keys[0].as_u32_reduced() as usize),
         id,
     )
 }

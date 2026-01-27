@@ -58,19 +58,19 @@ pub(crate) fn enforce_add_sub_relation<F: PrimeField, CS: Circuit<F>>(
             let mask = placer.get_boolean(*flag);
             let mut result = match a {
                 Num::Constant(a) => <CS::WitnessPlacer as WitnessTypeSet<F>>::U32::constant(
-                    a.as_u64_reduced() as u32,
+                    a.as_u32_reduced() as u32,
                 ),
                 Num::Var(a) => placer.get_u16(*a).widen(),
             };
             let b = match b {
                 Num::Constant(b) => <CS::WitnessPlacer as WitnessTypeSet<F>>::U32::constant(
-                    b.as_u64_reduced() as u32,
+                    b.as_u32_reduced() as u32,
                 ),
                 Num::Var(b) => placer.get_u16(*b).widen(),
             };
             let c = match c {
                 Num::Constant(c) => <CS::WitnessPlacer as WitnessTypeSet<F>>::U32::constant(
-                    c.as_u64_reduced() as u32,
+                    c.as_u32_reduced() as u32,
                 ),
                 Num::Var(c) => placer.get_u16(*c).widen(),
             };
@@ -86,7 +86,7 @@ pub(crate) fn enforce_add_sub_relation<F: PrimeField, CS: Circuit<F>>(
 
     let constraint_low = constraint_low
         - Term::<F>::from((
-            F::from_u64_unchecked(1 << 16),
+            F::from_u32_unchecked(1 << 16),
             carry_intermediate.get_variable().unwrap(),
         ));
     cs.add_constraint(constraint_low);
@@ -94,7 +94,7 @@ pub(crate) fn enforce_add_sub_relation<F: PrimeField, CS: Circuit<F>>(
     let constraint_high = constraint_high
         + Term::<F>::from(carry_intermediate.get_variable().unwrap())
         - Term::<F>::from((
-            F::from_u64_unchecked(1 << 16),
+            F::from_u32_unchecked(1 << 16),
             carry_out.get_variable().unwrap(),
         ));
     cs.add_constraint(constraint_high);

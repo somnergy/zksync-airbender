@@ -602,8 +602,8 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                 cs.set_values(value_fn);
             }
             ((true, true), (false, false)) => {
-                let a_low_constant = a.0[0].get_constant_value().as_u64_reduced() as u32;
-                let a_high_constant = a.0[1].get_constant_value().as_u64_reduced() as u32;
+                let a_low_constant = a.0[0].get_constant_value().as_u32_reduced() as u32;
+                let a_high_constant = a.0[1].get_constant_value().as_u32_reduced() as u32;
 
                 let a = (a_high_constant << 16) | a_low_constant;
                 let b = b.0.map(|el| el.get_variable());
@@ -628,8 +628,8 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                 cs.set_values(value_fn);
             }
             ((false, false), (true, true)) => {
-                let b_low_constant = b.0[0].get_constant_value().as_u64_reduced() as u32;
-                let b_high_constant = b.0[1].get_constant_value().as_u64_reduced() as u32;
+                let b_low_constant = b.0[0].get_constant_value().as_u32_reduced() as u32;
+                let b_high_constant = b.0[1].get_constant_value().as_u32_reduced() as u32;
 
                 let a = a.0.map(|el| el.get_variable());
                 let b = (b_high_constant << 16) | b_low_constant;
@@ -795,7 +795,7 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
         // https://faculty-web.msoe.edu/johnsontimoj/Common/FILES/binary_multiplication.pdf
         // In 2’s complement you must sign extend to the product bit width
         let op1_sign_t = match op1_sign {
-            Num::Var(op1_sign_var) => Term::from((F::from_u64_unchecked(0xff), op1_sign_var)),
+            Num::Var(op1_sign_var) => Term::from((F::from_u32_unchecked(0xff), op1_sign_var)),
             Num::Constant(op1_sign_constant) => {
                 if op1_sign_constant == F::ONE {
                     Term::from(0xff)
@@ -808,7 +808,7 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
         };
 
         let op2_sign_t = match op2_sign {
-            Num::Var(op2_sign_var) => Term::from((F::from_u64_unchecked(0xff), op2_sign_var)),
+            Num::Var(op2_sign_var) => Term::from((F::from_u32_unchecked(0xff), op2_sign_var)),
             Num::Constant(op2_sign_constant) => {
                 if op2_sign_constant == F::ONE {
                     Term::from(0xff)
@@ -848,7 +848,7 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
 
         let sign_term = match additive_term_sign {
             Num::Var(add_term_sign_var) => {
-                Term::from((F::from_u64_unchecked(0xffff), add_term_sign_var))
+                Term::from((F::from_u32_unchecked(0xffff), add_term_sign_var))
             }
             Num::Constant(op2_sign_constant) => {
                 if op2_sign_constant == F::ONE {
@@ -931,8 +931,8 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
             cnstr += add_term_t[0];
             cnstr -= mul_low_t[0];
 
-            cnstr -= Term::from((F::from_u64_unchecked(1 << 16), byte));
-            cnstr -= Term::from((F::from_u64_unchecked(1 << 24), bit.get_variable().unwrap()));
+            cnstr -= Term::from((F::from_u32_unchecked(1 << 16), byte));
+            cnstr -= Term::from((F::from_u32_unchecked(1 << 24), bit.get_variable().unwrap()));
 
             cs.add_constraint(cnstr);
 
@@ -1019,8 +1019,8 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
             }
 
             let mut cnstr = Constraint::empty();
-            cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[0].1), carry[0].0));
-            cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[1].1), carry[1].0));
+            cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[0].1), carry[0].0));
+            cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[1].1), carry[1].0));
 
             cnstr = cnstr + op1_t[0] * op2_t[2];
             cnstr = cnstr + op1_t[0] * op2_t[3] * byte_shift_t;
@@ -1032,13 +1032,13 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
             cnstr += add_term_t[1];
             cnstr -= mul_low_t[1];
 
-            cnstr -= Term::from((F::from_u64_unchecked(1 << 16), byte));
+            cnstr -= Term::from((F::from_u32_unchecked(1 << 16), byte));
             cnstr -= Term::from((
-                F::from_u64_unchecked(1 << 24),
+                F::from_u32_unchecked(1 << 24),
                 bit_0.get_variable().unwrap(),
             ));
             cnstr -= Term::from((
-                F::from_u64_unchecked(1 << 25),
+                F::from_u32_unchecked(1 << 25),
                 bit_1.get_variable().unwrap(),
             ));
 
@@ -1187,9 +1187,9 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     }
 
                     let mut cnstr = Constraint::empty();
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[0].1), carry[0].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[1].1), carry[1].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[2].1), carry[2].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[0].1), carry[0].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[1].1), carry[1].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[2].1), carry[2].0));
 
                     cnstr = cnstr + op1_t[0] * op2_t[4];
                     cnstr = cnstr + op1_t[0] * op2_t[5] * byte_shift_t;
@@ -1205,17 +1205,17 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     cnstr += sign_term;
                     cnstr -= mul_high_t[0];
 
-                    cnstr -= Term::from((F::from_u64_unchecked(1 << 16), byte));
+                    cnstr -= Term::from((F::from_u32_unchecked(1 << 16), byte));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 24),
+                        F::from_u32_unchecked(1 << 24),
                         bit_0.get_variable().unwrap(),
                     ));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 25),
+                        F::from_u32_unchecked(1 << 25),
                         bit_1.get_variable().unwrap(),
                     ));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 26),
+                        F::from_u32_unchecked(1 << 26),
                         bit_2.get_variable().unwrap(),
                     ));
 
@@ -1370,10 +1370,10 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     }
 
                     let mut cnstr = Constraint::empty();
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[0].1), carry[0].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[1].1), carry[1].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[2].1), carry[2].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[3].1), carry[3].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[0].1), carry[0].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[1].1), carry[1].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[2].1), carry[2].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[3].1), carry[3].0));
 
                     cnstr = cnstr + op1_t[0] * op2_t[6];
                     cnstr = cnstr + op1_t[0] * op2_t[7] * byte_shift_t;
@@ -1393,17 +1393,17 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     cnstr += sign_term;
                     cnstr -= mul_high_t[1];
 
-                    cnstr -= Term::from((F::from_u64_unchecked(1 << 16), byte));
+                    cnstr -= Term::from((F::from_u32_unchecked(1 << 16), byte));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 24),
+                        F::from_u32_unchecked(1 << 24),
                         bit_0.get_variable().unwrap(),
                     ));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 25),
+                        F::from_u32_unchecked(1 << 25),
                         bit_1.get_variable().unwrap(),
                     ));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 26),
+                        F::from_u32_unchecked(1 << 26),
                         bit_2.get_variable().unwrap(),
                     ));
 
@@ -1494,9 +1494,9 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     }
 
                     let mut cnstr = Constraint::empty();
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[0].1), carry[0].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[1].1), carry[1].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[2].1), carry[2].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[0].1), carry[0].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[1].1), carry[1].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[2].1), carry[2].0));
 
                     cnstr = cnstr + op1_t[1] * op2_t[3];
                     cnstr = cnstr + op1_t[2] * op2_t[2];
@@ -1505,9 +1505,9 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     cnstr = cnstr + op1_t[3] * op2_t[2] * byte_shift_t;
                     cnstr -= mul_high_t[0];
 
-                    cnstr -= Term::from((F::from_u64_unchecked(1 << 16), byte));
+                    cnstr -= Term::from((F::from_u32_unchecked(1 << 16), byte));
                     cnstr -= Term::from((
-                        F::from_u64_unchecked(1 << 24),
+                        F::from_u32_unchecked(1 << 24),
                         bit_0.get_variable().unwrap(),
                     ));
 
@@ -1520,8 +1520,8 @@ impl<F: PrimeField, CS: Circuit<F>> OptimizationContext<F, CS> {
                     assert_eq!(carry.len(), 2);
 
                     let mut cnstr = Constraint::empty();
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[0].1), carry[0].0));
-                    cnstr += Term::from((F::from_u64_unchecked(1u64 << carry[1].1), carry[1].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[0].1), carry[0].0));
+                    cnstr += Term::from((F::from_u32_unchecked(1u32 << carry[1].1), carry[1].0));
 
                     cnstr = cnstr + op1_t[3] * op2_t[3];
                     cnstr -= mul_high_t[1];

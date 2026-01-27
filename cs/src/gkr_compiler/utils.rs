@@ -450,11 +450,11 @@ pub(crate) fn lookup_input_into_relation<F: PrimeField, const SINGLE_COLUMN: boo
         let mut t = vec![];
         for (c, v) in relation.linear_terms.iter() {
             let v = graph.get_address_for_variable(*v);
-            t.push((c.as_u64_reduced(), v));
+            t.push((c.as_u32_reduced(), v));
         }
         let rel = NoFieldLinearRelation {
             linear_terms: t.into_boxed_slice(),
-            constant: relation.constant_term.as_u64_reduced(),
+            constant: relation.constant_term.as_u32_reduced(),
         };
         dst.push(rel);
     }

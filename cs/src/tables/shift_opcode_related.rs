@@ -8,7 +8,7 @@ pub fn create_sra_sign_filler_table<F: PrimeField>(id: u32) -> LookupTable<F, 3>
         TABLE_NAME.to_string(),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
             let input_sign = a & 1 > 0;
             let is_sra = (a >> 1) & 1 > 0;
             let shift_amount = a >> 2;
@@ -30,8 +30,8 @@ pub fn create_sra_sign_filler_table<F: PrimeField>(id: u32) -> LookupTable<F, 3>
                     let (mask, _) = u32::MAX.overflowing_shl(32 - (shift_amount as u32));
 
                     let mut result = [F::ZERO; 3];
-                    result[0] = F::from_u64_unchecked(mask as u16 as u64);
-                    result[1] = F::from_u64_unchecked((mask >> 16) as u16 as u64);
+                    result[0] = F::from_u32_unchecked(mask as u16 as u32);
+                    result[1] = F::from_u32_unchecked((mask >> 16) as u16 as u32);
 
                     (a as usize, result)
                 }
@@ -53,7 +53,7 @@ pub fn create_shift_implementation_table<F: PrimeField>(id: u32) -> LookupTable<
         table_name,
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
             let input_word = a as u16;
             let shift_amount = ((a >> 16) & 0b1_1111) as u32;
             let is_right_shift = (a >> (16 + 5)) > 0;
@@ -75,8 +75,8 @@ pub fn create_shift_implementation_table<F: PrimeField>(id: u32) -> LookupTable<
             };
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(in_place as u64);
-            result[1] = F::from_u64_unchecked(overflow as u64);
+            result[0] = F::from_u32_unchecked(in_place as u32);
+            result[1] = F::from_u32_unchecked(overflow as u32);
 
             (a as usize, result)
         },
@@ -90,8 +90,8 @@ pub fn create_truncate_shift_amount_table<F: PrimeField>(id: u32) -> LookupTable
     for first in 0..(1 << 8) {
         for second in 0..(1 << 1) {
             let key = [
-                F::from_u64_unchecked(first as u64),
-                F::from_u64_unchecked(second as u64),
+                F::from_u32_unchecked(first as u32),
+                F::from_u32_unchecked(second as u32),
                 F::ZERO,
             ];
             keys.push(key)
@@ -103,8 +103,8 @@ pub fn create_truncate_shift_amount_table<F: PrimeField>(id: u32) -> LookupTable
         table_name,
         2,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
             assert!(a < 1 << 8);
 
             let is_right_shift = b != 0;
@@ -116,16 +116,16 @@ pub fn create_truncate_shift_amount_table<F: PrimeField>(id: u32) -> LookupTable
             };
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(shift_amount as u64);
+            result[0] = F::from_u32_unchecked(shift_amount as u32);
 
             (((a << 1) | b) as usize, result)
         },
         Some(|keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
 
-            assert!(a < (1u64 << 8));
-            assert!(b < (1u64 << 1));
+            assert!(a < (1u32 << 8));
+            assert!(b < (1u32 << 1));
 
             ((a << 1) | b) as usize
         }),
@@ -142,12 +142,12 @@ pub fn create_shift_amount_truncation_table<F: PrimeField>(id: u32) -> LookupTab
         format!("Shift amount truncation table"),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
             assert!(a < (1 << TABLE_WIDTH));
 
             let shift_amount = a & 0b11111;
 
-            let result = [F::from_u64_unchecked(shift_amount as u64), F::ZERO, F::ZERO];
+            let result = [F::from_u32_unchecked(shift_amount as u32), F::ZERO, F::ZERO];
             (a as usize, result)
         },
         Some(first_key_index_gen_fn::<F, 3>),
@@ -174,7 +174,7 @@ pub fn create_logical_shift_16_bit_table<
         ),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
             assert!(a < (1 << TABLE_WIDTH));
 
             let word = (a & 0xffff) as u32;
@@ -192,8 +192,8 @@ pub fn create_logical_shift_16_bit_table<
             let high_result = shift_result >> 16;
 
             let result = [
-                F::from_u64_unchecked(low_result as u64),
-                F::from_u64_unchecked(high_result as u64),
+                F::from_u32_unchecked(low_result as u32),
+                F::from_u32_unchecked(high_result as u32),
                 F::ZERO,
             ];
             (a as usize, result)
@@ -212,7 +212,7 @@ pub fn create_sra_16_filler_mask_table<F: PrimeField>(id: u32) -> LookupTable<F,
         format!("SRA filler bits table"),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
             assert!(a < (1 << TABLE_WIDTH));
 
             let word = (a & 0xffff) as u32;
@@ -233,8 +233,8 @@ pub fn create_sra_16_filler_mask_table<F: PrimeField>(id: u32) -> LookupTable<F,
             let high_result = mask >> 16;
 
             let result = [
-                F::from_u64_unchecked(low_result as u64),
-                F::from_u64_unchecked(high_result as u64),
+                F::from_u32_unchecked(low_result as u32),
+                F::from_u32_unchecked(high_result as u32),
                 F::ZERO,
             ];
             (a as usize, result)

@@ -726,7 +726,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
         let value_fn = move |placer: &mut Self::WitnessPlacer| {
             let input_values: [_; M] = std::array::from_fn(|i| inputs_vars[i].evaluate(placer));
             let table_id = if let Num::Constant(c) = table_type {
-                <Self::WitnessPlacer as WitnessTypeSet<F>>::U16::constant(c.as_u64() as u16)
+                <Self::WitnessPlacer as WitnessTypeSet<F>>::U16::constant(c.as_u32_reduced() as u16)
             } else if let Num::Var(v) = table_type {
                 placer.get_u16(v)
             } else {
@@ -750,7 +750,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
         let query = LookupQuery {
             row,
             table: if let Num::Constant(c) = table_type {
-                LookupQueryTableType::Constant(TableType::get_table_from_id(c.as_u64() as u32))
+                LookupQueryTableType::Constant(TableType::get_table_from_id(c.as_u32_reduced() as u32))
             } else if let Num::Var(v) = table_type {
                 LookupQueryTableType::Variable(v)
             } else {
@@ -881,7 +881,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
             Invariant::Substituted((Placeholder::ExecuteOpcodeFamilyCycle, 0)),
         );
         use crate::constraint::Term;
-        self.add_constraint((Term::from(execute) - Term::from(1u64)) * Term::from(execute));
+        self.add_constraint((Term::from(execute) - Term::from(1u32)) * Term::from(execute));
 
         let decoder_data: DecoderData<F> = DecoderData {
             rs1_index: self.add_variable(),
@@ -1045,7 +1045,7 @@ impl<F: PrimeField, W: WitnessPlacer<F>> Circuit<F> for BasicAssembly<F, W> {
             Invariant::Substituted((Placeholder::ExecuteOpcodeFamilyCycle, 0)),
         );
         use crate::constraint::Term;
-        self.add_constraint((Term::from(execute) - Term::from(1u64)) * Term::from(execute));
+        self.add_constraint((Term::from(execute) - Term::from(1u32)) * Term::from(execute));
 
         let mut decoder_data: DecoderData<F> = DecoderData {
             rs1_index: self.add_named_variable("rs1 index from decoder"),

@@ -130,11 +130,11 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
         let all_generic_tables = table_driver.dump_tables();
 
         let range_check_16_table_content: Vec<_> = (0..(1 << 16))
-            .map(|el| F::from_u64_unchecked(el as u64))
+            .map(|el| F::from_u32_unchecked(el as u32))
             .collect();
 
         let timestamp_range_check_table: Vec<_> = (0..(1 << TIMESTAMP_COLUMNS_NUM_BITS))
-            .map(|el| F::from_u64_unchecked(el as u64))
+            .map(|el| F::from_u32_unchecked(el as u32))
             .collect();
 
         assert_eq!(
@@ -186,7 +186,7 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
                 }
                 if compiled_circuit.tables_ids_in_generic_lookups {
                     trace.columns.last_mut().unwrap()[row_idx + offset] =
-                        F::from_u64_unchecked(TableType::Decoder as u32 as u64);
+                        F::from_u32_unchecked(TableType::Decoder as u32);
                 }
             }
         }
@@ -323,7 +323,7 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
 
                             // range check 16
                             let mut denom = lookup_argument_gamma;
-                            denom.add_assign_base(&F::from_u64_unchecked(absolute_table_idx as u64));
+                            denom.add_assign_base(&F::from_u32_unchecked(absolute_table_idx as u32));
 
                             chunk[i].write(denom);
                         }
@@ -378,7 +378,7 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
 
                             // range check
                             let mut denom = lookup_argument_gamma;
-                            denom.add_assign_base(&F::from_u64_unchecked(absolute_table_idx as u64));
+                            denom.add_assign_base(&F::from_u32_unchecked(absolute_table_idx as u32));
 
                             chunk[i].write(denom);
                         }

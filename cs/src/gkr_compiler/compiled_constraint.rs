@@ -101,7 +101,7 @@ pub struct ConstraintsCollapseNode<F: PrimeField> {
 //             let mut terms = vec![];
 //             for (c, other) in cross_terms.iter() {
 //                 let place = graph.get_address_for_variable(*other);
-//                 terms.push((c.as_u64_reduced(), place));
+//                 terms.push((c.as_u32_reduced(), place));
 //             }
 //             terms.sort_by(|a, b| a.1.cmp(&b.1));
 //             let next_best_candidate = graph.get_address_for_variable(next_best_candidate);
@@ -165,7 +165,7 @@ pub struct ConstraintsCollapseNode<F: PrimeField> {
 //         let sparse_constant_remainders = self
 //             .constant_parts
 //             .iter()
-//             .map(|el| el.as_u64_reduced())
+//             .map(|el| el.as_u32_reduced())
 //             .collect::<Vec<_>>()
 //             .into_boxed_slice();
 //         let num_terms = sparse_constant_remainders.len();
@@ -174,7 +174,7 @@ pub struct ConstraintsCollapseNode<F: PrimeField> {
 //             let mut subset = vec![];
 //             for (c, v) in set.iter() {
 //                 let address = graph.get_address_for_variable(*v);
-//                 subset.push((c.as_u64_reduced(), address));
+//                 subset.push((c.as_u32_reduced(), address));
 //             }
 //             subset.sort_by(|a, b| a.1.cmp(&b.1));
 //             sparse_linear_remainders.push(subset.into_boxed_slice());
@@ -333,7 +333,7 @@ pub(crate) fn layout_constraints<F: PrimeField>(
 //             let mut terms = vec![];
 //             for (c, other) in cross_terms.iter() {
 //                 let place = graph.get_address_for_variable(*other);
-//                 terms.push((c.as_u64_reduced(), place));
+//                 terms.push((c.as_u32_reduced(), place));
 //             }
 //             terms.sort_by(|a, b| a.1.cmp(&b.1));
 //             let next_best_candidate = graph.get_address_for_variable(next_best_candidate);
@@ -343,7 +343,7 @@ pub(crate) fn layout_constraints<F: PrimeField>(
 //         let linear_terms = self.linear_parts.iter().map(|els| {
 //             let mut inner = vec![];
 //             for (c, v) in els.iter() {
-//                 let c = c.as_u64_reduced();
+//                 let c = c.as_u32_reduced();
 //                 let pos = graph.get_address_for_variable(*v);
 //                 inner.push((c, pos));
 //             }
@@ -351,7 +351,7 @@ pub(crate) fn layout_constraints<F: PrimeField>(
 //         }).collect::<Vec<_>>().into_boxed_slice();
 
 //         let constants = self.constant_parts.iter().map(|c| {
-//             c.as_u64_reduced()
+//             c.as_u32_reduced()
 //         }).collect::<Vec<_>>().into_boxed_slice();
 
 //         let input = NoFieldMaxQuadraticGKRRelation {
@@ -459,17 +459,17 @@ impl<F: PrimeField> GKRGate for OneStepConstraintsEvaluationNode<F> {
                 quadratic_sorted
                     .entry((a, b))
                     .or_insert(vec![])
-                    .push((coeff.as_u64_reduced(), i));
+                    .push((coeff.as_u32_reduced(), i));
             }
             for (coeff, a) in l.iter() {
                 let a = graph.get_address_for_variable(*a);
                 linear_sorted
                     .entry(a)
                     .or_insert(vec![])
-                    .push((coeff.as_u64_reduced(), i));
+                    .push((coeff.as_u32_reduced(), i));
             }
             if c.is_zero() == false {
-                constant_sorted.push((c.as_u64_reduced(), i));
+                constant_sorted.push((c.as_u32_reduced(), i));
             }
         }
 

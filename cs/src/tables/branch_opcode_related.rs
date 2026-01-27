@@ -2,7 +2,7 @@ use super::*;
 
 pub fn create_conditional_op_resolution_table<F: PrimeField>(id: u32) -> LookupTable<F, 3> {
     const TABLE_WIDTH: usize = 3 + 1 + 1 + 1 + 1;
-    const FUNCT3_MASK: u64 = 0x7u64;
+    const FUNCT3_MASK: u32 = 0x7u32;
     const UNSIGNED_LT_BIT_SHIFT: usize = 3;
     const EQ_BIT_SHIFT: usize = 4;
     const SRC1_BIT_SHIFT: usize = 5;
@@ -16,8 +16,8 @@ pub fn create_conditional_op_resolution_table<F: PrimeField>(id: u32) -> LookupT
         TABLE_NAME.to_string(),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            assert!(a < (1u64 << TABLE_WIDTH));
+            let a = keys[0].as_u32_reduced();
+            assert!(a < (1u32 << TABLE_WIDTH));
 
             let input = a;
             let funct3 = input & FUNCT3_MASK;
@@ -134,8 +134,8 @@ pub fn create_conditional_op_resolution_table<F: PrimeField>(id: u32) -> LookupT
             };
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(should_branch as u64);
-            result[1] = F::from_u64_unchecked(should_store as u64);
+            result[0] = F::from_u32_unchecked(should_branch as u32);
+            result[1] = F::from_u32_unchecked(should_store as u32);
 
             (a as usize, result)
         },
@@ -152,7 +152,7 @@ pub fn create_conditional_jmp_branch_slt_family_resolution_table<F: PrimeField>(
     let mut keys = Vec::with_capacity(1 << TABLE_WIDTH);
     for a in 0..1 << 4 {
         for b in 0..1 << 3 {
-            let key = [F::from_u64_unchecked(a), F::from_u64_unchecked(b), F::ZERO];
+            let key = [F::from_u32_unchecked(a), F::from_u32_unchecked(b), F::ZERO];
             keys.push(key);
         }
     }
@@ -164,8 +164,8 @@ pub fn create_conditional_jmp_branch_slt_family_resolution_table<F: PrimeField>(
         TABLE_NAME.to_string(),
         2,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
             assert!(a < (1 << 4)); // input bits
             assert!(b < (1 << 3)); // funct3
 
@@ -203,8 +203,8 @@ pub fn create_conditional_jmp_branch_slt_family_resolution_table<F: PrimeField>(
             (index_for_binary_key_for_width::<3>(a, b), result)
         },
         Some(|keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
             assert!(a < (1 << 4));
             assert!(b < (1 << 3));
             index_for_binary_key_for_width::<3>(a, b)

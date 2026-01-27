@@ -42,7 +42,8 @@ fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
                             let mut result = external_challenges.permutation_argument_additive_part;
                             match rel.address_space {
                                 CompiledAddressSpaceRelationStrict::Constant(c) => {
-                                    result.add_assign_base(&F::from_u64_unchecked(c as u64));
+                                    assert!(c < (1u32 << 16));
+                                    result.add_assign_base(&F::from_u32_unchecked(c));
                                 }
                                 CompiledAddressSpaceRelationStrict::Is(offset) => {
                                     let el = src_ref
@@ -63,10 +64,11 @@ fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
                             }
                             match &rel.address {
                                 &CompiledAddressStrict::Constant(c) => {
+                                    assert!(c < (1u32 << 16));
                                     let mut t = external_challenges
                                         .permutation_argument_linearization_challenges
                                         [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX];
-                                    t.mul_assign_by_base(&F::from_u64_unchecked(c as u64));
+                                    t.mul_assign_by_base(&F::from_u32_unchecked(c));
                                     result.add_assign(&t);
                                 }
                                 &CompiledAddressStrict::U16Space(offset) => {
@@ -113,7 +115,7 @@ fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
                                 let mut el = *src_ref
                                     .get_base_layer_mem(rel.timestamp[0])
                                     .get_unchecked(chunk_start + i);
-                                el.add_assign(&F::from_u64_unchecked(rel.timestamp_offset as u64));
+                                el.add_assign(&F::from_u32_unchecked(rel.timestamp_offset as u32));
                                 t.mul_assign_by_base(&el);
                                 result.add_assign(&t);
                             }
@@ -208,11 +210,29 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
 ) {
     if layer_idx == 0 {
         // move base field polys
-        for (i, poly) in witness_trace.column_major_memory_trace.drain(..).into_iter().enumerate() {
-            gkr_storage.insert_base_field_at_layer(0, GKRAddress::BaseLayerMemory(i), BaseFieldPoly::new(poly.into_boxed_slice()));
+        for (i, poly) in witness_trace
+            .column_major_memory_trace
+            .drain(..)
+            .into_iter()
+            .enumerate()
+        {
+            gkr_storage.insert_base_field_at_layer(
+                0,
+                GKRAddress::BaseLayerMemory(i),
+                BaseFieldPoly::new(poly.into_boxed_slice()),
+            );
         }
-        for (i, poly) in witness_trace.column_major_witness_trace.drain(..).into_iter().enumerate() {
-            gkr_storage.insert_base_field_at_layer(0, GKRAddress::BaseLayerWitness(i), BaseFieldPoly::new(poly.into_boxed_slice()));
+        for (i, poly) in witness_trace
+            .column_major_witness_trace
+            .drain(..)
+            .into_iter()
+            .enumerate()
+        {
+            gkr_storage.insert_base_field_at_layer(
+                0,
+                GKRAddress::BaseLayerWitness(i),
+                BaseFieldPoly::new(poly.into_boxed_slice()),
+            );
         }
     }
 

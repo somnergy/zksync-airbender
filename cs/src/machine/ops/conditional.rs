@@ -135,11 +135,11 @@ impl<
         let key_constraint = if SUPPORT_SIGNED == false {
             Term::from(funct3.get_variable())
                 + Term::from((
-                    F::from_u64_unchecked(1u64 << 3),
+                    F::from_u32_unchecked(1u32 << 3),
                     bltu_flag.get_variable().unwrap(),
                 ))
                 + Term::from((
-                    F::from_u64_unchecked(1u64 << (3 + 1)),
+                    F::from_u32_unchecked(1u32 << (3 + 1)),
                     eq_flag.get_variable().unwrap(),
                 ))
         } else {
@@ -161,19 +161,19 @@ impl<
 
             Term::from(funct3.get_variable())
                 + Term::from((
-                    F::from_u64_unchecked(1u64 << 3),
+                    F::from_u32_unchecked(1u32 << 3),
                     bltu_flag.get_variable().unwrap(),
                 ))
                 + Term::from((
-                    F::from_u64_unchecked(1u64 << (3 + 1)),
+                    F::from_u32_unchecked(1u32 << (3 + 1)),
                     eq_flag.get_variable().unwrap(),
                 ))
                 + Term::from((
-                    F::from_u64_unchecked(1u64 << (3 + 1 + 1)),
+                    F::from_u32_unchecked(1u32 << (3 + 1 + 1)),
                     src1_sign_bit.get_variable().unwrap(),
                 ))
                 + Term::from((
-                    F::from_u64_unchecked(1u64 << (3 + 1 + 1 + 1)),
+                    F::from_u32_unchecked(1u32 << (3 + 1 + 1 + 1)),
                     src2_sign_bit.get_variable().unwrap(),
                 ))
         };

@@ -5,7 +5,7 @@ use ::cs::cs::witness_placer::{
     WitnessComputationalInteger, WitnessComputationalU8, WitnessComputationalU16,
     WitnessComputationalU32, WitnessMask,
 };
-use ::prover::field::Mersenne31Field;
+use ::field::Mersenne31Field;
 use ::prover::witness_proxy::WitnessProxy;
 
 include!("./generated.rs");

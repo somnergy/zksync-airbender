@@ -13,8 +13,8 @@ pub fn create_rom_separator_table<
         TABLE_NAME.to_string(),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            assert!(a < (1u64 << 16));
+            let a = keys[0].as_u32_reduced();
+            assert!(a < (1u32 << 16));
 
             let bound = 1 << ROM_ADDRESS_SPACE_SECOND_WORD_BITS;
             let input = a;
@@ -22,8 +22,8 @@ pub fn create_rom_separator_table<
             let rom_chunk = input % bound;
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(is_ram as u64);
-            result[1] = F::from_u64_unchecked(rom_chunk);
+            result[0] = F::from_u32_unchecked(is_ram as u32);
+            result[1] = F::from_u32_unchecked(rom_chunk);
 
             (a as usize, result)
         },

@@ -129,11 +129,11 @@ fn apply_word_only_load_store<
         // NOTE: we just read from RAM when we read from ROM, but discard a value,
         // but we can never write there anyway
         let rs2_or_load_ram_access_query_address_low = cs.add_variable_from_constraint(
-            Term::from(unclean_addr.0[0]) * (Term::from(1u64) - Term::from(is_store)) + // load from RAM or ROM, address is the same
+            Term::from(unclean_addr.0[0]) * (Term::from(1u32) - Term::from(is_store)) + // load from RAM or ROM, address is the same
             Term::from(inputs.decoder_data.rs2_index) * Term::from(is_store), // RS2 index in case of STORE
         );
         let rs2_or_load_ram_access_query_address_high = cs.add_variable_from_constraint(
-            Term::from(unclean_addr.0[1]) * (Term::from(1u64) - Term::from(is_store)), // load from RAM or ROM, and 0 in case of STORE
+            Term::from(unclean_addr.0[1]) * (Term::from(1u32) - Term::from(is_store)), // load from RAM or ROM, and 0 in case of STORE
         );
 
         // We will make read/write values and for purposes of witness evaluation just mark them as "known".

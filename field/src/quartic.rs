@@ -261,10 +261,10 @@ impl core::fmt::Debug for Mersenne31Quartic {
         write!(
             f,
             "F4[{}, {}, {}, {}]",
-            self.c0.c0.as_u64_reduced(),
-            self.c0.c1.as_u64_reduced(),
-            self.c1.c0.as_u64_reduced(),
-            self.c1.c1.as_u64_reduced(),
+            self.c0.c0.as_u32_reduced(),
+            self.c0.c1.as_u32_reduced(),
+            self.c1.c0.as_u32_reduced(),
+            self.c1.c1.as_u32_reduced(),
         )
     }
 }
@@ -274,10 +274,10 @@ impl core::fmt::Display for Mersenne31Quartic {
         write!(
             f,
             "F4[{}, {}, {}, {}]",
-            self.c0.c0.as_u64_reduced(),
-            self.c0.c1.as_u64_reduced(),
-            self.c1.c0.as_u64_reduced(),
-            self.c1.c1.as_u64_reduced(),
+            self.c0.c0.as_u32_reduced(),
+            self.c0.c1.as_u32_reduced(),
+            self.c1.c0.as_u32_reduced(),
+            self.c1.c1.as_u32_reduced(),
         )
     }
 }

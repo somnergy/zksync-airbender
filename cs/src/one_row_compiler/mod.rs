@@ -27,7 +27,7 @@ pub mod stage_2_layout;
 pub use self::layout_utils::*;
 pub use self::stage_2_layout::*;
 
-pub const SHIFT_16: u64 = 1 << 16;
+pub const SHIFT_16: u32 = 1 << 16;
 
 pub fn array_to_tokens<T: quote::ToTokens, const N: usize>(
     els: &[T; N],

@@ -159,12 +159,12 @@ impl<F: PrimeField> WitnessPlacer<F> for CSDebugWitnessEvaluator<F> {
 
     #[inline(always)]
     fn get_u16(&mut self, variable: Variable) -> Self::U16 {
-        self.get_field(variable).as_u64_reduced() as u16
+        self.get_field(variable).as_u32_reduced() as u16
     }
 
     #[inline(always)]
     fn get_u8(&mut self, variable: Variable) -> Self::U8 {
-        self.get_field(variable).as_u64_reduced() as u8
+        self.get_field(variable).as_u32_reduced() as u8
     }
 
     #[inline(always)]
@@ -193,12 +193,12 @@ impl<F: PrimeField> WitnessPlacer<F> for CSDebugWitnessEvaluator<F> {
 
     #[inline(always)]
     fn assign_u16(&mut self, variable: Variable, value: &Self::U16) {
-        self.assign_field(variable, &F::from_u64_unchecked(*value as u64));
+        self.assign_field(variable, &F::from_u32_unchecked(*value as u32));
     }
 
     #[inline(always)]
     fn assign_u8(&mut self, variable: Variable, value: &Self::U8) {
-        self.assign_field(variable, &F::from_u64_unchecked(*value as u64));
+        self.assign_field(variable, &F::from_u32_unchecked(*value as u32));
     }
 
     #[inline(always)]
@@ -303,7 +303,7 @@ impl<F: PrimeField> WitnessPlacer<F> for CSDebugWitnessEvaluator<F> {
             assert!(decoder_data.circuit_family_mask_bits.is_empty());
             self.assign_field(
                 decoder_data.circuit_family_extra_mask,
-                &F::from_u64_unchecked(entry.opcode_family_bits as u64),
+                &F::from_u32_unchecked(entry.opcode_family_bits as u32),
             );
         } else {
             let mut t = entry.opcode_family_bits;

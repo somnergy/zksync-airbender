@@ -164,12 +164,12 @@ pub fn run_basic_delegation_test_impl(
 
     let challenge = Mersenne31Quartic {
         c0: Mersenne31Complex {
-            c0: Mersenne31Field::from_u64_unchecked(42),
-            c1: Mersenne31Field::from_u64_unchecked(42),
+            c0: Mersenne31Field::from_u32_unchecked(42),
+            c1: Mersenne31Field::from_u32_unchecked(42),
         },
         c1: Mersenne31Complex {
-            c0: Mersenne31Field::from_u64_unchecked(42),
-            c1: Mersenne31Field::from_u64_unchecked(42),
+            c0: Mersenne31Field::from_u32_unchecked(42),
+            c1: Mersenne31Field::from_u32_unchecked(42),
         },
     };
 

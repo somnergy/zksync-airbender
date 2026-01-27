@@ -97,7 +97,7 @@ impl<F: PrimeField> GKRCompiler<F> {
             );
         let total_lookups_for_range_checks_16 =
             (range_check_16_expressions.len() as u64) * trace_len as u64;
-        assert!(total_lookups_for_range_checks_16 < F::CHARACTERISTICS, "total number of range-check-16 lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
+        assert!(total_lookups_for_range_checks_16 < F::CHARACTERISTICS as u64, "total number of range-check-16 lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
 
         let mut expect_table_id_for_generic_lookup = false;
         let mut decode_table_columns_mask = Vec::new();
@@ -160,7 +160,7 @@ impl<F: PrimeField> GKRCompiler<F> {
                         assert!(circuit_family_bitmask.len() < F::CHAR_BITS);
                         let mut mask_constraint = Constraint::empty();
                         for (i, var) in circuit_family_bitmask.iter().enumerate() {
-                            mask_constraint += Term::from((F::from_u64_unchecked(1 << i), *var));
+                            mask_constraint += Term::from((F::from_u32_unchecked(1 << i), *var));
                         }
                         mask_constraint.normalize();
                         let (_, linear_terms, _) = mask_constraint.split_max_quadratic();
@@ -178,7 +178,7 @@ impl<F: PrimeField> GKRCompiler<F> {
             let total_generic_lookups = (generic_lookups.len() as u64
                 + decoder_lookup_pair.is_some() as u64)
                 * trace_len as u64;
-            assert!(total_generic_lookups < F::CHARACTERISTICS, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
+            assert!(total_generic_lookups < F::CHARACTERISTICS as u64, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
 
             let max_width_without_decoder = generic_lookups
                 .iter()
@@ -418,7 +418,7 @@ impl<F: PrimeField> GKRCompiler<F> {
 
             // we need to ensure that constraint the describes a carry is boolean
             let mut t = Constraint::from(executor_machine_state.cycle_start_state.timestamp[0])
-                + Term::from(TIMESTAMP_STEP)
+                + Term::from(TIMESTAMP_STEP as u32)
                 - Term::from(executor_machine_state.cycle_end_state.timestamp[0]);
             t.scale(
                 F::from_u64_with_reduction(1 << TIMESTAMP_COLUMNS_NUM_BITS)
@@ -473,7 +473,7 @@ impl<F: PrimeField> GKRCompiler<F> {
 
         let total_timestamp_range_check_lookups =
             timestamp_range_check_expressions_to_compile.len() as u64 * trace_len as u64;
-        assert!(total_timestamp_range_check_lookups < F::CHARACTERISTICS, "total number of timestamp range check lookups in circuit is {} that is larger that field characteristics {}", total_timestamp_range_check_lookups, F::CHARACTERISTICS);
+        assert!(total_timestamp_range_check_lookups < F::CHARACTERISTICS as u64, "total number of timestamp range check lookups in circuit is {} that is larger that field characteristics {}", total_timestamp_range_check_lookups, F::CHARACTERISTICS);
 
         // for all boolean vars we add booleanity constraint here
 

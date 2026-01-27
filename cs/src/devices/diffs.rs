@@ -6,7 +6,7 @@ use crate::definitions::*;
 use crate::types::*;
 use field::PrimeField;
 
-pub const PC_INC_STEP: u64 = 4;
+pub const PC_INC_STEP: u32 = 4;
 pub const NUM_OF_MEMORY_ACCESSES_PER_CYCLE: usize = 3;
 
 #[derive(Clone, Copy, Debug)]
@@ -23,7 +23,7 @@ impl<F: PrimeField> RegisterLikeDiff<F> {
                 let mut result: u32 = 0;
                 for (i, el) in els.iter().enumerate() {
                     if let Some(value) = el.get_value(cs) {
-                        let value = value.as_u64_reduced();
+                        let value = value.as_u32_reduced();
                         assert!(value < (1 << 8));
                         result += (value as u32) << (i * 4)
                     } else {

@@ -28,9 +28,9 @@ pub fn assert_no_unimp<F: PrimeField, C: Circuit<F>>(_cs: &mut C, _next_opcode: 
     //                 table_type: TableType| {
     //     debug_assert!(constants.is_empty());
     //     let mut opcode_low: F = input[0];
-    //     opcode_low.sub_assign(&F::from_u64_unchecked(UNIMP_OPCODE_LOW as u64));
+    //     opcode_low.sub_assign(&F::from_u32_unchecked(UNIMP_OPCODE_LOW as u64));
     //     let mut opcode_high: F = input[1];
-    //     opcode_high.sub_assign(&F::from_u64_unchecked(UNIMP_OPCODE_HIGH as u64));
+    //     opcode_high.sub_assign(&F::from_u32_unchecked(UNIMP_OPCODE_HIGH as u64));
     //     let inv0 = opcode_low.inverse().unwrap_or(F::ZERO);
     //     let inv1 = opcode_high.inverse().unwrap_or(F::ZERO);
     //     output[0] = inv0;
@@ -75,11 +75,11 @@ pub fn calculate_pc_next_no_overflows<F: PrimeField, CS: Circuit<F>>(
     carry_constraint += pc_t[0].clone();
     carry_constraint += Term::from(PC_INC_STEP);
     carry_constraint -= Term::from(pc_next_low);
-    carry_constraint.scale(F::from_u64_unchecked(1 << 16).inverse().unwrap());
+    carry_constraint.scale(F::from_u32_unchecked(1 << 16).inverse().unwrap());
 
     // ensure boolean
     let mut t = carry_constraint.clone();
-    t -= Term::from(1u64);
+    t -= Term::from(1u32);
     circuit.add_constraint(carry_constraint.clone() * t);
 
     let mut pc_high_constraint = carry_constraint;
@@ -92,8 +92,8 @@ pub fn calculate_pc_next_no_overflows<F: PrimeField, CS: Circuit<F>>(
     // ensure that it is not equal to 2^16
     let inversion_witness = circuit.add_variable();
     circuit.add_constraint(
-        (Term::from(inversion_witness) * (Term::from(pc_next_high) - Term::from(1u64 << 16)))
-            - Term::from(1u64),
+        (Term::from(inversion_witness) * (Term::from(pc_next_high) - Term::from(1u32 << 16)))
+            - Term::from(1u32),
     );
 
     let pc_next = Register([Num::Var(pc_next_low), Num::Var(pc_next_high)]);
@@ -116,7 +116,7 @@ pub fn calculate_pc_next_no_overflows<F: PrimeField, CS: Circuit<F>>(
         let pc_high = pc_next.shr(16);
         let mut pc_high = <CS::WitnessPlacer as WitnessTypeSet<F>>::Field::from_integer(pc_high);
         let shift = <CS::WitnessPlacer as WitnessTypeSet<F>>::Field::constant(
-            F::from_u64_unchecked(1u64 << 16),
+            F::from_u32_unchecked(1u32 << 16),
         );
         pc_high.sub_assign(&shift);
         let inversion_witness_value = pc_high.inverse();
@@ -192,10 +192,10 @@ pub fn bump_pc_no_range_checks_explicit<F: PrimeField, CS: Circuit<F>>(
             let mut tmp =
                 <CS::WitnessPlacer as WitnessTypeSet<F>>::Field::from_integer(pc_low.widen());
             tmp.add_assign(&<CS::WitnessPlacer as WitnessTypeSet<F>>::Field::constant(
-                F::from_u64_unchecked(PC_INC_STEP),
+                F::from_u32_unchecked(PC_INC_STEP),
             ));
             tmp.sub_assign(&<CS::WitnessPlacer as WitnessTypeSet<F>>::Field::constant(
-                F::from_u64_unchecked(1 << 16),
+                F::from_u32_unchecked(1 << 16),
             ));
             let tmp = tmp.inverse_or_zero();
             placer.assign_field(var_inv, &tmp);
@@ -262,7 +262,7 @@ pub fn bump_pc_no_range_checks_explicit<F: PrimeField, CS: Circuit<F>>(
                 &<CS::WitnessPlacer as WitnessTypeSet<F>>::Field::from_integer(step.widen()),
             );
             tmp.sub_assign(&<CS::WitnessPlacer as WitnessTypeSet<F>>::Field::constant(
-                F::from_u64_unchecked(1 << 16),
+                F::from_u32_unchecked(1 << 16),
             ));
             let tmp = tmp.inverse_or_zero();
             placer.assign_field(var_inv, &tmp);
@@ -320,7 +320,7 @@ pub(crate) fn read_from_shuffle_ram_or_bytecode_no_decomposition_with_ctx<
     );
     // this one is also aligned
     let rom_address = address_aligned_low.clone()
-        + Term::from((F::from_u64_unchecked(1 << 16), address_high_bits_for_rom));
+        + Term::from((F::from_u32_unchecked(1 << 16), address_high_bits_for_rom));
 
     let [rom_value_low, rom_value_high] = optimization_context
         .append_lookup_relation_from_linear_terms(
@@ -402,7 +402,7 @@ pub(crate) fn read_opcode_from_rom<
     // assert that we only read opcodes from ROM, so "is RAM" is always false here
     cs.add_constraint_allow_explicit_linear(Constraint::<F>::from(is_ram_range));
     let rom_address_constraint = Term::from(pc.0[0].get_variable())
-        + Term::from((F::from_u64_unchecked(1 << 16), rom_address_low));
+        + Term::from((F::from_u32_unchecked(1 << 16), rom_address_low));
 
     let [low, high] = cs.get_variables_from_lookup_constrained(
         &[LookupInput::from(rom_address_constraint)],
@@ -787,7 +787,7 @@ pub fn get_reg_add_and_overflow<F: PrimeField, CS: Circuit<F>>(
     cs.set_values(value_fn);
 
     let mut carry_constraint = Constraint::from(a_low) + Term::from(b_low) - Term::from(c_low);
-    carry_constraint.scale(F::from_u64_unchecked(1 << 16).inverse().unwrap());
+    carry_constraint.scale(F::from_u32_unchecked(1 << 16).inverse().unwrap());
 
     let bool_constraint = carry_constraint.clone() * (carry_constraint.clone() - Term::from(1));
     cs.add_constraint(bool_constraint);
@@ -825,7 +825,7 @@ pub fn get_reg_sub_and_underflow<F: PrimeField, CS: Circuit<F>>(
 
     // a - b == c - 2^16 uf --> 2^16 uf == c - a + b
     let mut carry_constraint = Constraint::from(c_low) - Term::from(a_low) + Term::from(b_low);
-    carry_constraint.scale(F::from_u64_unchecked(1 << 16).inverse().unwrap());
+    carry_constraint.scale(F::from_u32_unchecked(1 << 16).inverse().unwrap());
 
     let bool_constraint = carry_constraint.clone() * (carry_constraint.clone() - Term::from(1));
     cs.add_constraint(bool_constraint);

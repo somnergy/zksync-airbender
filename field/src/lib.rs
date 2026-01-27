@@ -129,19 +129,19 @@ pub trait Rand {
 }
 
 pub fn rand_fp_from_rng<R: rand::Rng>(rng: &mut R) -> Mersenne31Field {
-    Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)))
+    Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)))
 }
 
 pub fn rand_fp2_from_rng<R: rand::Rng>(rng: &mut R) -> Mersenne31Complex {
-    let a = Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)));
-    let b = Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)));
+    let a = Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)));
+    let b = Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)));
     Mersenne31Complex::new(a, b)
 }
 
 pub fn rand_fp4_from_rng<R: rand::Rng>(rng: &mut R) -> Mersenne31Quartic {
-    let a = Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)));
-    let b = Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)));
-    let c = Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)));
-    let d = Mersenne31Field::from_u64_unchecked(rng.random_range(0..((1 << 31) - 1)));
+    let a = Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)));
+    let b = Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)));
+    let c = Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)));
+    let d = Mersenne31Field::from_u32_unchecked(rng.random_range(0..((1 << 31) - 1)));
     Mersenne31Quartic::from_array_of_base([a, b, c, d])
 }

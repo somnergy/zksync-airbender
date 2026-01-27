@@ -114,7 +114,7 @@ impl<F: PrimeField, const N: usize> LookupKey<F, N> {
 impl<F: PrimeField, const N: usize> PartialOrd for LookupKey<F, N> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         for (a, b) in self.0.iter().zip(other.0.iter()) {
-            match a.as_u64_reduced().cmp(&b.as_u64_reduced()) {
+            match a.as_u32_reduced().cmp(&b.as_u32_reduced()) {
                 std::cmp::Ordering::Equal => {
                     continue;
                 }
@@ -131,7 +131,7 @@ impl<F: PrimeField, const N: usize> Ord for LookupKey<F, N> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         debug_assert_eq!(self.0.len(), other.0.len());
         for (a, b) in self.0.iter().zip(other.0.iter()) {
-            match a.as_u64_reduced().cmp(&b.as_u64_reduced()) {
+            match a.as_u32_reduced().cmp(&b.as_u32_reduced()) {
                 std::cmp::Ordering::Equal => {
                     continue;
                 }
@@ -151,7 +151,7 @@ pub struct DataKey<F: PrimeField, const N: usize>([F; N]);
 impl<F: PrimeField, const N: usize> PartialOrd for DataKey<F, N> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         for (a, b) in self.0.iter().zip(other.0.iter()) {
-            match a.as_u64_reduced().cmp(&b.as_u64_reduced()) {
+            match a.as_u32_reduced().cmp(&b.as_u32_reduced()) {
                 std::cmp::Ordering::Equal => {
                     continue;
                 }
@@ -168,7 +168,7 @@ impl<F: PrimeField, const N: usize> Ord for DataKey<F, N> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         debug_assert_eq!(self.0.len(), other.0.len());
         for (a, b) in self.0.iter().zip(other.0.iter()) {
-            match a.as_u64_reduced().cmp(&b.as_u64_reduced()) {
+            match a.as_u32_reduced().cmp(&b.as_u32_reduced()) {
                 std::cmp::Ordering::Equal => {
                     continue;
                 }
@@ -537,7 +537,7 @@ impl<F: PrimeField, const N: usize> LookupTable<F, N> {
             let mut assembled_row = [F::ZERO; M];
             assembled_row[..N].copy_from_slice(&row[..]);
             if let Some(id) = id {
-                assembled_row[N] = F::from_u64_unchecked(id as u64);
+                assembled_row[N] = F::from_u32_unchecked(id as u32);
             }
             dst.push(assembled_row);
         }
@@ -968,16 +968,16 @@ impl TableType {
 
 #[inline(always)]
 pub(crate) fn first_key_index_gen_fn<F: PrimeField, const N: usize>(keys: &[F; N]) -> usize {
-    keys[0].as_u64_reduced() as usize
+    keys[0].as_u32_reduced() as usize
 }
 
 #[inline(always)]
 fn u8_chunks_index_gen_fn<F: PrimeField, const N: usize>(keys: &[F; N]) -> usize {
-    let a = keys[0].as_u64_reduced();
-    let b = keys[1].as_u64_reduced();
+    let a = keys[0].as_u32_reduced();
+    let b = keys[1].as_u32_reduced();
 
-    assert!(a <= u8::MAX as u64);
-    assert!(b <= u8::MAX as u64);
+    assert!(a <= u8::MAX as u32);
+    assert!(b <= u8::MAX as u32);
 
     index_for_binary_key(a, b)
 }
@@ -986,20 +986,20 @@ fn u8_chunks_index_gen_fn<F: PrimeField, const N: usize>(keys: &[F; N]) -> usize
 fn bit_chunks_index_gen_fn<F: PrimeField, const N: usize, const WIDTH: usize>(
     keys: &[F; N],
 ) -> usize {
-    let a = keys[0].as_u64_reduced();
-    let b = keys[1].as_u64_reduced();
+    let a = keys[0].as_u32_reduced();
+    let b = keys[1].as_u32_reduced();
 
-    assert!(a < 1u64 << WIDTH);
-    assert!(b < 1u64 << WIDTH);
+    assert!(a < 1u32 << WIDTH);
+    assert!(b < 1u32 << WIDTH);
 
     index_for_binary_key_for_width::<WIDTH>(a, b)
 }
 
-fn index_for_binary_key(a: u64, b: u64) -> usize {
+fn index_for_binary_key(a: u32, b: u32) -> usize {
     ((a << 8) | b) as usize
 }
 
-fn index_for_binary_key_for_width<const WIDTH: usize>(a: u64, b: u64) -> usize {
+fn index_for_binary_key_for_width<const WIDTH: usize>(a: u32, b: u32) -> usize {
     ((a << WIDTH) | b) as usize
 }
 
@@ -1009,8 +1009,8 @@ pub fn key_binary_generation<F: PrimeField, const N: usize>() -> Vec<[F; N]> {
     for a in 0..(1u64 << 8) {
         for b in 0..(1u64 << 8) {
             let mut key = [F::ZERO; N];
-            key[0] = F::from_u64_unchecked(a as u64);
-            key[1] = F::from_u64_unchecked(b as u64);
+            key[0] = F::from_u32_unchecked(a as u32);
+            key[1] = F::from_u32_unchecked(b as u32);
             keys.push(key);
         }
     }
@@ -1027,8 +1027,8 @@ pub fn key_binary_generation_for_width<F: PrimeField, const N: usize, const WIDT
         for a in 0..(1u64 << WIDTH) {
             for b in 0..(1u64 << WIDTH) {
                 let mut key = [F::ZERO; N];
-                key[0] = F::from_u64_unchecked(a as u64);
-                key[1] = F::from_u64_unchecked(b as u64);
+                key[0] = F::from_u32_unchecked(a as u32);
+                key[1] = F::from_u32_unchecked(b as u32);
                 keys.push(key);
             }
         }
@@ -1036,12 +1036,12 @@ pub fn key_binary_generation_for_width<F: PrimeField, const N: usize, const WIDT
         (0..len)
             .into_par_iter()
             .map(|i| {
-                let i = i as u64;
+                let i = i as u32;
                 let a = i >> WIDTH;
-                let b = i & ((1u64 << WIDTH) - 1);
+                let b = i & ((1u32 << WIDTH) - 1);
                 let mut key = [F::ZERO; N];
-                key[0] = F::from_u64_unchecked(a);
-                key[1] = F::from_u64_unchecked(b);
+                key[0] = F::from_u32_unchecked(a);
+                key[1] = F::from_u32_unchecked(b);
                 key
             })
             .collect_into_vec(&mut keys);
@@ -1089,8 +1089,8 @@ pub fn key_get_bit<F: PrimeField, const N: usize>() -> Vec<SmallVec<[F; N]>> {
         .flat_map(|a| {
             (0..16).map(move |b| {
                 smallvec::smallvec![
-                    F::from_u64_unchecked(a as u64),
-                    F::from_u64_unchecked(b as u64)
+                    F::from_u32_unchecked(a as u32),
+                    F::from_u32_unchecked(b as u32)
                 ]
             })
         })

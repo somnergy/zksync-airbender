@@ -153,11 +153,11 @@ fn apply_load_store<
         let rs2_or_load_ram_access_query_is_register = is_store;
 
         let rs2_or_load_ram_access_query_address_low = cs.add_variable_from_constraint(
-            clean_addr[0].clone() * (Term::from(1u64) - Term::from(is_store)) + // load from RAM/ROM
+            clean_addr[0].clone() * (Term::from(1u32) - Term::from(is_store)) + // load from RAM/ROM
             Term::from(inputs.decoder_data.rs2_index) * Term::from(is_store), // RS2 index in case of STORE
         );
         let rs2_or_load_ram_access_query_address_high = cs.add_variable_from_constraint(
-            clean_addr[1].clone() * (Term::from(1u64) - Term::from(is_store)), // load from RAM/ROM, and 0 in case of STORE
+            clean_addr[1].clone() * (Term::from(1u32) - Term::from(is_store)), // load from RAM/ROM, and 0 in case of STORE
         );
 
         // We will make read/write values and for purposes of witness evaluation just mark them as "known".
@@ -277,7 +277,7 @@ fn apply_load_store<
         // This combination is always aligned, so we can shift another 2 bits to the right
         let mut input =
             clean_addr[0].clone() + Term::from(1 << 16) * Term::from(address_high_bits_for_rom);
-        input.scale(F::from_u64_unchecked(1u64 << 2).inverse().unwrap());
+        input.scale(F::from_u32_unchecked(1u32 << 2).inverse().unwrap());
 
         // These values will be used if we do full LW
         let [rom_load_low, rom_load_high] = opt_ctx.append_lookup_relation_from_linear_terms(

@@ -207,7 +207,7 @@
     },
     {
       "Field": {
-        "Constant": 65536
+        "Constant": 268295646
       }
     },
     {
@@ -266,7 +266,7 @@
     },
     {
       "Field": {
-        "Constant": 2
+        "Constant": 1172168163
       }
     },
     {
@@ -825,7 +825,7 @@
     },
     {
       "Integer": {
-        "ConstantU32": 2147483647
+        "ConstantU32": 2013265921
       }
     },
     {
@@ -1399,7 +1399,7 @@
     },
     {
       "Field": {
-        "Constant": 4
+        "Constant": 1073741816
       }
     },
     {
@@ -1416,7 +1416,7 @@
     },
     {
       "Field": {
-        "Constant": 65536
+        "Constant": 268295646
       }
     },
     {
@@ -1569,7 +1569,7 @@
     },
     {
       "Field": {
-        "Constant": 65536
+        "Constant": 268295646
       }
     },
     {
@@ -1694,7 +1694,7 @@
     },
     {
       "Integer": {
-        "ConstantU32": 65535
+        "ConstantU32": 1
       }
     },
     {

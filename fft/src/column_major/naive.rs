@@ -61,7 +61,7 @@ pub fn ifft_natural_to_natural<
     }
 
     if input.len() > 1 {
-        let n_inv = P::from_u64_with_reduction(input.len() as u64)
+        let n_inv = P::from_u32_with_reduction(input.len() as u32)
             .inverse()
             .unwrap();
         let mut i = 0;

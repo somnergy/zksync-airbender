@@ -108,7 +108,7 @@ fn lookup_input_node_from_expr<F: PrimeField, const SINGLE_COLUMN: bool>(
             LookupQueryTableTypeExt::Constant(constant) => {
                 inputs.push(Degree1Constraint {
                     linear_terms: vec![].into_boxed_slice(),
-                    constant_term: F::from_u64_unchecked(constant.to_table_id() as u64),
+                    constant_term: F::from_u32_unchecked(constant.to_table_id() as u32),
                 });
             }
             LookupQueryTableTypeExt::Variable(var) => {

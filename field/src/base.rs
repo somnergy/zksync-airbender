@@ -63,7 +63,7 @@ impl Mersenne31Field {
         self.0
     }
 
-    #[cfg(not(feature = "use_division"))]
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
     pub const fn from_nonreduced_u32(c: u32) -> Self {
         let mut c = c;
         if c >= Self::ORDER {
@@ -73,12 +73,6 @@ impl Mersenne31Field {
             c -= Self::ORDER;
         }
         Self::new(c)
-    }
-
-    #[cfg(feature = "use_division")]
-    #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    pub const fn from_nonreduced_u32(c: u32) -> Self {
-        Self(ops::reduce_with_division(c))
     }
 
     pub const fn mul_2exp_u64(&self, exp: u64) -> Self {
@@ -161,13 +155,13 @@ impl PartialOrd for Mersenne31Field {
 
 impl Display for Mersenne31Field {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        Display::fmt(&self.as_u64_reduced(), f)
+        Display::fmt(&self.as_u32_reduced(), f)
     }
 }
 
 impl Debug for Mersenne31Field {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        Debug::fmt(&self.as_u64_reduced(), f)
+        Debug::fmt(&self.as_u32_reduced(), f)
     }
 }
 
@@ -498,32 +492,39 @@ impl PrimeField for Mersenne31Field {
     const MINUS_ONE: Self = Self(Self::ORDER - 1);
     const NUM_BYTES_IN_REPR: usize = 4;
     const CHAR_BITS: usize = 31;
-    const CHARACTERISTICS: u64 = Self::ORDER as u64;
+    const CHARACTERISTICS: u32 = Self::ORDER;
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn as_u64(self) -> u64 {
-        self.0 as u64
+    fn as_u32(self) -> u32 {
+        self.0
     }
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_u64_unchecked(value: u64) -> Self {
-        Self::new(value as u32)
+    fn as_u32_reduced(self) -> u32 {
+        self.to_reduced_u32()
     }
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_u64(value: u64) -> Option<Self> {
-        if value as u32 >= Self::ORDER {
+    fn as_u32_raw_repr_reduced(self) -> u32 {
+        self.to_reduced_u32()
+    }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn from_u32_unchecked(value: u32) -> Self {
+        Self::new(value)
+    }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn from_u32_with_reduction(value: u32) -> Self {
+        Self::from_nonreduced_u32(value)
+    }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn from_u32(value: u32) -> Option<Self> {
+        if value >= Self::ORDER {
             None
         } else {
-            Some(Self(value as u32))
+            Some(Self(value))
         }
     }
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_u64_with_reduction(value: u64) -> Self {
-        // p = 2^31 - 1, so 2^32 = 2p + 2 = 2
-        Self((value % Self::ORDER as u64) as u32)
-    }
-    #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn as_u64_reduced(&self) -> u64 {
-        self.to_reduced_u32() as u64
+    fn from_reduced_raw_repr(value: u32) -> Self {
+        Self(value)
     }
     #[track_caller]
     #[cfg_attr(not(feature = "no_inline"), inline(always))]

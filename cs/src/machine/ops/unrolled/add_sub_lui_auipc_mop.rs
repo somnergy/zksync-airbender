@@ -37,7 +37,7 @@ fn apply_add_sub_lui_auipc_mop_inner<F: PrimeField, CS: Circuit<F>>(
     {
         println!(
             "circuit_family_extra_mask = 0b{:08b}",
-            circuit_family_extra_mask.as_u64_reduced()
+            circuit_family_extra_mask.as_u32_reduced()
         );
     }
 
@@ -56,15 +56,14 @@ fn apply_add_sub_lui_auipc_mop_inner<F: PrimeField, CS: Circuit<F>>(
 
     let indexers = opt_ctx.save_indexers();
 
-    assert!(F::CHARACTERISTICS < (1u64 << 32));
     let modulus_reg = Register([
-        Num::Constant(F::from_u64_unchecked((F::CHARACTERISTICS as u16) as u64)),
-        Num::Constant(F::from_u64_unchecked(
-            ((F::CHARACTERISTICS >> 16) as u16) as u64,
+        Num::Constant(F::from_u32_unchecked((F::CHARACTERISTICS as u16) as u32)),
+        Num::Constant(F::from_u32_unchecked(
+            ((F::CHARACTERISTICS >> 16) as u16) as u32,
         )),
     ]);
 
-    let shift = Term::from(1u64 << 16);
+    let shift = Term::from(1u32 << 16);
 
     let Register([out_low, out_high]) = out;
 
@@ -211,7 +210,7 @@ fn apply_add_sub_lui_auipc_mop_inner<F: PrimeField, CS: Circuit<F>>(
         };
         let addmod_borrow_bit = opt_ctx.append_add_sub_relation_raw(cs, relation);
         cs.add_constraint(
-            Term::from(is_addmod) * (Term::from(1u64) - Term::from(addmod_borrow_bit)),
+            Term::from(is_addmod) * (Term::from(1u32) - Term::from(addmod_borrow_bit)),
         );
         // check that we indeed use the same boolean for all the cases
         assert_eq!(of_var, addmod_borrow_bit.get_variable().unwrap());
@@ -235,7 +234,7 @@ fn apply_add_sub_lui_auipc_mop_inner<F: PrimeField, CS: Circuit<F>>(
         };
         let submod_borrow_bit = opt_ctx.append_add_sub_relation_raw(cs, relation);
         cs.add_constraint(
-            Term::from(is_submod) * (Term::from(1u64) - Term::from(submod_borrow_bit)),
+            Term::from(is_submod) * (Term::from(1u32) - Term::from(submod_borrow_bit)),
         );
         // check that we indeed use the same boolean for all the cases
         assert_eq!(of_var, submod_borrow_bit.get_variable().unwrap());
@@ -262,7 +261,7 @@ fn apply_add_sub_lui_auipc_mop_inner<F: PrimeField, CS: Circuit<F>>(
         };
         let mulmod_borrow_bit = opt_ctx.append_add_sub_relation_raw(cs, relation);
         cs.add_constraint(
-            Term::from(is_mulmod) * (Term::from(1u64) - Term::from(mulmod_borrow_bit)),
+            Term::from(is_mulmod) * (Term::from(1u32) - Term::from(mulmod_borrow_bit)),
         );
         // check that we indeed use the same boolean for all the cases
         assert_eq!(of_var, mulmod_borrow_bit.get_variable().unwrap());

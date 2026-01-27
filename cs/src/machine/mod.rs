@@ -251,15 +251,15 @@ pub trait Machine<F: PrimeField>: 'static + Clone + Default {
             TABLE_NAME.to_string(),
             1,
             move |key| {
-                let input = key[0].as_u64_reduced();
-                assert!(input < (1u64 << 17));
+                let input = key[0].as_u32_reduced();
+                assert!(input < (1u32 << 17));
                 let bitmask = stub_values[input as usize];
                 let first_word = bitmask & mask_first_word;
                 let second_word = bitmask >> first_word_bits;
 
                 let mut result = [F::ZERO; 3];
-                result[0] = F::from_u64_unchecked(first_word as u64);
-                result[1] = F::from_u64_unchecked(second_word as u64);
+                result[0] = F::from_u32_unchecked(first_word as u32);
+                result[1] = F::from_u32_unchecked(second_word as u32);
 
                 (input as usize, result)
             },

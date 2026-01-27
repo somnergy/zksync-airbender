@@ -50,12 +50,12 @@ use rand::Rng;
 impl Rand for Mersenne31ComplexVectorized {
     fn random_element<R: Rng + ?Sized>(rng: &mut R) -> Mersenne31ComplexVectorized {
         let t_real = [(); WIDTH].map(|_| {
-            Mersenne31Field::from_u64_unchecked(
+            Mersenne31Field::from_u32_unchecked(
                 rng.random_range(0..Mersenne31Field::CHARACTERISTICS),
             )
         });
         let t_imag = [(); WIDTH].map(|_| {
-            Mersenne31Field::from_u64_unchecked(
+            Mersenne31Field::from_u32_unchecked(
                 rng.random_range(0..Mersenne31Field::CHARACTERISTICS),
             )
         });

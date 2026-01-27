@@ -141,8 +141,8 @@ impl<
             let dst_high = x.0[1];
             let dst = Register([dst_low, dst_high]);
             let trapped = is_misaligned_addr;
-            let trap_reason = Num::Constant(F::from_u64_unchecked(
-                TrapReason::InstructionAddressMisaligned as u64,
+            let trap_reason = Num::Constant(F::from_u32_unchecked(
+                TrapReason::InstructionAddressMisaligned as u32,
             ));
 
             if exec_flag.get_value(cs).unwrap_or(false) {

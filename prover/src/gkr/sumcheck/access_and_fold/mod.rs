@@ -54,7 +54,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         value: BaseFieldPoly<F>,
     ) {
         if layer >= self.layers.len() {
-            self.layers.resize_with(layer + 1, || GKRLayerSource::default());
+            self.layers
+                .resize_with(layer + 1, || GKRLayerSource::default());
         }
         self.layers[layer].base_field_inputs.insert(address, value);
     }
@@ -66,9 +67,12 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         value: ExtensionFieldPoly<F, E>,
     ) {
         if layer >= self.layers.len() {
-            self.layers.resize_with(layer + 1, || GKRLayerSource::default());
+            self.layers
+                .resize_with(layer + 1, || GKRLayerSource::default());
         }
-        self.layers[layer].extension_field_inputs.insert(address, value);
+        self.layers[layer]
+            .extension_field_inputs
+            .insert(address, value);
     }
 
     pub(crate) fn make_ext_source_for_rounds_two_and_beyond(

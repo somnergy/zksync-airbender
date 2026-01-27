@@ -11,9 +11,9 @@ use cs::machine::ops::unrolled::compile_unrolled_circuit_state_transition_into_g
 use cs::machine::ops::unrolled::opcodes_for_full_machine_with_mem_word_access_specialization;
 use cs::machine::ops::unrolled::opcodes_for_full_machine_with_unsigned_mul_div_only_with_mem_word_access_specialization;
 
-use crate::gkr::prover::GKRExternalChallenges;
 use crate::gkr::prover::prove_configured_with_gkr;
 use crate::gkr::prover::setup::GKRSetupPrecomputations;
+use crate::gkr::prover::GKRExternalChallenges;
 use crate::gkr::witness_gen::family_circuits::evaluate_gkr_memory_witness_for_executor_family;
 use crate::gkr::witness_gen::family_circuits::evaluate_gkr_witness_for_executor_family;
 use crate::unrolled::NonMemoryCircuitOracle;
@@ -360,15 +360,14 @@ pub fn gkr_run_basic_unrolled_test_impl(
 
         let is_empty = oracle.inner.is_empty();
 
-        let memory_trace =
-            evaluate_gkr_memory_witness_for_executor_family::<BabyBearField, _, _, _>(
-                &add_sub_circuit,
-                NUM_CYCLES_PER_CHUNK,
-                &oracle,
-                &worker,
-                Global,
-                Global,
-            );
+        let memory_trace = evaluate_gkr_memory_witness_for_executor_family::<BabyBearField, _, _, _>(
+            &add_sub_circuit,
+            NUM_CYCLES_PER_CHUNK,
+            &oracle,
+            &worker,
+            Global,
+            Global,
+        );
 
         let full_trace = evaluate_gkr_witness_for_executor_family::<BabyBearField, _, _, _>(
             &add_sub_circuit,
@@ -424,22 +423,19 @@ pub fn gkr_run_basic_unrolled_test_impl(
             println!("Trying to prove");
 
             let now = std::time::Instant::now();
-            let (prover_data, proof) = prove_configured_with_gkr::<
-                BabyBearField,
-                BabyBearExt4,
-                DefaultTreeConstructor,
-            >(
-                &add_sub_circuit,
-                &external_challenges,
-                full_trace,
-                &setup,
-                &twiddles,
-                lde_factor,
-                tree_cap_size,
-                53,
-                28,
-                &worker,
-            );
+            let (prover_data, proof) =
+                prove_configured_with_gkr::<BabyBearField, BabyBearExt4, DefaultTreeConstructor>(
+                    &add_sub_circuit,
+                    &external_challenges,
+                    full_trace,
+                    &setup,
+                    &twiddles,
+                    lde_factor,
+                    tree_cap_size,
+                    53,
+                    28,
+                    &worker,
+                );
             println!("Proving time is {:?}", now.elapsed());
 
             // if is_empty {

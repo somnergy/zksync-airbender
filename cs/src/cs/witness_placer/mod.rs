@@ -661,7 +661,7 @@ impl<F: PrimeField> WitnessComputationalField<F> for F {
 
     #[inline(always)]
     fn as_integer(self) -> Self::IntegerRepresentation {
-        self.as_u64_reduced() as u32
+        self.as_u32_reduced() as u32
     }
 
     #[inline(always)]

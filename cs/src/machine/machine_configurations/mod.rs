@@ -164,7 +164,7 @@ pub fn create_table_for_rom_image<
         .map(|i| {
             let mut key = [F::ZERO; 3];
             let address = i * 4;
-            key[0] = F::from_u64_unchecked(address as u64);
+            key[0] = F::from_u32_unchecked(address as u32);
             key
         })
         .collect_into_vec(&mut keys);
@@ -177,7 +177,7 @@ pub fn create_table_for_rom_image<
         TABLE_NAME.to_string(),
         1,
         move |key| {
-            let pc = key[0].as_u64_reduced();
+            let pc = key[0].as_u32_reduced();
             assert!(
                 pc < 1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS) as u64,
                 "PC = {} is too large for ROM bound {} bytes",
@@ -198,15 +198,15 @@ pub fn create_table_for_rom_image<
             let high = (opcode >> 16) as u16;
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(low as u64);
-            result[1] = F::from_u64_unchecked(high as u64);
+            result[0] = F::from_u32_unchecked(low as u32);
+            result[1] = F::from_u32_unchecked(high as u32);
 
             ((pc / 4) as usize, result)
         },
         Some(|keys| {
-            let pc = keys[0].as_u64_reduced();
+            let pc = keys[0].as_u32_reduced();
             assert!(
-                pc < 1u64 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS),
+                pc < 1u32 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS),
                 "PC = {} is too large for ROM bound {}",
                 pc,
                 1u64 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS)
@@ -254,7 +254,7 @@ pub fn create_table_for_aligned_rom_image<
         TABLE_NAME.to_string(),
         1,
         move |key| {
-            let word_index = key[0].as_u64_reduced();
+            let word_index = key[0].as_u32_reduced();
             assert!(
                 word_index < 1 << (16 + ROM_ADDRESS_SPACE_SECOND_WORD_BITS - 2) as u64,
                 "Word index = {} is too large for ROM bound {} words",
@@ -274,8 +274,8 @@ pub fn create_table_for_aligned_rom_image<
             let high = (opcode >> 16) as u16;
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(low as u64);
-            result[1] = F::from_u64_unchecked(high as u64);
+            result[0] = F::from_u32_unchecked(low as u32);
+            result[1] = F::from_u32_unchecked(high as u32);
 
             (word_index as usize, result)
         },

@@ -682,7 +682,7 @@ pub(crate) fn allocate_range_check_expressions<F: PrimeField>(
     let total_lookups_for_range_checks_16 = ((range_check_16_lookup_expressions.len()
         + extra_preexisting_range_checks_16) as u64)
         * trace_len as u64;
-    assert!(total_lookups_for_range_checks_16 < F::CHARACTERISTICS, "total number of range-check-16 lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
+    assert!(total_lookups_for_range_checks_16 < F::CHARACTERISTICS as u64, "total number of range-check-16 lookups in circuit is {} that is larger that field characteristics {}", total_lookups_for_range_checks_16, F::CHARACTERISTICS);
 
     (
         range_check_8_columns,
@@ -790,7 +790,7 @@ pub(crate) fn allocate_width_3_lookups<F: PrimeField>(
     }
 
     let total_generic_lookups = width_3_lookups.len() as u64 * trace_len as u64;
-    assert!(total_generic_lookups < F::CHARACTERISTICS, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
+    assert!(total_generic_lookups < F::CHARACTERISTICS as u64, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
 
     width_3_lookups
 }
@@ -857,7 +857,7 @@ pub(crate) fn compile_timestamp_range_check_expressions<
             let mut compiled_linear_terms = vec![];
             let borrow_place = *layout.get(&intermediate_borrow).unwrap();
             compiled_linear_terms.push((
-                F::from_u64_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
+                F::from_u32_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
                 borrow_place,
             ));
             let read_low_place = *layout.get(&read_low).unwrap();
@@ -874,7 +874,7 @@ pub(crate) fn compile_timestamp_range_check_expressions<
             compiled_linear_terms.push((F::MINUS_ONE, write_low_place));
 
             // and we also have a constant of `- in cycle local write`
-            let mut constant_coeff = F::from_u64_unchecked(local_timestamp_in_cycle as u64);
+            let mut constant_coeff = F::from_u32_unchecked(local_timestamp_in_cycle as u32);
             constant_coeff.negate();
 
             let compiled_constraint = CompiledDegree1Constraint {
@@ -903,7 +903,7 @@ pub(crate) fn compile_timestamp_range_check_expressions<
             let borrow_place = *layout.get(&intermediate_borrow).unwrap();
             compiled_linear_terms.push((F::MINUS_ONE, borrow_place));
 
-            let constant_coeff = F::from_u64_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS);
+            let constant_coeff = F::from_u32_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS);
             let compiled_constraint = CompiledDegree1Constraint {
                 linear_terms: compiled_linear_terms.into_boxed_slice(),
                 constant_term: constant_coeff,
@@ -921,7 +921,7 @@ pub(crate) fn compile_timestamp_range_check_expressions<
 
     let total_timestamp_range_check_lookups =
         compiled_timestamp_comparion_expressions.len() as u64 * trace_len as u64;
-    assert!(total_timestamp_range_check_lookups < F::CHARACTERISTICS, "total number of timestamp range check lookups in circuit is {} that is larger that field characteristics {}", total_timestamp_range_check_lookups, F::CHARACTERISTICS);
+    assert!(total_timestamp_range_check_lookups < F::CHARACTERISTICS as u64, "total number of timestamp range check lookups in circuit is {} that is larger that field characteristics {}", total_timestamp_range_check_lookups, F::CHARACTERISTICS);
 
     (
         offset_for_special_shuffle_ram_timestamps_range_check_expressions,

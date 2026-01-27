@@ -49,7 +49,7 @@ impl ShuffleRamQueryType {
                 let addr =
                     cs.get_value(address[0])
                         .zip_with(cs.get_value(address[1]), |low, high| {
-                            (low.as_u64_reduced() | (high.as_u64_reduced() << 16))
+                            (low.as_u32_reduced() | (high.as_u32_reduced() << 16))
                                 .try_into()
                                 .unwrap()
                         });
@@ -64,7 +64,7 @@ impl ShuffleRamQueryType {
         match *self {
             Self::RegisterOnly { register_index } => cs
                 .get_value(register_index)
-                .map(|f| f.as_u64_reduced().try_into().unwrap()),
+                .map(|f| f.as_u32_reduced().try_into().unwrap()),
             Self::RegisterOrRam {
                 is_register,
                 address,
@@ -75,7 +75,7 @@ impl ShuffleRamQueryType {
                 flag.and_then(|_| {
                     cs.get_value(address[0])
                         .zip_with(cs.get_value(address[1]), |low, high| {
-                            (low.as_u64_reduced() | (high.as_u64_reduced() << 16))
+                            (low.as_u32_reduced() | (high.as_u32_reduced() << 16))
                                 .try_into()
                                 .unwrap()
                         })
@@ -111,7 +111,7 @@ impl ShuffleRamMemQuery {
     pub fn get_write_value<F: PrimeField, CS: Circuit<F>>(&self, cs: &CS) -> u32 {
         cs.get_value(self.write_value[0])
             .zip_with(cs.get_value(self.write_value[1]), |low, high| {
-                (low.as_u64_reduced() | (high.as_u64_reduced() << 16))
+                (low.as_u32_reduced() | (high.as_u32_reduced() << 16))
                     .try_into()
                     .unwrap()
             })
@@ -120,7 +120,7 @@ impl ShuffleRamMemQuery {
     pub fn get_read_value<F: PrimeField, CS: Circuit<F>>(&self, cs: &CS) -> u32 {
         cs.get_value(self.read_value[0])
             .zip_with(cs.get_value(self.read_value[1]), |low, high| {
-                (low.as_u64_reduced() | (high.as_u64_reduced() << 16))
+                (low.as_u32_reduced() | (high.as_u32_reduced() << 16))
                     .try_into()
                     .unwrap()
             })
@@ -864,7 +864,7 @@ pub trait Circuit<F: PrimeField>: Sized {
         let inner_evaluator = move |placer: &mut Self::WitnessPlacer| {
             let table_id = match table {
                 Num::Constant(con) => <Self::WitnessPlacer as WitnessTypeSet<F>>::U16::constant(
-                    con.as_u64_reduced() as u16,
+                    con.as_u32_reduced() as u16,
                 ),
                 Num::Var(var) => placer.get_u16(var),
             };

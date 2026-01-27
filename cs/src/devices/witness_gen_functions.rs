@@ -46,8 +46,8 @@ pub(crate) fn unconditional_add_sub_witness_gen_function_for_constant_src1<F: Pr
     table_type: TableType,
 ) {
     let is_sub = constants[0].as_boolean();
-    let a_low = constants[1].as_u64_reduced() as u16;
-    let a_high = constants[2].as_u64_reduced() as u16;
+    let a_low = constants[1].as_u32_reduced() as u16;
+    let a_high = constants[2].as_u32_reduced() as u16;
     let a = ((a_high as u32) << 16) | (a_low as u32);
 
     let b = Register::get_u32_from_source(inputs, 0);
@@ -74,8 +74,8 @@ pub(crate) fn unconditional_add_sub_witness_gen_function_for_constant_src2<F: Pr
     table_type: TableType,
 ) {
     let is_sub = constants[0].as_boolean();
-    let b_low = constants[1].as_u64_reduced() as u16;
-    let b_high = constants[2].as_u64_reduced() as u16;
+    let b_low = constants[1].as_u32_reduced() as u16;
+    let b_high = constants[2].as_u32_reduced() as u16;
     let b = ((b_high as u32) << 16) | (b_low as u32);
 
     let a = Register::get_u32_from_source(inputs, 0);

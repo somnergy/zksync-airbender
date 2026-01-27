@@ -126,7 +126,7 @@ impl CsrRegisters {
             Self::Invalid => 0x00,
         };
 
-        Num::Constant(F::from_u64(encoding as u64).unwrap())
+        Num::Constant(F::from_u32_unchecked(encoding as u32))
     }
 
     pub fn from_encoding(num: u32) -> Self {

@@ -218,7 +218,7 @@ impl<
             // or true booleans if we actually execute this family
             let is_rom_read = cs.add_variable_from_constraint(
                 Term::from(execute_family.get_variable().unwrap())
-                    * (Term::from(1u64) - Term::from(is_ram_range)),
+                    * (Term::from(1u32) - Term::from(is_ram_range)),
             );
             let is_ram_read = cs.add_variable_from_constraint(
                 Term::from(execute_family.get_variable().unwrap()) * Term::from(is_ram_range),
@@ -228,7 +228,7 @@ impl<
             let [rom_value_low, rom_value_high] = {
                 // ROM
                 let rom_address = aligned_address_low_constraint.clone()
-                    + Term::from((F::from_u64_unchecked(1 << 16), address_high_bits_for_rom));
+                    + Term::from((F::from_u32_unchecked(1 << 16), address_high_bits_for_rom));
 
                 let [rom_value_low, rom_value_high] = opt_ctx
                     .append_lookup_relation_from_linear_terms(
@@ -241,7 +241,7 @@ impl<
                 // now we can select a word in case of sub-word reads
                 let subword_to_use = cs.add_variable_from_constraint(
                     Term::from(bit_1) * Term::from(rom_value_high)
-                        + (Term::from(1u64) - Term::from(bit_1)) * Term::from(rom_value_low),
+                        + (Term::from(1u32) - Term::from(bit_1)) * Term::from(rom_value_low),
                 );
 
                 // zero/signextend if needed - we will just use funct3 for it
@@ -333,7 +333,7 @@ impl<
                 // now we can select a word in case of sub-word reads
                 let subword_to_use = cs.add_variable_from_constraint(
                     Term::from(bit_1) * Term::from(ram_value_high)
-                        + (Term::from(1u64) - Term::from(bit_1)) * Term::from(ram_value_low),
+                        + (Term::from(1u32) - Term::from(bit_1)) * Term::from(ram_value_low),
                 );
 
                 // zero/signextend if needed - we will just use funct3 for it
@@ -373,7 +373,7 @@ impl<
             };
             // TODO: fix compiler to handle it
             let t = cs.add_variable_from_constraint_allow_explicit_linear(
-                Term::from(1u64) - Term::from(execute_family),
+                Term::from(1u32) - Term::from(execute_family),
             );
             *is_register = Boolean::Is(t);
 
@@ -381,10 +381,10 @@ impl<
             let rs2_index = inputs.get_rs2_index();
             cs.add_constraint(
                 (rs2_index - Term::from(address[0]))
-                    * (Term::from(1u64) - Term::from(execute_family)),
+                    * (Term::from(1u32) - Term::from(execute_family)),
             );
             cs.add_constraint(
-                Term::from(address[1]) * (Term::from(1u64) - Term::from(execute_family)),
+                Term::from(address[1]) * (Term::from(1u32) - Term::from(execute_family)),
             );
 
             if ASSUME_TRUSTED_CODE {
@@ -434,7 +434,7 @@ impl<
 
             // This will also trap unaligned access
             let rom_address = Term::from(unaligned_address.0[0])
-                + Term::from((F::from_u64_unchecked(1 << 16), address_high_bits_for_rom));
+                + Term::from((F::from_u32_unchecked(1 << 16), address_high_bits_for_rom));
 
             let [rom_value_low, rom_value_high] = opt_ctx.append_lookup_relation_from_linear_terms(
                 cs,
@@ -447,7 +447,7 @@ impl<
             // or true booleans if we actually execute this family
             let is_rom_read = cs.add_variable_from_constraint(
                 Term::from(execute_family.get_variable().unwrap())
-                    * (Term::from(1u64) - Term::from(is_ram_range)),
+                    * (Term::from(1u32) - Term::from(is_ram_range)),
             );
             let is_ram_read = cs.add_variable_from_constraint(
                 Term::from(execute_family.get_variable().unwrap()) * Term::from(is_ram_range),
@@ -524,7 +524,7 @@ impl<
             };
             // TODO: fix compiler to handle it
             let t = cs.add_variable_from_constraint_allow_explicit_linear(
-                Term::from(1u64) - Term::from(execute_family),
+                Term::from(1u32) - Term::from(execute_family),
             );
             *is_register = Boolean::Is(t);
 
@@ -532,10 +532,10 @@ impl<
             let rs2_index = inputs.get_rs2_index();
             cs.add_constraint(
                 (rs2_index - Term::from(address[0]))
-                    * (Term::from(1u64) - Term::from(execute_family)),
+                    * (Term::from(1u32) - Term::from(execute_family)),
             );
             cs.add_constraint(
-                Term::from(address[1]) * (Term::from(1u64) - Term::from(execute_family)),
+                Term::from(address[1]) * (Term::from(1u32) - Term::from(execute_family)),
             );
 
             CommonDiffs {

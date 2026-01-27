@@ -399,8 +399,8 @@ impl core::fmt::Debug for BabyBearExt2 {
         write!(
             f,
             "F2[{}, {}]",
-            self.c0.as_u64_reduced(),
-            self.c1.as_u64_reduced()
+            self.c0.as_u32_reduced(),
+            self.c1.as_u32_reduced()
         )
     }
 }
@@ -410,8 +410,8 @@ impl core::fmt::Display for BabyBearExt2 {
         write!(
             f,
             "F2[{}, {}]",
-            self.c0.as_u64_reduced(),
-            self.c1.as_u64_reduced()
+            self.c0.as_u32_reduced(),
+            self.c1.as_u32_reduced()
         )
     }
 }

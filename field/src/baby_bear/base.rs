@@ -388,31 +388,39 @@ impl PrimeField for BabyBearField {
     const MINUS_ONE: Self = Self::new(Self::ORDER - 1);
     const NUM_BYTES_IN_REPR: usize = 4;
     const CHAR_BITS: usize = 31;
-    const CHARACTERISTICS: u64 = Self::ORDER as u64;
+    const CHARACTERISTICS: u32 = Self::ORDER;
 
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn as_u64(self) -> u64 {
-        self.0 as u64
+    fn as_u32(self) -> u32 {
+        self.as_u32_reduced()
     }
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_u64_unchecked(value: u64) -> Self {
-        Self::new(value as u32)
+    fn as_u32_reduced(self) -> u32 {
+        self.to_u32()
     }
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_u64(value: u64) -> Option<Self> {
-        if value >= Self::ORDER as u64 {
+    fn as_u32_raw_repr_reduced(self) -> u32 {
+        self.0
+    }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn from_u32_unchecked(value: u32) -> Self {
+        Self::new(value)
+    }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn from_u32_with_reduction(value: u32) -> Self {
+        Self::from_nonreduced_u32(value)
+    }
+    #[cfg_attr(not(feature = "no_inline"), inline(always))]
+    fn from_u32(value: u32) -> Option<Self> {
+        if value >= Self::ORDER {
             None
         } else {
-            Some(Self(value as u32))
+            Some(Self::new(value))
         }
     }
     #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn from_u64_with_reduction(value: u64) -> Self {
-        Self((value % Self::ORDER as u64) as u32)
-    }
-    #[cfg_attr(not(feature = "no_inline"), inline(always))]
-    fn as_u64_reduced(&self) -> u64 {
-        self.to_u32() as u64
+    fn from_reduced_raw_repr(value: u32) -> Self {
+        Self(value)
     }
     #[track_caller]
     #[cfg_attr(not(feature = "no_inline"), inline(always))]

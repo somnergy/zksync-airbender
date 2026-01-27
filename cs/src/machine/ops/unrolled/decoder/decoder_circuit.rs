@@ -55,7 +55,7 @@ pub fn describe_decoder_cycle<
     // when we perform lookup over the relation
     let mut imm4_1: Constraint<F> = Constraint::from(rd_from_decoder);
     imm4_1 -= Term::from(imm11);
-    imm4_1.scale(F::from_u64_unchecked(1 << 1).inverse().unwrap());
+    imm4_1.scale(F::from_u32_unchecked(1 << 1).inverse().unwrap());
     // funct3 comes from decoder
     let funct3 = Num::Var(decoder_circuit_state.decoder_data.decoder_data.funct3);
     // rs1 crosses the boundary, and we could need to split lowest bit. Instead - we rewrite it as
@@ -69,7 +69,7 @@ pub fn describe_decoder_cycle<
             - Term::from(1 << 7) * Term::from(rd_from_decoder) // 5 bits
             - Term::from(1 << 12) * Term::from(funct3) // 3 bits
     };
-    rs1_low_constraint.scale(F::from_u64_unchecked(1 << 15).inverse().unwrap());
+    rs1_low_constraint.scale(F::from_u32_unchecked(1 << 15).inverse().unwrap());
     // ensure that it's boolean
     circuit
         .add_constraint(rs1_low_constraint.clone() * (rs1_low_constraint.clone() - Term::from(1)));
@@ -78,7 +78,7 @@ pub fn describe_decoder_cycle<
 
     let mut rs1_high: Constraint<F> = Constraint::from(rs1_from_decoder);
     rs1_high = rs1_high - rs1_low_constraint.clone();
-    rs1_high.scale(F::from_u64_unchecked(1 << 1).inverse().unwrap());
+    rs1_high.scale(F::from_u32_unchecked(1 << 1).inverse().unwrap());
     // rs2 doesn't cross the word boundary, but we need it's 1 bit to parse immediate
     let rs2_from_decoder = Num::Var(decoder_circuit_state.decoder_data.decoder_data.rs2_index);
 
@@ -87,7 +87,7 @@ pub fn describe_decoder_cycle<
     let rs2_low = circuit.add_boolean_variable();
     let mut rs2_high: Constraint<F> = Constraint::from(rs2_from_decoder);
     rs2_high -= Term::from(rs2_low);
-    rs2_high.scale(F::from_u64_unchecked(1 << 1).inverse().unwrap());
+    rs2_high.scale(F::from_u32_unchecked(1 << 1).inverse().unwrap());
     let imm10_5 = Num::Var(circuit.add_variable());
 
     // and we do not need sign bit, as we can span a linear constraint on it
@@ -98,7 +98,7 @@ pub fn describe_decoder_cycle<
             - Term::from(rs1_from_decoder) * Term::from(1 << 4)
             - Term::from(imm10_5) * Term::from(1 << 9)
     };
-    sign_bit_constraint.scale(F::from_u64_unchecked(1 << 16).inverse().unwrap());
+    sign_bit_constraint.scale(F::from_u32_unchecked(1 << 16).inverse().unwrap());
     circuit.add_constraint(
         sign_bit_constraint.clone() * (sign_bit_constraint.clone() - Term::from(1)),
     );
@@ -257,7 +257,7 @@ pub fn describe_decoder_cycle<
         // 4
         (Term::from(i_insn) + Term::from(s_insn) + Term::from(b_insn))
             * sign_bit_constraint.clone()
-            * Term::from(0b1111u64)
+            * Term::from(0b1111u32)
             + (Term::from(u_insn) + Term::from(j_insn))
                 * (rs1_low_constraint * Term::from(1 << 3) + (Term::from(funct3))),
     ];
@@ -369,11 +369,11 @@ fn opcode_lookup<F: PrimeField, CS: Circuit<F>>(
             let funct3 = placer.get_field(funct3);
             let funct7 = placer.get_field(funct7);
             let coeff = <CS::WitnessPlacer as WitnessTypeSet<F>>::Field::constant(
-                F::from_u64_unchecked(1 << 7),
+                F::from_u32_unchecked(1 << 7),
             );
             result.add_assign_product(&coeff, &funct3);
             let coeff = <CS::WitnessPlacer as WitnessTypeSet<F>>::Field::constant(
-                F::from_u64_unchecked(1 << (7 + 3)),
+                F::from_u32_unchecked(1 << (7 + 3)),
             );
             result.add_assign_product(&coeff, &funct7);
 

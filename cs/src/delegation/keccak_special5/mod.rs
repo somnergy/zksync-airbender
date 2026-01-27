@@ -486,7 +486,7 @@ pub fn define_keccak_special5_delegation_circuit<
             );
             // then: go ahead and process state_inputs
             let state_indexes_usize =
-                state_indexes.map(|var| cs.get_value(var).unwrap().as_u64_reduced() as usize);
+                state_indexes.map(|var| cs.get_value(var).unwrap().as_u32_reduced() as usize);
             let value_fn = move |placer: &mut CS::WitnessPlacer| {
                 let state_inputs_values = state_indexes_usize.map(|i| {
                     [
@@ -529,7 +529,7 @@ pub fn define_keccak_special5_delegation_circuit<
                 .into_iter()
                 .enumerate()
                 .fold(Constraint::from(0), |acc, (i, bit)| {
-                    acc + Term::from(i as u64) * Term::from(bit)
+                    acc + Term::from(i as u32) * Term::from(bit)
                 })
         };
         let iter_bitmask: [Boolean; 5] = from_fn(|_| cs.add_boolean_variable());
@@ -539,7 +539,7 @@ pub fn define_keccak_special5_delegation_circuit<
                 .into_iter()
                 .enumerate()
                 .fold(Constraint::from(0), |acc, (i, bit)| {
-                    acc + Term::from(i as u64) * Term::from(bit)
+                    acc + Term::from(i as u32) * Term::from(bit)
                 })
         };
         let round_bits: [Boolean; 5] = from_fn(|_| cs.add_boolean_variable());
@@ -677,7 +677,7 @@ pub fn define_keccak_special5_delegation_circuit<
     let p0_round_constant_control_reg = {
         let round_if_iter0 = cs.add_variable_from_constraint(round * Term::from(is_iter0)); // (might not be necessary but let's do it for safety)
         let chunks_u8: [Constraint<F>; 8] = from_fn(|i| {
-            Constraint::from(round_if_iter0) + Term::from(1 << 5) * Term::from(i as u64)
+            Constraint::from(round_if_iter0) + Term::from(1 << 5) * Term::from(i as u32)
         });
         let chunks_u16: [Num<F>; 4] = from_fn(|i| {
             cs.add_variable_from_constraint_allow_explicit_linear(
@@ -1455,11 +1455,11 @@ pub fn define_keccak_special5_delegation_circuit<
     if DEBUG {
         unsafe {
             let expected_control = DEBUG_CONTROL;
-            let begotten_control = cs.get_value(control).unwrap().as_u64_reduced() as u16;
+            let begotten_control = cs.get_value(control).unwrap().as_u32_reduced() as u16;
             let expected_state_indexes = DEBUG_INDEXES;
             let expected_state_inputs = DEBUG_INDEXES.map(|i| DEBUG_INPUT_STATE[i]);
             let begotten_state_indexes =
-                state_indexes.map(|x| cs.get_value(x).unwrap().as_u64_reduced() as usize);
+                state_indexes.map(|x| cs.get_value(x).unwrap().as_u32_reduced() as usize);
             let begotten_state_inputs = state_inputs.map(|x| x.get_value_unsigned(cs).unwrap());
             assert!(expected_control == begotten_control);
             assert!(expected_state_indexes == begotten_state_indexes);
@@ -1470,7 +1470,7 @@ pub fn define_keccak_special5_delegation_circuit<
             assert!(expected_state_outputs == begotten_state_outputs, "wanted state updates {expected_state_outputs:?} but got {begotten_state_outputs:?}");
 
             let expected_control_next = DEBUG_CONTROL_NEXT;
-            let begotten_control_next = cs.get_value(control_next).unwrap().as_u64_reduced() as u16;
+            let begotten_control_next = cs.get_value(control_next).unwrap().as_u32_reduced() as u16;
             assert!(
                 expected_control_next == begotten_control_next,
                 "wanted control update {expected_control_next} but got {begotten_control_next}"
@@ -1541,7 +1541,7 @@ fn enforce_binop<F: PrimeField, CS: Circuit<F>, const N: usize, const DEBUG: boo
             .into_iter()
             .zip(precompile_rotation_constants)
         {
-            rot_const_mod16 += Term::from(flag) * Term::from(constant % 16);
+            rot_const_mod16 += Term::from(flag) * Term::from((constant % 16) as u32);
         }
         rot_const_mod16
     };

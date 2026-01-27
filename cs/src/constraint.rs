@@ -29,7 +29,7 @@ impl<F: PrimeField> std::fmt::Display for Term<F> {
                 inner,
                 degree,
             } => {
-                let coeff = coeff.as_u64_reduced();
+                let coeff = coeff.as_u32_reduced();
                 let coeff_opp = F::CHARACTERISTICS - coeff;
                 if coeff < coeff_opp {
                     if coeff != 1 {
@@ -69,7 +69,7 @@ impl<F: PrimeField> Ord for Term<F> {
         }
 
         match (self, other) {
-            (Term::Constant(s), Term::Constant(o)) => s.as_u64_reduced().cmp(&o.as_u64_reduced()),
+            (Term::Constant(s), Term::Constant(o)) => s.as_u32_reduced().cmp(&o.as_u32_reduced()),
             (Term::Constant(..), Term::Expression { .. }) => std::cmp::Ordering::Less,
             (Term::Expression { .. }, Term::Constant(..)) => std::cmp::Ordering::Greater,
             (
@@ -92,7 +92,7 @@ impl<F: PrimeField> Ord for Term<F> {
                     return t;
                 }
 
-                s_coeff.as_u64_reduced().cmp(&o_coeff.as_u64_reduced())
+                s_coeff.as_u32_reduced().cmp(&o_coeff.as_u32_reduced())
             }
         }
     }
@@ -375,15 +375,15 @@ impl<F: PrimeField> Constraint<F> {
     }
 }
 
-impl<F: PrimeField> From<u64> for Constraint<F> {
-    fn from(value: u64) -> Self {
-        let term = Term::Constant(F::from_u64(value).unwrap());
+impl<F: PrimeField> From<u32> for Constraint<F> {
+    fn from(value: u32) -> Self {
+        let term = Term::Constant(F::from_u32_with_reduction(value));
         Constraint { terms: vec![term] }
     }
 }
 impl<F: PrimeField> From<bool> for Constraint<F> {
     fn from(value: bool) -> Self {
-        let term = Term::Constant(F::from_u64(value as u64).unwrap());
+        let term = Term::Constant(F::from_u32(value as u32).unwrap());
         Constraint { terms: vec![term] }
     }
 }
@@ -914,9 +914,9 @@ impl<F: PrimeField> Term<F> {
     }
 }
 
-impl<F: PrimeField> From<u64> for Term<F> {
-    fn from(value: u64) -> Self {
-        Term::Constant(F::from_u64(value).unwrap())
+impl<F: PrimeField> From<u32> for Term<F> {
+    fn from(value: u32) -> Self {
+        Term::Constant(F::from_u32_with_reduction(value))
     }
 }
 
@@ -956,7 +956,7 @@ impl<F: PrimeField> From<Num<F>> for Term<F> {
 impl<F: PrimeField> From<Boolean> for Term<F> {
     fn from(value: Boolean) -> Self {
         match value {
-            Boolean::Constant(value) => Term::from(value as u64),
+            Boolean::Constant(value) => Term::from(value as u32),
             Boolean::Is(value) => Self::from(value),
             Boolean::Not(_) => {
                 unreachable!()

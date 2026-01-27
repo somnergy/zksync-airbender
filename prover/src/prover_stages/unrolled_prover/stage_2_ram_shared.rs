@@ -26,7 +26,7 @@ pub(crate) unsafe fn stage_2_shuffle_ram_add_timestamp_contributions_in_executor
     read_timestamp_contibution.add_assign(&t);
 
     let mut write_timestamp_low = *memory_trace_row.get_unchecked(cycle_timestamp_columns.start());
-    write_timestamp_low.add_assign(&Mersenne31Field::from_u64_unchecked(access_idx as u64));
+    write_timestamp_low.add_assign(&Mersenne31Field::from_u32_unchecked(access_idx as u32));
     let mut write_timestamp_contibution = memory_argument_challenges
         .memory_argument_linearization_challenges[MEM_ARGUMENT_CHALLENGE_POWERS_TIMESTAMP_LOW_IDX];
     write_timestamp_contibution.mul_assign_by_base(&write_timestamp_low);

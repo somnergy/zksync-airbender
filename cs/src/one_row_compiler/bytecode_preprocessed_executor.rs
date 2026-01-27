@@ -271,7 +271,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
                     next_timestamp_intermediate_carry,
                 ))
                 - Term::from(executor_machine_state.cycle_start_state.timestamp[0])
-                - Term::from(TIMESTAMP_STEP),
+                - Term::from(TIMESTAMP_STEP as u32),
             true,
         ));
         // high - carryless

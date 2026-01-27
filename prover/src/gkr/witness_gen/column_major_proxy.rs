@@ -67,10 +67,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
         unsafe {
             self.memory_rows_starts
                 .get_unchecked_mut(offset_low)
-                .write(F::from_u64_unchecked(low as u64));
+                .write(F::from_u32_unchecked(low as u32));
             self.memory_rows_starts
                 .get_unchecked_mut(offset_high)
-                .write(F::from_u64_unchecked(high as u64));
+                .write(F::from_u32_unchecked(high as u32));
         }
     }
 
@@ -109,10 +109,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
             unsafe {
                 self.memory_rows_starts
                     .get_unchecked_mut(offset_low)
-                    .write(F::from_u64_unchecked(low as u64));
+                    .write(F::from_u32_unchecked(low as u32));
                 self.memory_rows_starts
                     .get_unchecked_mut(offset_high)
-                    .write(F::from_u64_unchecked(high as u64));
+                    .write(F::from_u32_unchecked(high as u32));
             }
         } else {
             debug_assert!(offset_low < self.witness_rows_starts.len());
@@ -121,10 +121,10 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
             unsafe {
                 self.witness_rows_starts
                     .get_unchecked_mut(offset_low)
-                    .write(F::from_u64_unchecked(low as u64));
+                    .write(F::from_u32_unchecked(low as u32));
                 self.witness_rows_starts
                     .get_unchecked_mut(offset_high)
-                    .write(F::from_u64_unchecked(high as u64));
+                    .write(F::from_u32_unchecked(high as u32));
             }
         }
     }
@@ -159,14 +159,14 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
             unsafe {
                 self.memory_rows_starts
                     .get_unchecked_mut(column)
-                    .write(F::from_u64_unchecked(value as u64));
+                    .write(F::from_u32_unchecked(value as u32));
             }
         } else {
             debug_assert!(column < self.witness_rows_starts.len());
             unsafe {
                 self.witness_rows_starts
                     .get_unchecked_mut(column)
-                    .write(F::from_u64_unchecked(value as u64));
+                    .write(F::from_u32_unchecked(value as u32));
             }
         }
     }
@@ -201,14 +201,14 @@ impl<'a, O: Oracle<F> + 'a, F: PrimeField> ColumnMajorWitnessProxy<'a, O, F> {
             unsafe {
                 self.memory_rows_starts
                     .get_unchecked_mut(column)
-                    .write(F::from_u64_unchecked(value as u64));
+                    .write(F::from_u32_unchecked(value as u32));
             }
         } else {
             debug_assert!(column < self.witness_rows_starts.len());
             unsafe {
                 self.witness_rows_starts
                     .get_unchecked_mut(column)
-                    .write(F::from_u64_unchecked(value as u64));
+                    .write(F::from_u32_unchecked(value as u32));
             }
         }
     }

@@ -181,7 +181,7 @@ pub fn define_u256_ops_extended_control_delegation_circuit<F: PrimeField, CS: Ci
             constraint = constraint + bit.get_terms();
         }
     }
-    let constraint_minus_one = constraint.clone() - Term::from(1u64);
+    let constraint_minus_one = constraint.clone() - Term::from(1u32);
     constraint = constraint * constraint_minus_one;
     cs.add_constraint(constraint);
 
@@ -464,7 +464,7 @@ pub fn define_u256_ops_extended_control_delegation_circuit<F: PrimeField, CS: Ci
             constraint - Term::from(perform_memcopy) * Term::from(additive_ops_result[limb_idx]);
 
         // and propagate carries
-        constraint -= Term::from((F::from_u64_unchecked(1 << 16), of_for_limb));
+        constraint -= Term::from((F::from_u32_unchecked(1 << 16), of_for_limb));
         if limb_idx == 0 {
             // we only "use" carry or borrow in case of add/sub/sub_neg, but it is still degree 2
 
@@ -510,13 +510,13 @@ pub fn define_u256_ops_extended_control_delegation_circuit<F: PrimeField, CS: Ci
     // {
     //     for (i, el) in a_bytes.iter().enumerate() {
     //         if let Some(value) = cs.get_value(*el) {
-    //             println!("`a` element byte {} = 0x{:02x}", i, value.as_u64_reduced() as u8);
+    //             println!("`a` element byte {} = 0x{:02x}", i, value.as_u32_reduced() as u8);
     //         }
     //     }
 
     //     for (i, el) in b_bytes.iter().enumerate() {
     //         if let Some(value) = cs.get_value(*el) {
-    //             println!("`b` element byte {} = 0x{:02x}", i, value.as_u64_reduced() as u8);
+    //             println!("`b` element byte {} = 0x{:02x}", i, value.as_u32_reduced() as u8);
     //         }
     //     }
     // }
@@ -561,14 +561,14 @@ pub fn define_u256_ops_extended_control_delegation_circuit<F: PrimeField, CS: Ci
                     product_range += 255u64 * 255u64;
                 } else if a_byte_idx + b_byte_idx == 2 * i + 1 {
                     product_constraint = product_constraint
-                        + Term::from((F::from_u64_unchecked(1 << 8), a_bytes[a_byte_idx]))
+                        + Term::from((F::from_u32_unchecked(1 << 8), a_bytes[a_byte_idx]))
                             * Term::from(b_bytes[b_byte_idx]);
                     product_range += (255u64 * 255u64) << 8;
                 }
             }
         }
-        assert!(product_range < F::CHARACTERISTICS);
-        assert!(product_range.next_power_of_two() <= F::CHARACTERISTICS);
+        assert!(product_range < F::CHARACTERISTICS as u64);
+        assert!(product_range.next_power_of_two() <= F::CHARACTERISTICS as u64);
 
         if i == full_product.len() - 1 {
             assert!(product_range < 1 << 16);
@@ -596,15 +596,15 @@ pub fn define_u256_ops_extended_control_delegation_circuit<F: PrimeField, CS: Ci
             carry_constraint = Constraint::empty();
             carry_constraint += Term::from(product_intermediate);
             carry_constraint -= Term::from(product_word);
-            carry_constraint.scale(F::from_u64_unchecked(1 << 16).inverse().unwrap());
+            carry_constraint.scale(F::from_u32_unchecked(1 << 16).inverse().unwrap());
 
             // {
             //     if let Some(value) = cs.get_value(product_intermediate) {
-            //         println!("Intermediate product {} value = 0x{:016x}", i, value.as_u64_reduced());
+            //         println!("Intermediate product {} value = 0x{:016x}", i, value.as_u32_reduced());
             //     }
 
             //     if let Some(value) = cs.get_value(*product_word) {
-            //         println!("Result product word {} value = 0x{:016x}", i, value.as_u64_reduced());
+            //         println!("Result product word {} value = 0x{:016x}", i, value.as_u32_reduced());
             //     }
             // }
 
@@ -795,7 +795,7 @@ pub fn define_u256_ops_extended_control_delegation_circuit<F: PrimeField, CS: Ci
         + (Term::from(perform_eq) * Term::from(perform_eq_result.get_variable().unwrap()));
     constraint = constraint
         + (Term::from(perform_mul_low)
-            * (Term::from(1u64) - Term::from(all_zeroes.get_variable().unwrap())));
+            * (Term::from(1u32) - Term::from(all_zeroes.get_variable().unwrap())));
     // memcopy is same as addition
     constraint = constraint + (Term::from(perform_memcopy) * Term::from(result_of_variable));
     collapse_max_quadratic_constraint_into(cs, constraint.clone(), x12_write_vars[0]);

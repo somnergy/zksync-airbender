@@ -92,13 +92,22 @@ pub trait PrimeField: Field {
     const NUM_BYTES_IN_REPR: usize;
 
     const CHAR_BITS: usize;
-    const CHARACTERISTICS: u64;
+    const CHARACTERISTICS: u32;
 
-    fn as_u64(self) -> u64;
-    fn from_u64_unchecked(value: u64) -> Self;
-    fn from_u64_with_reduction(value: u64) -> Self;
-    fn from_u64(value: u64) -> Option<Self>;
-    fn as_u64_reduced(&self) -> u64;
+    // Potentially unnormalized, but "natural" representation
+    fn as_u32(self) -> u32;
+    // < CHAR, but "natural" representation
+    fn as_u32_reduced(self) -> u32;
+    // any representation, that can be used with the corresponding constructor
+    fn as_u32_raw_repr_reduced(self) -> u32;
+
+    fn from_u32_unchecked(value: u32) -> Self;
+    fn from_u32_with_reduction(value: u32) -> Self;
+    fn from_u64_with_reduction(value: u64) -> Self {
+        Self::from_u32_unchecked((value % (Self::CHARACTERISTICS as u64)) as u32)
+    }
+    fn from_u32(value: u32) -> Option<Self>;
+    fn from_reduced_raw_repr(value: u32) -> Self;
 
     fn as_boolean(&self) -> bool;
 
@@ -219,6 +228,6 @@ pub trait TwoAdicField: Field {
 
 impl<F: PrimeField> Rand for F {
     fn random_element<R: Rng + ?Sized>(rng: &mut R) -> F {
-        F::from_u64_unchecked(rng.random_range(0..F::CHARACTERISTICS))
+        F::from_u32_unchecked(rng.random_range(0..F::CHARACTERISTICS))
     }
 }

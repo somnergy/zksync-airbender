@@ -201,11 +201,11 @@ impl<
         let returned_value = [
             Constraint::<F>::from(
                 Term::from(res_chunks[0])
-                    + Term::from((F::from_u64_unchecked(1 << 8), res_chunks[1])),
+                    + Term::from((F::from_u32_unchecked(1 << 8), res_chunks[1])),
             ),
             Constraint::<F>::from(
                 Term::from(res_chunks[2])
-                    + Term::from((F::from_u64_unchecked(1 << 8), res_chunks[3])),
+                    + Term::from((F::from_u32_unchecked(1 << 8), res_chunks[3])),
             ),
         ];
 

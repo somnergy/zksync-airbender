@@ -39,7 +39,7 @@ fn apply_jump_branch_slt<F: PrimeField, CS: Circuit<F>, const SUPPORT_SIGNED: bo
     let is_jalr = decoder.perform_jalr();
 
     let four_as_reg = Register([
-        Num::Constant(F::from_u64_unchecked(4)),
+        Num::Constant(F::from_u32_unchecked(4)),
         Num::Constant(F::ZERO),
     ]);
 

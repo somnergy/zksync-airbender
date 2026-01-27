@@ -9,9 +9,7 @@ pub struct BaseFieldPoly<F: PrimeField> {
 impl<F: PrimeField> BaseFieldPoly<F> {
     pub fn new(values: Box<[F]>) -> Self {
         assert!(values.len().is_power_of_two());
-        Self {
-            values,
-        }
+        Self { values }
     }
 }
 

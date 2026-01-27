@@ -241,9 +241,9 @@ pub struct NoFieldLookupPostTrivialNumeratorRelation {
 // constant temrs: (constant, power of random challenge)
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NoFieldMaxQuadraticConstraintsGKRRelation {
-    pub quadratic_terms: Box<[((GKRAddress, GKRAddress), Box<[(u64, usize)]>)]>,
-    pub linear_terms: Box<[(GKRAddress, Box<[(u64, usize)]>)]>,
-    pub constants: Box<[(u64, usize)]>,
+    pub quadratic_terms: Box<[((GKRAddress, GKRAddress), Box<[(u32, usize)]>)]>,
+    pub linear_terms: Box<[(GKRAddress, Box<[(u32, usize)]>)]>,
+    pub constants: Box<[(u32, usize)]>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

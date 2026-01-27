@@ -135,12 +135,12 @@ pub fn define_blake2_single_round_delegation_circuit<F: PrimeField, CS: Circuit<
         let existing = input_state[i];
         let selected_0 = cs.choose(
             first_round,
-            Num::Constant(F::from_u64_unchecked(IV[i - 8] as u64 & 0xffff)),
+            Num::Constant(F::from_u32_unchecked(IV[i - 8] as u32 & 0xffff)),
             Num::Var(existing[0]),
         );
         let selected_1 = cs.choose(
             first_round,
-            Num::Constant(F::from_u64_unchecked((IV[i - 8] as u64) >> 16)),
+            Num::Constant(F::from_u32_unchecked((IV[i - 8] as u32) >> 16)),
             Num::Var(existing[1]),
         );
 
@@ -321,7 +321,7 @@ pub fn define_blake2_single_round_delegation_circuit<F: PrimeField, CS: Circuit<
             let mut constraint = Constraint::empty();
             let mut shift = 0;
             for (width, var) in src.into_iter() {
-                constraint += Term::from((F::from_u64_unchecked(1u64 << shift), var));
+                constraint += Term::from((F::from_u32_unchecked(1u32 << shift), var));
                 shift += width;
             }
             // set value
@@ -350,7 +350,7 @@ pub fn define_blake2_single_round_delegation_circuit<F: PrimeField, CS: Circuit<
             let mut constraint = Constraint::empty();
             let mut shift = 0;
             for (width, var) in src.into_iter() {
-                constraint += Term::from((F::from_u64_unchecked(1u64 << shift), var));
+                constraint += Term::from((F::from_u32_unchecked(1u32 << shift), var));
                 shift += width;
             }
             // set value
@@ -460,7 +460,7 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
             // MARIO: this is the 1 less chunk trick here, i.e. we split a u16 constraint into var+constraint u8 chunks. we do this optimisation everywhere
             constraint -= Term::from(addition_result_chunks[0]);
             // and scale
-            constraint.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+            constraint.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
             a_chunks_and_constraints.push(([(8, addition_result_chunks[0])], constraint));
 
@@ -499,7 +499,7 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
                 let mut constraint = Constraint::<F>::empty();
                 constraint += Term::from(var);
                 constraint -= Term::from(low_chunk);
-                constraint.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+                constraint.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
                 // and xor
                 let [low_xor_result] = cs.get_variables_from_lookup_constrained::<2, 1>(
@@ -632,9 +632,9 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
             // now we can subtract chunks for lookup relation
             // subtract chunks
             constraint -= Term::from(addition_result_chunks[0]);
-            constraint -= Term::from((F::from_u64_unchecked(1 << 3), addition_result_chunks[1]));
+            constraint -= Term::from((F::from_u32_unchecked(1 << 3), addition_result_chunks[1]));
             // and scale
-            constraint.scale(F::from_u64_unchecked(1 << 12).inverse().unwrap());
+            constraint.scale(F::from_u32_unchecked(1 << 12).inverse().unwrap());
 
             c_chunks_and_constraints.push((
                 [
@@ -686,8 +686,8 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
                 let mut constraint = Constraint::<F>::empty();
                 constraint += Term::from(var);
                 constraint -= Term::from(chunk_3);
-                constraint -= Term::from((F::from_u64_unchecked(1 << 3), chunk_9));
-                constraint.scale(F::from_u64_unchecked(1 << 12).inverse().unwrap());
+                constraint -= Term::from((F::from_u32_unchecked(1 << 3), chunk_9));
+                constraint.scale(F::from_u32_unchecked(1 << 12).inverse().unwrap());
 
                 // and xor
                 let [xor_result_3] = cs.get_variables_from_lookup_constrained::<2, 1>(
@@ -750,10 +750,10 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
 
                 let mut constraint = Constraint::<F>::empty();
                 constraint += Term::from(b_low_var);
-                constraint += Term::from((F::from_u64_unchecked(1 << 9), b_high_var));
+                constraint += Term::from((F::from_u32_unchecked(1 << 9), b_high_var));
                 constraint -= Term::from(chunk_3);
-                constraint -= Term::from((F::from_u64_unchecked(1 << 3), chunk_9));
-                constraint.scale(F::from_u64_unchecked(1 << 12).inverse().unwrap());
+                constraint -= Term::from((F::from_u32_unchecked(1 << 3), chunk_9));
+                constraint.scale(F::from_u32_unchecked(1 << 12).inverse().unwrap());
 
                 // and xor
                 let [xor_result_3] = cs.get_variables_from_lookup_constrained::<2, 1>(
@@ -864,7 +864,7 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
             // subtract chunks
             constraint -= Term::from(addition_result_chunks[0]);
             // and scale
-            constraint.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+            constraint.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
             a_chunks_and_constraints.push(([(8, addition_result_chunks[0])], constraint));
 
@@ -981,7 +981,7 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
             // subtract chunks
             constraint -= Term::from(addition_result_chunks[0]);
             // and scale
-            constraint.scale(F::from_u64_unchecked(1 << 7).inverse().unwrap());
+            constraint.scale(F::from_u32_unchecked(1 << 7).inverse().unwrap());
 
             c_chunks_and_constraints.push(([(7, addition_result_chunks[0])], constraint));
 
@@ -1013,7 +1013,7 @@ pub(crate) fn g_function<F: PrimeField, CS: Circuit<F>>(
             // we just use linear expressions and XOR
             let mut xor_7_constraint = Constraint::empty();
             xor_7_constraint += Term::from(width_4_var);
-            xor_7_constraint += Term::from((F::from_u64_unchecked(1 << 4), width_3_var));
+            xor_7_constraint += Term::from((F::from_u32_unchecked(1 << 4), width_3_var));
 
             let [xor_result_7] = cs.get_variables_from_lookup_constrained::<2, 1>(
                 &[
@@ -1056,7 +1056,7 @@ fn add_chunks_into_constraint<F: PrimeField>(
 ) -> Constraint<F> {
     let mut shift = 0;
     for (width, var) in chunks.iter() {
-        constraint += Term::from((F::from_u64_unchecked(1u64 << shift), *var));
+        constraint += Term::from((F::from_u32_unchecked(1u32 << shift), *var));
         shift += *width;
     }
 
@@ -1069,7 +1069,7 @@ fn add_carries_into_constraint<F: PrimeField>(
 ) -> Constraint<F> {
     let mut shift = 0;
     for var in carries.iter() {
-        constraint += Term::from((F::from_u64_unchecked(1u64 << shift), *var));
+        constraint += Term::from((F::from_u32_unchecked(1u32 << shift), *var));
         shift += 1;
     }
 
@@ -1082,7 +1082,7 @@ fn sub_carries_from_constraint<F: PrimeField>(
 ) -> Constraint<F> {
     let mut shift = 16;
     for var in carries.iter() {
-        constraint -= Term::from((F::from_u64_unchecked(1u64 << shift), *var));
+        constraint -= Term::from((F::from_u32_unchecked(1u32 << shift), *var));
         shift += 1;
     }
 
@@ -1294,11 +1294,11 @@ fn witness_eval_addition_with_constraint<
 
 //         let mut shift = 0;
 //         for _ in 0..num_chunks {
-//             let chunk_el = inputs[i].as_u64_reduced() as u32;
+//             let chunk_el = inputs[i].as_u32_reduced() as u32;
 //             i += 1;
 //             assert!(chunk_el < 1u32 << 16);
 //             result += chunk_el << shift;
-//             let chunk_width = constants_it.next().unwrap().as_u64_reduced() as usize;
+//             let chunk_width = constants_it.next().unwrap().as_u32_reduced() as usize;
 //             shift += chunk_width
 //         }
 //     }
@@ -1318,7 +1318,7 @@ fn witness_eval_addition_with_constraint<
 //         }
 
 //         // compute result of the addition
-//         let t = linear_constraint_contribution.as_u64_reduced();
+//         let t = linear_constraint_contribution.as_u32_reduced();
 //         assert!(t < 1 << 16);
 //         result += t as u32;
 //     }
@@ -1336,9 +1336,9 @@ fn witness_eval_addition_with_constraint<
 
 //     // now we should parse how many chunks we assign and what are their width
 //     for i in 0..OUTPUT_CHUNKS_TO_PRODUCE {
-//         let chunk_width = constants_it.next().unwrap().as_u64_reduced() as usize;
+//         let chunk_width = constants_it.next().unwrap().as_u32_reduced() as usize;
 //         let chunk = result_low & ((1 << chunk_width) - 1);
-//         outputs[NUM_CARRIES_OUT + i] = F::from_u64_unchecked(chunk as u64);
+//         outputs[NUM_CARRIES_OUT + i] = F::from_u32_unchecked(chunk as u64);
 //         result_low >>= chunk_width;
 //     }
 

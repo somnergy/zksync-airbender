@@ -146,9 +146,9 @@ pub fn prove_configured_with_gkr<
 
     // now we need to draw prove-local challenges, and in our case it's just a challenge for lookups, and challenge to batch all constraints
     let [lookup_alpha, lookup_additive_part, constraints_batch_challenge] = [
-        E::from_base(F::from_u64_unchecked(42)),
-        E::from_base(F::from_u64_unchecked(127)),
-        E::from_base(F::from_u64_unchecked(0xff)),
+        E::from_base(F::from_u32_unchecked(42)),
+        E::from_base(F::from_u32_unchecked(127)),
+        E::from_base(F::from_u32_unchecked(0xff)),
     ];
 
     // Now we can use lookup challenges to preprocess tables into values like (column_0 + alpha * column_1 + ... + additive_part)

@@ -51,7 +51,7 @@ fn apply_subword_only_load_store<
         }
     }
     if let Some(funct3) = cs.get_value(inputs.decoder_data.funct3) {
-        println!("Funct3 = {:03b}", funct3.as_u64_reduced());
+        println!("Funct3 = {:03b}", funct3.as_u32_reduced());
     }
 
     // GET OPERANDS
@@ -127,17 +127,17 @@ fn apply_subword_only_load_store<
     if let Some(unclean_addr_low) = unclean_addr.0[0].get_value(cs) {
         println!(
             "Unaligned address low = 0x{:04x}",
-            unclean_addr_low.as_u64_reduced()
+            unclean_addr_low.as_u32_reduced()
         );
     }
     if let Some(aligned_address_low) = clean_addr[0].get_value(cs) {
         println!(
             "Aligned address low = 0x{:04x}",
-            aligned_address_low.as_u64_reduced()
+            aligned_address_low.as_u32_reduced()
         );
     }
     if let Some(address_high) = clean_addr[1].get_value(cs) {
-        println!("Address high = 0x{:04x}", address_high.as_u64_reduced());
+        println!("Address high = 0x{:04x}", address_high.as_u32_reduced());
     }
 
     // For ROM we need 2 outputs:
@@ -190,11 +190,11 @@ fn apply_subword_only_load_store<
         // NOTE: we just read from RAM when we read from ROM, but discard a value,
         // but we can never write there anyway
         let rs2_or_load_ram_access_query_address_low = cs.add_variable_from_constraint(
-            clean_addr[0].clone() * (Term::from(1u64) - Term::from(is_store)) + // load from RAM/ROM
+            clean_addr[0].clone() * (Term::from(1u32) - Term::from(is_store)) + // load from RAM/ROM
             Term::from(inputs.decoder_data.rs2_index) * Term::from(is_store), // RS2 index in case of STORE
         );
         let rs2_or_load_ram_access_query_address_high = cs.add_variable_from_constraint(
-            clean_addr[1].clone() * (Term::from(1u64) - Term::from(is_store)), // load from RAM/ROM, and 0 in case of STORE
+            clean_addr[1].clone() * (Term::from(1u32) - Term::from(is_store)), // load from RAM/ROM, and 0 in case of STORE
         );
 
         // We will make read/write values and for purposes of witness evaluation just mark them as "known".
@@ -349,7 +349,7 @@ fn apply_subword_only_load_store<
         // This combination is always aligned, so we can shift another 2 bits to the right
         let mut input =
             clean_addr[0].clone() + Term::from(1 << 16) * Term::from(address_high_bits_for_rom);
-        input.scale(F::from_u64_unchecked(1u64 << 2).inverse().unwrap());
+        input.scale(F::from_u32_unchecked(1u32 << 2).inverse().unwrap());
 
         // These values will be used if we do full LW
         let [rom_load_low, rom_load_high] = opt_ctx.append_lookup_relation_from_linear_terms(
@@ -395,13 +395,13 @@ fn apply_subword_only_load_store<
         if let Some(ram_limb_for_subword_size_ops) = ram_limb_for_subword_size_ops.get_value(cs) {
             println!(
                 "Selected LOAD half-word = 0x{:04x}",
-                ram_limb_for_subword_size_ops.as_u64_reduced()
+                ram_limb_for_subword_size_ops.as_u32_reduced()
             );
         }
         if let Some(offset_low_bits) = cs.get_value(offset_low_bits) {
             println!(
                 "Offset low bits = 0b{:02b}",
-                offset_low_bits.as_u64_reduced()
+                offset_low_bits.as_u32_reduced()
             );
         }
 

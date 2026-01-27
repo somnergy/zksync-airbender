@@ -94,7 +94,7 @@ pub(crate) fn evaluate_linear_relation<'a, F: PrimeField, O: Oracle<F> + 'a>(
     relation: &NoFieldLinearRelation,
     proxy: &ColumnMajorWitnessProxy<'a, O, F>,
 ) -> F {
-    let mut result = F::from_u64_unchecked(relation.constant);
+    let mut result = F::from_u32_unchecked(relation.constant);
     for (c, addr) in relation.linear_terms.iter() {
         let el = match *addr {
             GKRAddress::BaseLayerMemory(offset) => proxy.get_memory_place(offset),
@@ -103,7 +103,7 @@ pub(crate) fn evaluate_linear_relation<'a, F: PrimeField, O: Oracle<F> + 'a>(
                 unreachable!()
             }
         };
-        let mut t = F::from_u64_unchecked(*c);
+        let mut t = F::from_u32_unchecked(*c);
         t.mul_assign(&el);
         result.add_assign(&t);
     }
@@ -131,7 +131,7 @@ pub fn non_trivial_padding_convention_for_executor_circuit_memory<
         .as_ref()
         .expect("is present");
     trace[machine_state.initial_state.timestamp[0]][num_cycles..]
-        .fill(F::from_u64_unchecked(low_start as u64));
+        .fill(F::from_u32_unchecked(low_start as u32));
     trace[machine_state.final_state.timestamp[0]][num_cycles..]
-        .fill(F::from_u64_unchecked(low_end as u64));
+        .fill(F::from_u32_unchecked(low_end as u32));
 }

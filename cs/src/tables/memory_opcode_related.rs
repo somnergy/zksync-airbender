@@ -8,16 +8,16 @@ pub fn create_memory_offset_lowest_bits_table<F: PrimeField>(id: u32) -> LookupT
         TABLE_NAME.to_string(),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            assert!(a < (1u64 << 16));
+            let a = keys[0].as_u32_reduced();
+            assert!(a < (1u32 << 16));
 
             // output lowest two bits
             let lowest = a & 0x01;
             let second = (a >> 1) & 0x01;
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(lowest as u64);
-            result[1] = F::from_u64_unchecked(second as u64);
+            result[0] = F::from_u32_unchecked(lowest as u32);
+            result[1] = F::from_u32_unchecked(second as u32);
 
             (a as usize, result)
         },
@@ -34,16 +34,16 @@ pub fn create_memory_load_signs_table<F: PrimeField>(id: u32) -> LookupTable<F, 
         TABLE_NAME.to_string(),
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            assert!(a < (1u64 << 16));
+            let a = keys[0].as_u32_reduced();
+            assert!(a < (1u32 << 16));
 
             // get bits 7 and 15
             let sign_if_u8 = (a >> 7) & 0x01;
             let sign_if_u16 = (a >> 15) & 0x01;
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(sign_if_u8 as u64);
-            result[1] = F::from_u64_unchecked(sign_if_u16 as u64);
+            result[0] = F::from_u32_unchecked(sign_if_u8 as u32);
+            result[1] = F::from_u32_unchecked(sign_if_u16 as u32);
 
             (a as usize, result)
         },
@@ -62,7 +62,7 @@ pub fn create_mem_load_extend_table<F: PrimeField>(id: u32) -> LookupTable<F, 3>
         table_name,
         1,
         |keys| {
-            let a = keys[0].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
             assert!(a < 1 << (16 + 1 + 3));
 
             let word = a as u16;
@@ -110,8 +110,8 @@ pub fn create_mem_load_extend_table<F: PrimeField>(id: u32) -> LookupTable<F, 3>
             };
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked((loaded_word & 0xffff) as u64);
-            result[1] = F::from_u64_unchecked((loaded_word >> 16) as u64);
+            result[0] = F::from_u32_unchecked((loaded_word & 0xffff) as u32);
+            result[1] = F::from_u32_unchecked((loaded_word >> 16) as u32);
 
             (a as usize, result)
         },
@@ -125,8 +125,8 @@ pub fn create_store_byte_source_contribution_table<F: PrimeField>(id: u32) -> Lo
     for first in 0..(1 << 16) {
         for second in 0..(1 << 1) {
             let key = [
-                F::from_u64_unchecked(first as u64),
-                F::from_u64_unchecked(second as u64),
+                F::from_u32_unchecked(first as u32),
+                F::from_u32_unchecked(second as u32),
                 F::ZERO,
             ];
             keys.push(key)
@@ -138,8 +138,8 @@ pub fn create_store_byte_source_contribution_table<F: PrimeField>(id: u32) -> Lo
         table_name,
         2,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
 
             let bit_0 = b != 0;
             let byte = a as u8;
@@ -150,16 +150,16 @@ pub fn create_store_byte_source_contribution_table<F: PrimeField>(id: u32) -> Lo
             };
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(result_half_word as u64);
+            result[0] = F::from_u32_unchecked(result_half_word as u32);
 
             (((a << 1) | b) as usize, result)
         },
         Some(|keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
 
-            assert!(a < (1u64 << 16));
-            assert!(b < (1u64 << 1));
+            assert!(a < (1u32 << 16));
+            assert!(b < (1u32 << 1));
 
             ((a << 1) | b) as usize
         }),
@@ -172,8 +172,8 @@ pub fn create_store_byte_existing_contribution_table<F: PrimeField>(id: u32) -> 
     for first in 0..(1 << 16) {
         for second in 0..(1 << 1) {
             let key = [
-                F::from_u64_unchecked(first as u64),
-                F::from_u64_unchecked(second as u64),
+                F::from_u32_unchecked(first as u32),
+                F::from_u32_unchecked(second as u32),
                 F::ZERO,
             ];
             keys.push(key)
@@ -185,8 +185,8 @@ pub fn create_store_byte_existing_contribution_table<F: PrimeField>(id: u32) -> 
         table_name,
         2,
         |keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
 
             // we need to cleanup a part of it to prepare for addition
             let bit_0 = b != 0;
@@ -197,16 +197,16 @@ pub fn create_store_byte_existing_contribution_table<F: PrimeField>(id: u32) -> 
             };
 
             let mut result = [F::ZERO; 3];
-            result[0] = F::from_u64_unchecked(result_half_word as u64);
+            result[0] = F::from_u32_unchecked(result_half_word as u32);
 
             (((a << 1) | b) as usize, result)
         },
         Some(|keys| {
-            let a = keys[0].as_u64_reduced();
-            let b = keys[1].as_u64_reduced();
+            let a = keys[0].as_u32_reduced();
+            let b = keys[1].as_u32_reduced();
 
-            assert!(a < (1u64 << 16));
-            assert!(b < (1u64 << 1));
+            assert!(a < (1u32 << 16));
+            assert!(b < (1u32 << 1));
 
             ((a << 1) | b) as usize
         }),
@@ -224,7 +224,7 @@ pub fn create_memory_offset_mask_with_trap_table<F: PrimeField>(id: u32) -> Look
         TABLE_NAME.to_string(),
         NUM_INPUTS,
         |keys| {
-            let input = keys[0].as_u64_reduced();
+            let input = keys[0].as_u32_reduced();
             assert!(input < (1 << TABLE_MAX_WIDTH));
 
             let mem_address_low = input & 0xffff;
@@ -280,8 +280,8 @@ pub fn create_memory_offset_mask_with_trap_table<F: PrimeField>(id: u32) -> Look
             assert!(bitmask < 1u64 << crate::machine::ops::unrolled::load_store::MEMORY_GET_OFFSET_AND_MASK_NUM_BITS_WITH_TRAP);
 
             let result = [
-                F::from_u64_unchecked(offset),
-                F::from_u64_unchecked(bitmask),
+                F::from_u32_unchecked(offset),
+                F::from_u32_unchecked(bitmask as u32),
                 F::ZERO,
             ];
             (input as usize, result)
@@ -301,7 +301,7 @@ pub fn create_memory_load_halfword_or_byte_table<F: PrimeField>(id: u32) -> Look
         TABLE_NAME.to_string(),
         NUM_INPUTS,
         |keys| {
-            let input = keys[0].as_u64_reduced();
+            let input = keys[0].as_u32_reduced();
             assert!(input < (1 << TABLE_MAX_WIDTH));
 
             let limb_value = input & 0xffff;
@@ -368,8 +368,8 @@ pub fn create_memory_load_halfword_or_byte_table<F: PrimeField>(id: u32) -> Look
             };
 
             let result = [
-                F::from_u64_unchecked(low),
-                F::from_u64_unchecked(high),
+                F::from_u32_unchecked(low),
+                F::from_u32_unchecked(high),
                 F::ZERO,
             ];
             (input as usize, result)
@@ -391,7 +391,7 @@ pub fn create_memory_store_halfword_or_byte_clear_source_limb_table<F: PrimeFiel
         TABLE_NAME.to_string(),
         NUM_INPUTS,
         |keys| {
-            let input = keys[0].as_u64_reduced();
+            let input = keys[0].as_u32_reduced();
             assert!(input < (1 << TABLE_MAX_WIDTH));
 
             // we already pre-selected word to be consistent with top bit of the offset,
@@ -426,7 +426,7 @@ pub fn create_memory_store_halfword_or_byte_clear_source_limb_table<F: PrimeFiel
                 }
             };
 
-            let result = [F::from_u64_unchecked(cleaned_value), F::ZERO, F::ZERO];
+            let result = [F::from_u32_unchecked(cleaned_value), F::ZERO, F::ZERO];
             (input as usize, result)
         },
         Some(first_key_index_gen_fn::<F, 3>),
@@ -447,7 +447,7 @@ pub fn create_memory_store_halfword_or_byte_clear_written_limb_table<F: PrimeFie
         TABLE_NAME.to_string(),
         NUM_INPUTS,
         |keys| {
-            let input = keys[0].as_u64_reduced();
+            let input = keys[0].as_u32_reduced();
             assert!(input < (1 << TABLE_MAX_WIDTH));
 
             // we already pre-selected word to be consistent with top bit of the offset,
@@ -486,7 +486,7 @@ pub fn create_memory_store_halfword_or_byte_clear_written_limb_table<F: PrimeFie
                 }
             };
 
-            let result = [F::from_u64_unchecked(cleaned_value), F::ZERO, F::ZERO];
+            let result = [F::from_u32_unchecked(cleaned_value), F::ZERO, F::ZERO];
             (input as usize, result)
         },
         Some(first_key_index_gen_fn::<F, 3>),

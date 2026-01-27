@@ -355,12 +355,12 @@ impl core::fmt::Debug for BabyBearExt6 {
         write!(
             f,
             "F6[{}, {}, {}, {}, {}, {}]",
-            self.c0.c0.as_u64_reduced(),
-            self.c0.c1.as_u64_reduced(),
-            self.c1.c0.as_u64_reduced(),
-            self.c1.c1.as_u64_reduced(),
-            self.c2.c0.as_u64_reduced(),
-            self.c2.c1.as_u64_reduced(),
+            self.c0.c0.as_u32_reduced(),
+            self.c0.c1.as_u32_reduced(),
+            self.c1.c0.as_u32_reduced(),
+            self.c1.c1.as_u32_reduced(),
+            self.c2.c0.as_u32_reduced(),
+            self.c2.c1.as_u32_reduced(),
         )
     }
 }
@@ -370,12 +370,12 @@ impl core::fmt::Display for BabyBearExt6 {
         write!(
             f,
             "F6[{}, {}, {}, {}, {}, {}]",
-            self.c0.c0.as_u64_reduced(),
-            self.c0.c1.as_u64_reduced(),
-            self.c1.c0.as_u64_reduced(),
-            self.c1.c1.as_u64_reduced(),
-            self.c2.c0.as_u64_reduced(),
-            self.c2.c1.as_u64_reduced(),
+            self.c0.c0.as_u32_reduced(),
+            self.c0.c1.as_u32_reduced(),
+            self.c1.c0.as_u32_reduced(),
+            self.c1.c1.as_u32_reduced(),
+            self.c2.c0.as_u32_reduced(),
+            self.c2.c1.as_u32_reduced(),
         )
     }
 }

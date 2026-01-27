@@ -72,7 +72,7 @@ impl<
         let src1 = inputs.get_rs1_or_equivalent().get_register();
         let src2 = inputs.get_rs2_or_equivalent().get_register();
 
-        let shift = F::from_u64_unchecked(1u64 << 16);
+        let shift = F::from_u32_unchecked(1u32 << 16);
 
         let product_result = cs.add_variable_from_constraint(
             (Term::from(src1.0[0].get_variable()) + Term::from((shift, src1.0[1].get_variable())))
@@ -185,12 +185,12 @@ impl<
 
         cs.set_values(value_fn);
         // we want to return canonical result, so we will create subtraction relation and require underflow
-        assert!(F::CHARACTERISTICS < u32::MAX as u64);
+        assert!(F::CHARACTERISTICS < u32::MAX);
         let modulus = Register::new_from_constant(F::CHARACTERISTICS as u32);
         let (_res, uf_flag) = opt_ctx.append_sub_relation(result_register, modulus, exec_flag, cs);
         // if we execute, then UF must be true
         cs.add_constraint(
-            (Term::from(1u64) - Term::from(uf_flag.get_variable().unwrap()))
+            (Term::from(1u32) - Term::from(uf_flag.get_variable().unwrap()))
                 * Term::from(exec_flag.get_variable().unwrap()),
         );
 

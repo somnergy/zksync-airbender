@@ -230,7 +230,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
                     let expr_low = LookupInput::from(
                         Constraint::empty()
                             + Term::from((
-                                F::from_u64_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
+                                F::from_u32_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
                                 register_timestamp_borrow_var,
                             ))
                             + Term::from(register_read_timestamp_low)
@@ -243,7 +243,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
                     let expr_high = LookupInput::from(
                         Constraint::empty()
                             + Term::from((
-                                F::from_u64_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
+                                F::from_u32_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
                                 predicate_variable,
                             ))
                             + Term::from(register_read_timestamp_high)
@@ -332,7 +332,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
                         request.register_access.get_read_value_columns().start(),
                     );
                     compiled_linear_terms.push((
-                        F::from_u64_unchecked(1 << indirects_alignment_log2)
+                        F::from_u32_unchecked(1 << indirects_alignment_log2)
                             .inverse()
                             .unwrap(),
                         place,
@@ -376,7 +376,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
                         let expr_low = LookupInput::from(
                             Constraint::empty()
                                 + Term::from((
-                                    F::from_u64_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
+                                    F::from_u32_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
                                     indirect_timestamp_borrow_var,
                                 ))
                                 + Term::from(indirect_read_timestamp_low)
@@ -390,7 +390,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
                         let expr_high = LookupInput::from(
                             Constraint::empty()
                                 + Term::from((
-                                    F::from_u64_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
+                                    F::from_u32_unchecked(1 << TIMESTAMP_COLUMNS_NUM_BITS),
                                     predicate_variable,
                                 ))
                                 + Term::from(indirect_read_timestamp_high)
@@ -479,12 +479,12 @@ impl<F: PrimeField> OneRowCompiler<F> {
                         );
                         compiled_linear_terms.push((F::ONE, place));
                         let place = ColumnAddress::MemorySubtree(address_carry_column.start());
-                        let mut coeff = F::from_u64_unchecked(SHIFT_16);
+                        let mut coeff = F::from_u32_unchecked(SHIFT_16);
                         coeff.negate();
                         compiled_linear_terms.push((coeff, place));
                         let compiled_constraint = CompiledDegree1Constraint {
                             linear_terms: compiled_linear_terms.into_boxed_slice(),
-                            constant_term: F::from_u64_unchecked(access.offset_constant() as u64),
+                            constant_term: F::from_u32_unchecked(access.offset_constant() as u32),
                         };
                         let expression = LookupExpression::Expression(compiled_constraint);
                         compiled_extra_range_check_16_expressions.push(expression);

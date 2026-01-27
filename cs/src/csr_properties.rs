@@ -18,8 +18,8 @@ pub fn create_special_csr_properties_table<F: PrimeField>(
         TABLE_NAME.to_string(),
         1,
         move |key| {
-            let input = key[0].as_u64_reduced();
-            assert!(input < (1u64 << 12));
+            let input = key[0].as_u32_reduced();
+            assert!(input < (1u32 << 12));
             let csr_index = input as u32;
             let is_nondeterminism_csr = csr_index == NON_DETERMINISM_CSR as u32;
             let is_allowed_for_delegation =
@@ -32,8 +32,8 @@ pub fn create_special_csr_properties_table<F: PrimeField>(
                 (is_nondeterminism_csr & support_non_determinism_csr) | is_allowed_for_delegation;
 
             let result = [
-                F::from_u64_unchecked(is_supported as u64),
-                F::from_u64_unchecked(is_allowed_for_delegation as u64),
+                F::from_u32_unchecked(is_supported as u32),
+                F::from_u32_unchecked(is_allowed_for_delegation as u32),
                 F::ZERO,
             ];
 

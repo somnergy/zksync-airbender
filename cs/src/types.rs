@@ -22,7 +22,7 @@ pub enum Num<F: PrimeField> {
 
 impl TableType {
     pub fn to_num<F: PrimeField>(self) -> Num<F> {
-        Num::Constant(F::from_u64_unchecked(self.to_table_id() as u64))
+        Num::Constant(F::from_u32_unchecked(self.to_table_id() as u32))
     }
 }
 
@@ -125,7 +125,7 @@ impl Boolean {
                 // Term::from(1) - Term::from(var)
             }
             &Boolean::Constant(var) => {
-                let var = var as u64;
+                let var = var as u32;
                 var.into()
             }
         }
@@ -417,7 +417,7 @@ impl Boolean {
             let mut cnstr = meaningful_terms
                 .iter()
                 .fold(Constraint::<F>::empty(), |acc, x| acc + x.get_terms());
-            cnstr -= Term::from(meaningful_terms.len() as u64);
+            cnstr -= Term::from(meaningful_terms.len() as u32);
             let tmp = Num::Var(cs.add_variable_from_constraint_allow_explicit_linear(cnstr));
             // if sum of booleans is equal to number of them - than all of those were `true`
 
@@ -542,8 +542,8 @@ impl Boolean {
                         // a * condition + b*(1-condition) = c ->
                         // (a - b) *condition - c + b = 0
                         let cnstr: Constraint<F> = {
-                            Term::from(cond) * (Term::from(a as u64) - Term::from(b as u64))
-                                + Term::from(b as u64)
+                            Term::from(cond) * (Term::from(a as u32) - Term::from(b as u32))
+                                + Term::from(b as u32)
                                 - Term::from(new_var)
                         };
                         cs.add_constraint_allow_explicit_linear(cnstr);
@@ -652,8 +652,8 @@ impl Boolean {
                         let cnstr: Constraint<F> = {
                             Term::from(cond)
                                 * (Term::from(a)
-                                    - Term::from_field(F::from_u64_unchecked(constant as u64)))
-                                + Term::from_field(F::from_u64_unchecked(constant as u64))
+                                    - Term::from_field(F::from_u32_unchecked(constant as u32)))
+                                + Term::from_field(F::from_u32_unchecked(constant as u32))
                                 - Term::from(new_var)
                         };
                         cs.add_constraint(cnstr);
@@ -695,7 +695,7 @@ impl Boolean {
                         // new_var = flag * constant + (1 - flag) * b = flag * (constant - b) + b
                         let cnstr: Constraint<F> = {
                             Term::from(cond)
-                                * (Term::from_field(F::from_u64_unchecked(constant as u64))
+                                * (Term::from_field(F::from_u32_unchecked(constant as u32))
                                     - Term::from(b))
                                 + Term::from(b)
                                 - Term::from(new_var)
@@ -761,8 +761,8 @@ impl Boolean {
                         // a * condition + b*(1-condition) = c ->
                         // (a - b) *condition - c + b = 0
                         let cnstr: Constraint<F> = {
-                            Term::from(cond) * (Term::from(a as u64) - Term::from(b as u64))
-                                + Term::from(b as u64)
+                            Term::from(cond) * (Term::from(a as u32) - Term::from(b as u32))
+                                + Term::from(b as u32)
                                 - Term::from(new_var)
                         };
                         cs.add_constraint_allow_explicit_linear(cnstr);
@@ -851,8 +851,8 @@ impl Boolean {
                         let cnstr: Constraint<F> = {
                             Term::from(cond)
                                 * (Term::from(a)
-                                    - Term::from_field(F::from_u64_unchecked(constant as u64)))
-                                + Term::from_field(F::from_u64_unchecked(constant as u64))
+                                    - Term::from_field(F::from_u32_unchecked(constant as u32)))
+                                + Term::from_field(F::from_u32_unchecked(constant as u32))
                                 - Term::from(new_var)
                         };
                         cs.add_constraint(cnstr);
@@ -894,7 +894,7 @@ impl Boolean {
                         // new_var = flag * constant + (1 - flag) * b = flag * (constant - b) + b
                         let cnstr: Constraint<F> = {
                             Term::from(cond)
-                                * (Term::from_field(F::from_u64_unchecked(constant as u64))
+                                * (Term::from_field(F::from_u32_unchecked(constant as u32))
                                     - Term::from(b))
                                 + Term::from(b)
                                 - Term::from(new_var)
@@ -1008,11 +1008,11 @@ impl<F: PrimeField> Register<F> {
 
     #[track_caller]
     pub fn get_value_unsigned<C: Circuit<F>>(self, cs: &C) -> Option<u32> {
-        let low = cs.get_value(self.0[0].get_variable())?.as_u64_reduced();
-        let high = cs.get_value(self.0[1].get_variable())?.as_u64_reduced();
+        let low = cs.get_value(self.0[0].get_variable())?.as_u32_reduced();
+        let high = cs.get_value(self.0[1].get_variable())?.as_u32_reduced();
 
-        assert!(low <= u16::MAX as u64);
-        assert!(high <= u16::MAX as u64);
+        assert!(low <= u16::MAX as u32);
+        assert!(high <= u16::MAX as u32);
 
         Some(low as u32 | (high as u32) << 16)
     }
@@ -1025,7 +1025,7 @@ impl<F: PrimeField> Register<F> {
 
     pub fn new_from_constant(value: u32) -> Self {
         let vars: [Num<F>; 2] = std::array::from_fn(|idx: usize| {
-            Num::Constant(F::from_u64_unchecked(((value >> idx * 16) & 0xffff) as u64))
+            Num::Constant(F::from_u32_unchecked(((value >> idx * 16) & 0xffff) as u32))
         });
         Self(vars)
     }
@@ -1071,8 +1071,8 @@ impl<F: PrimeField> Register<F> {
     }
 
     pub fn equals_to<C: Circuit<F>>(&self, cs: &mut C, cnst: u32) -> Boolean {
-        let low_cnst = Num::Constant(F::from_u64_unchecked((cnst & 0xffff) as u64));
-        let high_cnst = Num::Constant(F::from_u64_unchecked((cnst >> 16) as u64));
+        let low_cnst = Num::Constant(F::from_u32_unchecked((cnst & 0xffff) as u32));
+        let high_cnst = Num::Constant(F::from_u32_unchecked((cnst >> 16) as u32));
 
         let low_eq_flag = cs.equals_to(self.0[0], low_cnst);
         let high_eq_flag = cs.equals_to(self.0[1], high_cnst);
@@ -1158,11 +1158,11 @@ impl<F: PrimeField> RegisterDecomposition<F> {
     ) -> Self {
         if exec_flag.get_value(&*circuit).unwrap_or(false) {
             if let Some(value) = reg.0[0].get_value(&*circuit) {
-                assert!(value.as_u64_reduced() <= u16::MAX as u64);
+                assert!(value.as_u32_reduced() <= u16::MAX as u32);
             }
 
             if let Some(value) = reg.0[1].get_value(&*circuit) {
-                assert!(value.as_u64_reduced() <= u16::MAX as u64);
+                assert!(value.as_u32_reduced() <= u16::MAX as u32);
             }
         }
 
@@ -1267,7 +1267,7 @@ impl<F: PrimeField> RegisterDecompositionWithSign<F> {
         cs.set_values(value_fn);
 
         let mut byte_1 = Term::from(reg.0[0]) - Term::from(byte_0);
-        byte_1.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+        byte_1.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
         // for high we get high byte and sign as one lookup, and low - as constraint
         let [sign, byte_3] = cs.get_variables_from_lookup_constrained(
@@ -1292,13 +1292,13 @@ impl<F: PrimeField> RegisterDecompositionWithSign<F> {
     pub fn get_value_unsigned<C: Circuit<F>>(self, cs: &C) -> Option<u32> {
         let low = cs
             .get_value(self.u16_limbs[0].get_variable())?
-            .as_u64_reduced();
+            .as_u32_reduced();
         let high = cs
             .get_value(self.u16_limbs[1].get_variable())?
-            .as_u64_reduced();
+            .as_u32_reduced();
 
-        debug_assert!(low <= u16::MAX as u64);
-        debug_assert!(high <= u16::MAX as u64);
+        debug_assert!(low <= u16::MAX as u32);
+        debug_assert!(high <= u16::MAX as u32);
 
         Some(low as u32 | (high as u32) << 16)
     }

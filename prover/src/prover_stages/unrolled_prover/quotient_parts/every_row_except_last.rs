@@ -1442,7 +1442,7 @@ pub(crate) unsafe fn evaluate_memory_queries_accumulation(
             .memory_argument_linearization_challenges
             [MEM_ARGUMENT_CHALLENGE_POWERS_TIMESTAMP_LOW_IDX];
         extra_write_timestamp_low
-            .mul_assign_by_base(&Mersenne31Field::from_u64_unchecked(access_idx as u64));
+            .mul_assign_by_base(&Mersenne31Field::from_u32_unchecked(access_idx as u32));
 
         let previous = memory_argument_src.read();
         let this = stage_2_trace_view_row

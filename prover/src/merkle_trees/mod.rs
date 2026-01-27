@@ -7,13 +7,13 @@ use fft::GoodAllocator;
 use field::Mersenne31Field;
 use field::Mersenne31Quartic;
 use field::PrimeField;
-use poseidon2::m31::HASH_SIZE_U32_WORDS;
+// use poseidon2::m31::HASH_SIZE_U32_WORDS;
 use trace_holder::ColumnMajorTrace;
 use trace_holder::RowMajorTrace;
 use worker::Worker;
 
 pub mod blake2s_for_everything_tree;
-pub mod blake2s_for_leafs_poseidon2_for_nodes_tree;
+// pub mod blake2s_for_leafs_poseidon2_for_nodes_tree;
 pub mod blake2s_hash_leafs;
 
 pub type DefaultTreeConstructor =
@@ -80,8 +80,8 @@ pub trait MerkleTreeConstructor: Sized + Send + Sync {
         &self,
         idx: usize,
     ) -> (
-        [u32; HASH_SIZE_U32_WORDS],
-        Vec<[u32; HASH_SIZE_U32_WORDS], C>,
+        [u32; DIGEST_SIZE_U32_WORDS],
+        Vec<[u32; DIGEST_SIZE_U32_WORDS], C>,
     );
 }
 

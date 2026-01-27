@@ -139,7 +139,7 @@ impl OptimizedDecoder {
                 - Term::from(1 << 12) * Term::from(funct3)
                 - Term::from(rs1_low) * Term::from(1 << 15)
         };
-        imm11_constraint.scale(F::from_u64_unchecked(1 << 7).inverse().unwrap());
+        imm11_constraint.scale(F::from_u32_unchecked(1 << 7).inverse().unwrap());
         circuit
             .add_constraint(imm11_constraint.clone() * (imm11_constraint.clone() - Term::from(1)));
 
@@ -151,7 +151,7 @@ impl OptimizedDecoder {
                 - Term::from(imm10_5) * Term::from(1 << 9)
                 - Term::from(sign_bit) * Term::from(1 << 15)
         };
-        rs2_low_constraint.scale(F::from_u64_unchecked(1 << 4).inverse().unwrap());
+        rs2_low_constraint.scale(F::from_u32_unchecked(1 << 4).inverse().unwrap());
         circuit.add_constraint(
             rs2_low_constraint.clone() * (rs2_low_constraint.clone() - Term::from(1)),
         );
@@ -232,7 +232,7 @@ impl OptimizedDecoder {
             // 4
             (Term::from(i_insn) + Term::from(s_insn) + Term::from(b_insn))
                 * Term::from(sign_bit)
-                * Term::from(0b1111u64)
+                * Term::from(0b1111u32)
                 + (Term::from(u_insn) + Term::from(j_insn))
                     * (Term::from(rs1_low) * Term::from(1 << 3) + (Term::from(funct3))),
         ];

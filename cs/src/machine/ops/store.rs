@@ -197,7 +197,7 @@ impl<const SUPPORT_LESS_THAN_WORD: bool> StoreOp<SUPPORT_LESS_THAN_WORD> {
                 .get_variable();
             let subword_to_use_for_update = cs.add_variable_from_constraint(
                 Term::from(bit_1) * Term::from(base_value[1])
-                    + (Term::from(1u64) - Term::from(bit_1)) * Term::from(base_value[0]),
+                    + (Term::from(1u32) - Term::from(bit_1)) * Term::from(base_value[0]),
             );
             // we will use 2 lookups to get contribution of byte into subword,
             // and constibution of subword into result
@@ -278,7 +278,7 @@ impl<const SUPPORT_LESS_THAN_WORD: bool> StoreOp<SUPPORT_LESS_THAN_WORD> {
                 unreachable!()
             };
             let t = cs.add_variable_from_constraint_allow_explicit_linear(
-                Term::from(1u64) - Term::from(execute_family),
+                Term::from(1u32) - Term::from(execute_family),
             );
             *is_register = Boolean::Is(t);
             // here we do not need to constraint address if case if we did NOT perform write,
@@ -387,7 +387,7 @@ impl<const SUPPORT_LESS_THAN_WORD: bool> StoreOp<SUPPORT_LESS_THAN_WORD> {
                 unreachable!()
             };
             let t = cs.add_variable_from_constraint_allow_explicit_linear(
-                Term::from(1u64) - Term::from(execute_family),
+                Term::from(1u32) - Term::from(execute_family),
             );
             *is_register = Boolean::Is(t);
             // here we do not need to constraint address if case if we did NOT perform write,

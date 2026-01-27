@@ -207,7 +207,7 @@ impl<F: PrimeField> OneRowCompiler<F> {
         }
 
         let total_generic_lookups = width_3_lookups.len() as u64 * trace_len as u64;
-        assert!(total_generic_lookups < F::CHARACTERISTICS, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
+        assert!(total_generic_lookups < F::CHARACTERISTICS as u64, "total number of generic lookups in circuit is {} that is larger that field characteristics {}", total_generic_lookups, F::CHARACTERISTICS);
 
         let (optimized_out_variables, constraints) = optimize_out_linear_constraints(
             &state_input,

@@ -57,7 +57,7 @@ pub fn adjust_to_zero_c0_var_length<const N: usize, A: Allocator + Clone>(
                         let mut src_ptr = row_view.as_ptr();
                         for _ in 0..num_unroll_rounds {
                             seq!(N in 0..64 {
-                                let column_value = src_ptr.add(N).read().as_u64();
+                                let column_value = src_ptr.add(N).read().as_u32() as u64;
                                 let dst_loc = dst_ptr.add(N);
                                 assert!(dst_loc.read().checked_add(column_value).is_some());
                                 dst_loc.write(dst_loc.read().wrapping_add(column_value));
@@ -67,7 +67,7 @@ pub fn adjust_to_zero_c0_var_length<const N: usize, A: Allocator + Clone>(
                         }
                         if remainder_len != 0 {
                             for _i in 0..remainder_len {
-                                let column_value = src_ptr.read().as_u64();
+                                let column_value = src_ptr.read().as_u32() as u64;
                                 assert!(dst_ptr.read().checked_add(column_value).is_some());
                                 dst_ptr.write(dst_ptr.read().wrapping_add(column_value));
                                 src_ptr = src_ptr.add(1);
@@ -88,7 +88,7 @@ pub fn adjust_to_zero_c0_var_length<const N: usize, A: Allocator + Clone>(
     let mut adjustment_factors = vec![Mersenne31Field::ZERO; columns_range.len()];
     for src in per_thread_accumulators.into_iter() {
         for (dst, src) in adjustment_factors.iter_mut().zip(src.into_iter()) {
-            dst.sub_assign(&Mersenne31Field::from_u64_with_reduction(src));
+            dst.sub_assign(&Mersenne31Field::from_nonreduced_u32((src % (Mersenne31Field::CHARACTERISTICS as u64)) as u32));
         }
     }
     let mut row = trace_columns.row_view((trace_len - 1)..trace_len);

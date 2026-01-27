@@ -67,20 +67,20 @@ pub fn preprocess_bytecode<F: PrimeField, A: GoodAllocator>(
 
         let entry = DecoderTableEntry {
             pc: [
-                F::from_u64_unchecked((pc as u64) & 0xffff),
-                F::from_u64_unchecked(((pc >> 16) as u64) & 0xffff),
+                F::from_u32_unchecked((pc as u32) & 0xffff),
+                F::from_u32_unchecked(((pc >> 16) as u32) & 0xffff),
             ],
-            rs1_index: F::from_u64_unchecked(decoded.rs1_index as u64),
-            rs2_index: F::from_u64_unchecked(decoded.rs2_index as u64),
-            rd_index: F::from_u64_unchecked(decoded.rd_index as u64),
+            rs1_index: F::from_u32_unchecked(decoded.rs1_index as u32),
+            rs2_index: F::from_u32_unchecked(decoded.rs2_index as u32),
+            rd_index: F::from_u32_unchecked(decoded.rd_index as u32),
             rd_is_zero: F::from_boolean(decoded.rd_is_zero),
             imm: [
-                F::from_u64_unchecked((decoded.imm as u64) & 0xffff),
-                F::from_u64_unchecked(((decoded.imm >> 16) as u64) & 0xffff),
+                F::from_u32_unchecked((decoded.imm as u32) & 0xffff),
+                F::from_u32_unchecked(((decoded.imm >> 16) as u32) & 0xffff),
             ],
-            funct3: F::from_u64_unchecked(decoded.funct3 as u64),
-            // funct7: F::from_u64_unchecked(funct7 as u64),
-            circuit_family_extra_mask: F::from_u64_unchecked(decoded.opcode_family_bits as u64),
+            funct3: F::from_u32_unchecked(decoded.funct3 as u32),
+            // funct7: F::from_u32_unchecked(funct7 as u64),
+            circuit_family_extra_mask: F::from_u32_unchecked(decoded.opcode_family_bits as u32),
         };
 
         table[i] = Some(entry);

@@ -8,7 +8,7 @@ use rand::Rng;
 
 #[cfg(not(target_arch = "riscv32"))]
 #[derive(Clone, Copy, Hash, serde::Serialize, serde::Deserialize)]
-#[repr(C, align(8))]
+#[repr(C, align(16))]
 pub struct BabyBearExt4 {
     pub c0: BabyBearExt2,
     pub c1: BabyBearExt2,
@@ -26,7 +26,7 @@ const _: () = const {
     assert!(core::mem::size_of::<BabyBearExt4>() == 4 * core::mem::size_of::<u32>());
 
     #[cfg(not(target_arch = "riscv32"))]
-    assert!(core::mem::align_of::<BabyBearExt4>() == 8);
+    assert!(core::mem::align_of::<BabyBearExt4>() == 16);
 
     #[cfg(target_arch = "riscv32")]
     assert!(core::mem::align_of::<BabyBearExt4>() == 4);
@@ -263,10 +263,10 @@ impl core::fmt::Debug for BabyBearExt4 {
         write!(
             f,
             "F4[{}, {}, {}, {}]",
-            self.c0.c0.as_u64_reduced(),
-            self.c0.c1.as_u64_reduced(),
-            self.c1.c0.as_u64_reduced(),
-            self.c1.c1.as_u64_reduced(),
+            self.c0.c0.as_u32_reduced(),
+            self.c0.c1.as_u32_reduced(),
+            self.c1.c0.as_u32_reduced(),
+            self.c1.c1.as_u32_reduced(),
         )
     }
 }
@@ -276,10 +276,10 @@ impl core::fmt::Display for BabyBearExt4 {
         write!(
             f,
             "F4[{}, {}, {}, {}]",
-            self.c0.c0.as_u64_reduced(),
-            self.c0.c1.as_u64_reduced(),
-            self.c1.c0.as_u64_reduced(),
-            self.c1.c1.as_u64_reduced(),
+            self.c0.c0.as_u32_reduced(),
+            self.c0.c1.as_u32_reduced(),
+            self.c1.c0.as_u32_reduced(),
+            self.c1.c1.as_u32_reduced(),
         )
     }
 }

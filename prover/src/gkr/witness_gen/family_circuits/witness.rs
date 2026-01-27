@@ -594,13 +594,13 @@ pub(crate) unsafe fn gkr_count_special_multiplicities_for_executor_family<
     {
         let value = evaluate_linear_relation(&range_check_expression.input, &*proxy);
         assert!(
-            value.as_u64_reduced() <= u16::MAX as u64,
+            value.as_u32_reduced() <= u16::MAX as u32,
             "invalid value {:?} in range check 16 expression {:?} at row {}",
             absolute_row_idx,
             range_check_expression,
             value
         );
-        let index = value.as_u64_reduced() as usize;
+        let index = value.as_u32_reduced() as usize;
         debug_assert!(idx < range_check_16_chunk.len());
         range_check_16_chunk
             .get_unchecked_mut(idx)
@@ -640,13 +640,13 @@ pub(crate) unsafe fn gkr_count_special_multiplicities_for_executor_family<
     for (idx, range_check_expression) in timestamp_range_check_relations.iter().enumerate() {
         let value = evaluate_linear_relation(&range_check_expression.input, &*proxy);
         assert!(
-            value.as_u64_reduced() < (1u64 << TIMESTAMP_COLUMNS_NUM_BITS),
+            value.as_u32_reduced() < (1u32 << TIMESTAMP_COLUMNS_NUM_BITS),
             "invalid value {:?} in timestamp range check expression {:?} at row {}",
             value,
             range_check_expression,
             absolute_row_idx,
         );
-        let index = value.as_u64_reduced() as usize;
+        let index = value.as_u32_reduced() as usize;
         debug_assert!(idx < timestamp_range_check_chunk.len());
         timestamp_range_check_chunk
             .get_unchecked_mut(idx)
@@ -701,7 +701,7 @@ unsafe fn gkr_postprocess_multiplicities<
                 let multiplicity = *range_16_multiplicities.get_unchecked(absolute_row_idx);
                 debug_assert!(multiplicity < F::CHARACTERISTICS as u32);
                 *dst.get_unchecked_mut(absolute_row_idx) =
-                    F::from_u64_unchecked(multiplicity as u64);
+                    F::from_u32_unchecked(multiplicity as u32);
             }
         }
 
@@ -745,7 +745,7 @@ unsafe fn gkr_postprocess_multiplicities<
                     *timestamp_range_check_multiplicities.get_unchecked(absolute_row_idx);
                 debug_assert!(multiplicity < F::CHARACTERISTICS as u32);
                 *dst.get_unchecked_mut(absolute_row_idx) =
-                    F::from_u64_unchecked(multiplicity as u64);
+                    F::from_u32_unchecked(multiplicity as u32);
             }
         }
 
@@ -841,7 +841,7 @@ unsafe fn gkr_postprocess_multiplicities<
                                     *general_purpose_multiplicity_ref.get_unchecked(encoding_index);
                                 debug_assert!(multiplicity < F::CHARACTERISTICS as u32);
                                 *dst.get_unchecked_mut(i) =
-                                    F::from_u64_unchecked(multiplicity as u64);
+                                    F::from_u32_unchecked(multiplicity as u32);
                             }
 
                             // for (column, dst) in dst.iter_mut().enumerate() {
@@ -856,7 +856,7 @@ unsafe fn gkr_postprocess_multiplicities<
                             //         let multiplicity = *general_purpose_multiplicity_ref
                             //             .get_unchecked(encoding_index);
                             //         debug_assert!(multiplicity < F::CHARACTERISTICS as u32);
-                            //         *dst.get_unchecked_mut() = F::from_u64_unchecked(multiplicity as u64);
+                            //         *dst.get_unchecked_mut() = F::from_u32_unchecked(multiplicity as u64);
                             //     } else {
                             //         todo!()
                             //     }

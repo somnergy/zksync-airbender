@@ -2,8 +2,8 @@ use super::*;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct NoFieldLinearRelation {
-    pub linear_terms: Box<[(u64, GKRAddress)]>,
-    pub constant: u64,
+    pub linear_terms: Box<[(u32, GKRAddress)]>,
+    pub constant: u32,
 }
 
 impl NoFieldLinearRelation {

@@ -251,7 +251,7 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         );
 
         if let Some(shift_amount) = cs.get_value(shift_amount) {
-            println!("Shift amount = {}", shift_amount.as_u64_reduced());
+            println!("Shift amount = {}", shift_amount.as_u32_reduced());
         }
 
         // model it as SRL and filling top bits
@@ -279,10 +279,10 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         );
 
         if let Some(low_word_fill) = cs.get_value(low_word_fill) {
-            println!("Low word fill = 0x{:x}", low_word_fill.as_u64_reduced());
+            println!("Low word fill = 0x{:x}", low_word_fill.as_u32_reduced());
         }
         if let Some(high_word_fill) = cs.get_value(high_word_fill) {
-            println!("High word fill = 0x{:x}", high_word_fill.as_u64_reduced());
+            println!("High word fill = 0x{:x}", high_word_fill.as_u32_reduced());
         }
 
         let low_from_low = s4;
@@ -309,13 +309,13 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         if let Some(low_from_low) = cs.get_value(low_from_low) {
             println!(
                 "SRL result low from low = 0x{:x}",
-                low_from_low.as_u64_reduced()
+                low_from_low.as_u32_reduced()
             );
         }
         if let Some(high_from_low) = cs.get_value(high_from_low) {
             println!(
                 "SRL result high from low = 0x{:x}",
-                high_from_low.as_u64_reduced()
+                high_from_low.as_u32_reduced()
             );
         }
 
@@ -338,13 +338,13 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         if let Some(low_from_high) = cs.get_value(low_from_high) {
             println!(
                 "SRL result low from high = 0x{:x}",
-                low_from_high.as_u64_reduced()
+                low_from_high.as_u32_reduced()
             );
         }
         if let Some(high_from_high) = cs.get_value(high_from_high) {
             println!(
                 "SRL result high from high = 0x{:x}",
-                high_from_high.as_u64_reduced()
+                high_from_high.as_u32_reduced()
             );
         }
 
@@ -363,7 +363,7 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         if is_binary.get_value(cs).unwrap_or(false) {
             println!("BINARY OP");
             if let Some(funct3) = cs.get_value(inputs.decoder_data.funct3) {
-                println!("Funct3 = {:03b}", funct3.as_u64_reduced());
+                println!("Funct3 = {:03b}", funct3.as_u32_reduced());
             }
         }
 
@@ -429,11 +429,11 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
 
         // (word - u8) / 2^8 == u8 -> word == u8 + 2^8 u8
         let mut rs1_byte_1 = Term::from(rs1_low) - Term::from(rs1_byte_0);
-        rs1_byte_1.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+        rs1_byte_1.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
         // (word - u8) / 2^8 == u8 -> word == u8 + 2^8 u8
         let mut rs2_byte_1 = Term::from(rs2_low) - Term::from(rs2_byte_0);
-        rs2_byte_1.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+        rs2_byte_1.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
         cs.peek_lookup_value_unconstrained_ext(
             &[
@@ -475,11 +475,11 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
 
         // (word - u8) / 2^8 == u8 -> word == u8 + 2^8 u8
         let mut rs1_byte_3 = Term::from(rs1_high) - Term::from(rs1_byte_2);
-        rs1_byte_3.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+        rs1_byte_3.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
         // (word - u8) / 2^8 == u8 -> word == u8 + 2^8 u8
         let mut rs2_byte_3 = Term::from(rs2_high) - Term::from(rs2_byte_2);
-        rs2_byte_3.scale(F::from_u64_unchecked(1 << 8).inverse().unwrap());
+        rs2_byte_3.scale(F::from_u32_unchecked(1 << 8).inverse().unwrap());
 
         cs.peek_lookup_value_unconstrained_ext(
             &[
@@ -645,7 +645,7 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         {
             println!("Execute delegation");
             if let Some(delegation_type) = cs.get_value(delegation_type) {
-                println!("Delegation type = {}", delegation_type.as_u64_reduced());
+                println!("Delegation type = {}", delegation_type.as_u32_reduced());
             }
         }
 
@@ -680,7 +680,7 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
         // And to avoid prover's possibility to set delegation to 1 when we actually do not execute on this row, check
         // that we indeed execute
         cs.add_constraint(
-            Term::from(execute_delegation) * (Term::from(1u64) - Term::from(inputs.execute)),
+            Term::from(execute_delegation) * (Term::from(1u32) - Term::from(inputs.execute)),
         );
 
         let delegation_request = DelegatedComputationRequest {
@@ -785,10 +785,10 @@ fn apply_shift_binop_csrrw<F: PrimeField, CS: Circuit<F>>(
     let rd_high = cs.add_variable_from_constraint(rd_high);
 
     if let Some(rd_low) = cs.get_value(rd_low) {
-        println!("RD low = 0x{:x}", rd_low.as_u64_reduced());
+        println!("RD low = 0x{:x}", rd_low.as_u32_reduced());
     }
     if let Some(rd_high) = cs.get_value(rd_high) {
-        println!("RD high = 0x{:x}", rd_high.as_u64_reduced());
+        println!("RD high = 0x{:x}", rd_high.as_u32_reduced());
     }
 
     let rd_reg = Register([Num::Var(rd_low), Num::Var(rd_high)]);
