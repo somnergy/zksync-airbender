@@ -75,17 +75,12 @@ inline uint32_t bigint_trigger(uint32_t* mut_ptr, const uint32_t* immut_ptr, uin
     return x12;
 }
 
-inline uint32_t keccak_special5_invoke(const uint32_t* state_ptr) {
-    register uintptr_t x11 asm("x11") = reinterpret_cast<uintptr_t>(state_ptr);
-    register uint32_t x10 asm("x10");
-    asm volatile(
-        "csrrw x0, 0x7CB, x0"
-        : "=r"(x10)
-        : "r"(x11)
-        : "memory"
-    );
-    return x10;
-}
+// Keccak delegation is disabled for now -- clang refuses to produce correct assembly
+// for it. A better way would probably be to export it from Rust as a C function and link to it.
+//
+// inline uint32_t keccak_f1600_delegate(const uint32_t* state_ptr) {
+//    TODO
+// }
 
 [[noreturn]] inline void finish_error() {
     asm volatile("csrrw x0, cycle, x0" ::: "memory");
@@ -145,7 +140,7 @@ inline uint32_t csr_read_word() { return 0; }
 inline void blake_trigger_reduced_rounds(uint32_t*, const uint32_t*, uint32_t) {}
 inline void blake_trigger_full_rounds(uint32_t*, const uint32_t*, uint32_t) {}
 inline uint32_t bigint_trigger(uint32_t*, const uint32_t*, uint32_t mask) { return mask; }
-inline uint32_t keccak_special5_invoke(const uint32_t*) { return 0; }
+inline uint32_t keccak_f1600_delegate(const uint32_t*) { return 0; }
 [[noreturn]] inline void finish_error() { while (true) {} }
 [[noreturn]] inline void finish_success(const uint32_t[8]) { while (true) {} }
 [[noreturn]] inline void finish_success_extended(const uint32_t[16]) { while (true) {} }

@@ -14,7 +14,6 @@ set(MEMORY_SCRIPT "${LINKER_SCRIPT_DIR}/memory.x")
 add_executable(app
     src/main.cpp
     src/simple_allocator.cpp
-    src/memset.c
     src/start.S
 )
 
@@ -22,7 +21,6 @@ target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 
 target_compile_options(app PRIVATE
     -ffreestanding
-    -fno-builtin
     -fno-exceptions
     -fno-rtti
     -fno-unwind-tables

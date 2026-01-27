@@ -64,8 +64,6 @@ static void init_memory() {
     airbender::QuasiUART uart;
     uart.write_cstr("Computing Fibonacci number...");
 
-    uint32_t *val = new uint32_t(2);
-
     uint32_t a = 0;
     uint32_t b = 1;
     for (uint32_t i = 0; i < n; ++i) {
