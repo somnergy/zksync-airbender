@@ -8,6 +8,7 @@ use cs::{
 };
 
 fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
+    layer_idx: usize,
     address: GKRAddress,
     relation: &NoFieldGKRCacheRelation,
     gkr_storage: &mut GKRStorage<F, E>,
@@ -147,6 +148,7 @@ fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
                     },
                 );
                 let destination = destination.assume_init();
+                assert_eq!(layer_idx, 0);
                 gkr_storage.insert_extension_at_layer(
                     0,
                     address,
@@ -154,14 +156,17 @@ fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
                 );
             }
             NoFieldGKRCacheRelation::VectorizedLookup(rel) => {
+                println!("Evaluating vectorized lookup cache relation {:?}", rel);
                 // we materialize it, but the good thing is that we have a cache of lookups
                 let lookup_set_index = rel.lookup_set_index;
                 let mut destination = Box::<[E], Global>::new_uninit_slice(trace_len);
                 let ext_destination = vec![&mut destination[..]];
                 let mapping_ref = if lookup_set_index != DECODER_LOOKUP_FORMAL_SET_INDEX {
+                    println!("Mapping decoder lookup");
                     assert!(lookup_set_index < witness_trace.generic_lookup_mapping.len() - 1);
                     &witness_trace.generic_lookup_mapping[lookup_set_index]
                 } else {
+                    println!("Mapping lookup access number {}", lookup_set_index);
                     assert!(witness_trace.generic_lookup_mapping.len() > 0);
                     witness_trace.generic_lookup_mapping.last().unwrap()
                 };
@@ -182,6 +187,7 @@ fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
                     },
                 );
                 let destination = destination.assume_init();
+                assert_eq!(layer_idx, 0);
                 gkr_storage.insert_extension_at_layer(
                     0,
                     address,
@@ -208,6 +214,8 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
     preprocessed_generic_lookup: &[E],
     worker: &Worker,
 ) {
+    println!("Evaluating layer {} in forward direction", layer_idx);
+
     if layer_idx == 0 {
         // move base field polys
         for (i, poly) in witness_trace
@@ -238,8 +246,14 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
 
     // first we compute caches
     for (addr, cache_relation) in layer.cached_relations.iter() {
+        println!(
+            "Computing cache relation {:?} for output {:?}",
+            cache_relation, addr
+        );
+
         addr.assert_as_layer(layer_idx);
         evaluate_cache_relation(
+            layer_idx,
             *addr,
             cache_relation,
             gkr_storage,

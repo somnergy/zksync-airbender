@@ -75,7 +75,9 @@ impl GKRGate for GrandProductAccumulationStep {
             Self::Base { lhs, rhs, .. } => {
                 let input = [lhs, rhs].map(|el| {
                     let expr = mem_permutation_expr_into_cached_expr(el, graph);
-                    graph.add_cached_relation(expr, output_layer)
+                    assert!(output_layer > 0);
+                    let cache_layer = output_layer - 1;
+                    graph.add_cached_relation(expr, cache_layer)
                 });
                 let relation = NoFieldGKRRelation::InitialGrandProductFromCaches { input, output };
                 graph.add_enforced_relation(relation.clone(), output_layer);

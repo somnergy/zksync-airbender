@@ -84,10 +84,13 @@ fn split_destinations<T: Sized>(
             let chunk_size = geometry.get_chunk_size(chunk_idx);
             let (chunk, rest) = dest.split_at_mut(chunk_size);
             dest = rest;
-            result[i].push(chunk);
+            result[chunk_idx].push(chunk);
         }
+        assert_eq!(result[i].len(), len);
         assert!(dest.is_empty());
     }
+
+    assert_eq!(geometry.len(), result.len());
 
     result
 }
@@ -99,6 +102,8 @@ pub(crate) fn apply_row_wise<'a, F: PrimeField, E: FieldExtension<F> + Field>(
     worker: &Worker,
     func: impl Fn(Vec<&mut [MaybeUninit<F>]>, Vec<&mut [MaybeUninit<E>]>, usize, usize) + Sync,
 ) {
+    let d_len = destination.len();
+    let ext_d_len = extension_destination.len();
     worker.scope(trace_len, |scope, geometry| {
         let mut destination_chunks = split_destinations(destination, geometry);
         let mut destination_chunks = destination_chunks.drain(..).into_iter();
@@ -110,12 +115,16 @@ pub(crate) fn apply_row_wise<'a, F: PrimeField, E: FieldExtension<F> + Field>(
             let chunk_start = geometry.get_chunk_start_pos(thread_idx);
 
             let destination = destination_chunks.next().unwrap();
+            debug_assert_eq!(destination.len(), d_len);
             let extension_destination = extension_destination_chunks.next().unwrap();
+            debug_assert_eq!(extension_destination.len(), ext_d_len);
 
             Worker::smart_spawn(scope, thread_idx == geometry.len() - 1, move |_| {
                 (func_ref)(destination, extension_destination, chunk_start, chunk_size);
             });
         }
+        assert!(destination_chunks.next().is_none());
+        assert!(extension_destination_chunks.next().is_none());
     });
 }
 

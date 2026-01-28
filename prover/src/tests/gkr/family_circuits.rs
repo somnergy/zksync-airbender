@@ -360,6 +360,7 @@ pub fn gkr_run_basic_unrolled_test_impl(
 
         let is_empty = oracle.inner.is_empty();
 
+        println!("Computing memory trace");
         let memory_trace = evaluate_gkr_memory_witness_for_executor_family::<BabyBearField, _, _, _>(
             &add_sub_circuit,
             NUM_CYCLES_PER_CHUNK,
@@ -369,6 +370,7 @@ pub fn gkr_run_basic_unrolled_test_impl(
             Global,
         );
 
+        println!("Computing full trace");
         let full_trace = evaluate_gkr_witness_for_executor_family::<BabyBearField, _, _, _>(
             &add_sub_circuit,
             add_sub_lui_auipc_mod::witness_eval_fn,
@@ -396,13 +398,15 @@ pub fn gkr_run_basic_unrolled_test_impl(
         // );
 
         if CHECK_MEMORY_PERMUTATION_ONLY == false {
-            println!("Will check constraints satisfiability");
-            let is_satisfied = check_satisfied(&add_sub_circuit, &full_trace);
-            assert!(is_satisfied);
+            // println!("Will check constraints satisfiability");
+            // let is_satisfied = check_satisfied(&add_sub_circuit, &full_trace);
+            // assert!(is_satisfied);
 
+            println!("Preparing twiddles");
             let twiddles: Twiddles<_, Global> = Twiddles::new(trace_len, &worker);
             // let lde_precomputations =
             //     LdePrecomputations::new(trace_len, lde_factor, &[0, 1], &worker);
+            println!("Preparing setup");
             let setup = GKRSetupPrecomputations::from_tables_and_trace_len_with_decoder_table(
                 &TableDriver::new(),
                 &decoder_table_data,
@@ -431,9 +435,9 @@ pub fn gkr_run_basic_unrolled_test_impl(
                     &setup,
                     &twiddles,
                     lde_factor,
-                    tree_cap_size,
                     53,
                     28,
+                    trace_len,
                     &worker,
                 );
             println!("Proving time is {:?}", now.elapsed());

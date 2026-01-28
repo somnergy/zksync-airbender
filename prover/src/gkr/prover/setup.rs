@@ -60,7 +60,7 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
         let subtree_cap_size = (1 << optimal_folding.total_caps_size_log2) / lde_factor;
         assert!(subtree_cap_size > 0);
 
-        let mut main_domain_trace = Self::get_main_domain_trace(
+        let main_domain_trace = Self::get_main_domain_trace(
             table_driver,
             decoder_table,
             trace_len,
@@ -106,9 +106,12 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
         // worker: &Worker,
     ) -> BaseFieldCosetBoundTracePart<F> {
         // we always have range-check 16 bits and timestamp limbs
+        let total_width = 2 + compiled_circuit.generic_lookup_tables_width;
+
+        println!("Creating setup with {} columns in total", total_width);
 
         let mut trace = BaseFieldCosetBoundTracePart {
-            columns: Vec::with_capacity(2 + compiled_circuit.generic_lookup_tables_width),
+            columns: Vec::with_capacity(total_width),
             offset: F::ONE,
         };
         for _ in 0..(2 + compiled_circuit.generic_lookup_tables_width) {
@@ -118,10 +121,12 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
         }
 
         let table_encoding_capacity_per_tuple = trace_len;
+        let total_tables_size = table_driver.total_tables_len + decoder_table.len();
 
-        let mut num_table_subsets =
-            table_driver.total_tables_len / table_encoding_capacity_per_tuple;
-        if table_driver.total_tables_len % table_encoding_capacity_per_tuple != 0 {
+        assert_eq!(total_tables_size, compiled_circuit.total_tables_size);
+
+        let mut num_table_subsets = total_tables_size / table_encoding_capacity_per_tuple;
+        if total_tables_size % table_encoding_capacity_per_tuple != 0 {
             num_table_subsets += 1;
         }
         assert_eq!(num_table_subsets, 1);

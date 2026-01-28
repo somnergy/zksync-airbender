@@ -573,7 +573,7 @@
                 {
                   "Cached": {
                     "layer": 1,
-                    "offset": 8
+                    "offset": 0
                   }
                 }
               ],
@@ -584,7 +584,7 @@
                 {
                   "Cached": {
                     "layer": 1,
-                    "offset": 9
+                    "offset": 1
                   }
                 }
               ],
@@ -610,7 +610,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 0
             }
           },
@@ -637,7 +637,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 1
             }
           },
@@ -664,7 +664,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 2
             }
           },
@@ -691,7 +691,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 3
             }
           },
@@ -718,7 +718,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 4
             }
           },
@@ -745,7 +745,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 5
             }
           },
@@ -772,7 +772,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 6
             }
           },
@@ -799,7 +799,7 @@
         [
           {
             "Cached": {
-              "layer": 1,
+              "layer": 0,
               "offset": 7
             }
           },
@@ -827,155 +827,26 @@
           {
             "Cached": {
               "layer": 1,
-              "offset": 8
+              "offset": 0
             }
           },
           {
-            "VectorizedLookup": {
-              "columns": [
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerMemory": 18
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerMemory": 19
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerMemory": 4
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerMemory": 9
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerMemory": 14
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerWitness": 0
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerWitness": 1
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerWitness": 2
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                },
-                {
-                  "linear_terms": [
-                    [
-                      1,
-                      {
-                        "BaseLayerWitness": 3
-                      }
-                    ],
-                    [
-                      2,
-                      {
-                        "BaseLayerWitness": 4
-                      }
-                    ],
-                    [
-                      4,
-                      {
-                        "BaseLayerWitness": 5
-                      }
-                    ],
-                    [
-                      8,
-                      {
-                        "BaseLayerWitness": 6
-                      }
-                    ],
-                    [
-                      16,
-                      {
-                        "BaseLayerWitness": 7
-                      }
-                    ],
-                    [
-                      32,
-                      {
-                        "BaseLayerWitness": 8
-                      }
-                    ],
-                    [
-                      64,
-                      {
-                        "BaseLayerWitness": 9
-                      }
-                    ],
-                    [
-                      128,
-                      {
-                        "BaseLayerWitness": 10
-                      }
-                    ]
-                  ],
-                  "constant": 0
-                }
+            "MemoryTuple": {
+              "address_space": {
+                "Constant": 0
+              },
+              "address": {
+                "U16Space": 4
+              },
+              "timestamp": [
+                0,
+                1
               ],
-              "lookup_set_index": 18446744073709551615
+              "value": [
+                2,
+                3
+              ],
+              "timestamp_offset": 0
             }
           }
         ]
@@ -1004,13 +875,13 @@
               "input": [
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 0
                   }
                 },
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 1
                   }
                 }
@@ -1031,13 +902,13 @@
               "input": [
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 2
                   }
                 },
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 3
                   }
                 }
@@ -1058,13 +929,13 @@
               "input": [
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 4
                   }
                 },
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 5
                   }
                 }
@@ -1085,13 +956,13 @@
               "input": [
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 6
                   }
                 },
                 {
                   "Cached": {
-                    "layer": 1,
+                    "layer": 0,
                     "offset": 7
                   }
                 }
@@ -2859,7 +2730,7 @@
                     ],
                     [
                       [
-                        42000038,
+                        14745600,
                         18
                       ]
                     ]
@@ -2875,7 +2746,7 @@
                     ],
                     [
                       [
-                        1929265845,
+                        1983774721,
                         18
                       ]
                     ]
@@ -2891,7 +2762,7 @@
                     ],
                     [
                       [
-                        42000038,
+                        14745600,
                         18
                       ]
                     ]
@@ -3255,11 +3126,11 @@
                     },
                     [
                       [
-                        1723530552,
+                        117968640,
                         18
                       ],
                       [
-                        1387530248,
+                        3840,
                         19
                       ]
                     ]
@@ -3303,11 +3174,11 @@
                     },
                     [
                       [
-                        289735369,
+                        1895297281,
                         18
                       ],
                       [
-                        625735673,
+                        2013262081,
                         19
                       ]
                     ]
@@ -3338,11 +3209,11 @@
                     14
                   ],
                   [
-                    182323837,
+                    235944960,
                     18
                   ],
                   [
-                    1523589150,
+                    15360,
                     19
                   ]
                 ]
@@ -4579,32 +4450,32 @@
     {
       "quadratic_terms": [
         [
-          44617647,
+          1981808641,
           2,
           2
         ],
         [
-          1924030627,
+          62914560,
           2,
           21
         ],
         [
-          44617647,
+          1981808641,
           21,
           21
         ]
       ],
       "linear_terms": [
         [
-          1557626217,
+          1761599489,
           2
         ],
         [
-          455639704,
+          251666432,
           21
         ]
       ],
-      "constant_term": 1490090674
+      "constant_term": 1509916673
     },
     {
       "quadratic_terms": [
@@ -4882,7 +4753,7 @@
     {
       "linear_terms": [
         [
-          1200685041,
+          2013257729,
           2
         ],
         [
@@ -4890,7 +4761,7 @@
           3
         ],
         [
-          812580880,
+          8192,
           21
         ],
         [
@@ -4898,7 +4769,7 @@
           22
         ]
       ],
-      "constant_term": 776208322
+      "constant_term": 2013233153
     }
   ],
   "variable_names": {

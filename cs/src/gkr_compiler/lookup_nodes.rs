@@ -391,8 +391,10 @@ impl GKRGate for LookupMaskedWitnessMinusSetupInputNode {
         let output = [(); 2].map(|_| graph.add_intermediate_variable_at_layer(output_layer));
         let cached_input = NoFieldGKRCacheRelation::VectorizedLookup(self.input.clone());
         let cached_output = NoFieldGKRCacheRelation::VectorizedLookupSetup(self.setup.clone());
-        let cached_input = graph.add_cached_relation(cached_input, output_layer);
-        let cached_output = graph.add_cached_relation(cached_output, output_layer);
+        assert!(output_layer > 0);
+        let layer_for_caches = output_layer - 1;
+        let cached_input = graph.add_cached_relation(cached_input, layer_for_caches);
+        let cached_output = graph.add_cached_relation(cached_output, layer_for_caches);
 
         let relation = NoFieldGKRRelation::LookupWithCachedDensAndSetup {
             input: [self.mask, cached_input],

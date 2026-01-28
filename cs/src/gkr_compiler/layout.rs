@@ -60,12 +60,16 @@ impl GKRGraph {
                 additional_base_layer_openings: vec![],
             };
 
+            let layer_for_caches = layer - 1;
             let relations = &self.enforced_relations[&layer];
-            let cached_relations_at_layer = self
+            let cache_relations_for_this_layer = self
                 .cached_relations
-                .get(&layer)
+                .get(&layer_for_caches)
                 .cloned()
                 .unwrap_or_default();
+            dbg!(layer);
+            dbg!(&cache_relations_for_this_layer);
+
             let mut external_lookup_connections = BTreeSet::new();
 
             let mut base_layer_polys_to_open_for_caches = if layer == 1 {
@@ -95,8 +99,8 @@ impl GKRGraph {
                                 let GKRAddress::Cached { layer: l, offset } = cached else {
                                     unreachable!();
                                 };
-                                assert_eq!(l, layer);
-                                let relation = cached_relations_at_layer[offset].clone();
+                                assert_eq!(l + 1, layer, "relation {:?} is at layer {}, but references cache {:?}", rel, layer, cached);
+                                let relation = cache_relations_for_this_layer[offset].clone();
                                 descr.cached_relations.insert(cached, relation);
                             }
                             for claim in rel.created_claims().into_iter() {
@@ -120,8 +124,8 @@ impl GKRGraph {
                     let GKRAddress::Cached { layer: l, offset } = cached else {
                         unreachable!();
                     };
-                    assert_eq!(l, layer);
-                    let relation = cached_relations_at_layer[offset].clone();
+                    assert_eq!(l + 1, layer, "relation {:?} is at layer {}, but references cache {:?}", rel, layer, cached);
+                    let relation = cache_relations_for_this_layer[offset].clone();
                     // if layer == 1 {
                     //     for el in relation.dependencies().into_iter() {
                     //         base_layer_polys_to_open_for_caches.remove(&el);
@@ -153,6 +157,9 @@ impl GKRGraph {
 
             result.push(descr);
         }
+
+        // enumerate naturally
+        result.reverse();
 
         result
     }

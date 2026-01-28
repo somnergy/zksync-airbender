@@ -169,7 +169,7 @@ impl BabyBearField {
         let p_110 = square_by_value(p_11);
         let p_111 = mul_by_value(p_110, *self);
         let p_1110 = square_by_value(p_111);
-        let p_1111 = mul_by_value(p_110, *self);
+        let p_1111 = mul_by_value(p_1110, *self);
 
         let mut result = p_1110;
         result.square_impl();
@@ -518,5 +518,15 @@ mod test {
 
         dbg!(BabyBearField::TWO_ADICITY_GENERATORS);
         dbg!(BabyBearField::TWO_ADICITY_GENERATORS_INVERSED);
+    }
+
+    #[test]
+    fn test_inversion_chain() {
+        let el = BabyBearField::new(42);
+        let pow = BabyBearField::CHARACTERISTICS - 2;
+        dbg!(pow);
+        let naive_inverse = el.pow(pow);
+        let faster_inverse = el.inverse_impl().unwrap();
+        assert_eq!(naive_inverse, faster_inverse);
     }
 }

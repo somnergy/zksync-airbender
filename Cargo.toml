@@ -189,6 +189,13 @@ debug-assertions = true
 opt-level = 0
 debug = true
 
+[profile.dev.package.field]
+opt-level = 2
+[profile.dev.package.fft]
+opt-level = 2
+[profile.dev.package.worker]
+opt-level = 2
+
 [profile.release]
 opt-level = 3
 lto = "fat"
