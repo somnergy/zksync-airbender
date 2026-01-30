@@ -18,6 +18,7 @@ add_library(gpu_prover_native STATIC
         ntt/bitrev_Z_to_natural_evals.cu
         ntt/natural_evals_to_bitrev_Z.cu
         ntt/natural_evals_to_bitrev_Z_radix_8.cu
+        ntt/natural_evals_to_bitrev_Z_32_bit.cu
         ntt/ntt.cuh
         ntt/radix_8_utils.cu
         ntt/radix_8_utils.cuh
