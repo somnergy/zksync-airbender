@@ -135,13 +135,8 @@ fn evaluate_extension_field_in_out_fixed_sizes_evaluation_kernel<
     debug_assert_eq!(sources.len(), IN);
     debug_assert_eq!(batch_challenges.len(), OUT);
     unsafe {
-        let inputs = sources.as_chunks::<IN>().0.iter().next().unwrap_unchecked();
-        let challenges = batch_challenges
-            .as_chunks::<OUT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let inputs = sources.as_array().unwrap_unchecked();
+        let challenges = batch_challenges.as_array().unwrap_unchecked();
         K::evaluate::<S, EXPLICIT_FORM>(kernel, index, inputs, challenges)
     }
 }
@@ -165,19 +160,9 @@ fn evaluate_extension_field_in_out_fixed_sizes_evaluation_kernel_first_round<
     debug_assert_eq!(outputs.len(), OUT);
     debug_assert_eq!(batch_challenges.len(), OUT);
     unsafe {
-        let inputs = sources.as_chunks::<IN>().0.iter().next().unwrap_unchecked();
-        let outputs = outputs
-            .as_chunks::<OUT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
-        let challenges = batch_challenges
-            .as_chunks::<OUT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let inputs = sources.as_array().unwrap_unchecked();
+        let outputs = outputs.as_array().unwrap_unchecked();
+        let challenges = batch_challenges.as_array().unwrap_unchecked();
         K::evaluate_first_round::<S, SOUT>(kernel, index, inputs, outputs, challenges)
     }
 }
@@ -214,13 +199,7 @@ pub fn forward_evaluate_single_input_type_fixed_in_out_kernel_with_extension_inp
             destinations_refs.push(&mut el[..]);
         }
 
-        let inputs = sources
-            .extension_field_inputs
-            .as_chunks::<IN>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
 
         apply_row_wise::<F, _>(
             vec![],
@@ -282,26 +261,12 @@ pub fn evaluate_single_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_outputs.len(), OUT);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
                     let outputs = sources
                         .extension_field_outputs
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
+                        .as_array()
                         .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
@@ -329,19 +294,8 @@ pub fn evaluate_single_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_inputs.len(), IN);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
@@ -377,19 +331,8 @@ pub fn evaluate_single_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_inputs.len(), IN);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
@@ -427,19 +370,8 @@ pub fn evaluate_single_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_inputs.len(), IN);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],

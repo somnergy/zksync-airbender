@@ -6,6 +6,9 @@ use crate::gkr::{
 use super::*;
 use std::mem::MaybeUninit;
 
+// Trait for kernels that can take both base field and extension field as inputs,
+// but always output values in extension
+
 pub trait MixedFieldsInOutFixedSizesEvaluationKernel<
     F: PrimeField,
     E: FieldExtension<F> + Field,
@@ -180,24 +183,9 @@ fn evaluate_mixed_field_in_out_fixed_sizes_evaluation_kernel<
     debug_assert_eq!(ext_sources.len(), IN_EXT);
     debug_assert_eq!(batch_challenges.len(), OUT);
     unsafe {
-        let inputs = sources
-            .as_chunks::<IN_BASE>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
-        let inputs_ext = ext_sources
-            .as_chunks::<IN_EXT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
-        let challenges = batch_challenges
-            .as_chunks::<OUT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let inputs = sources.as_array().unwrap_unchecked();
+        let inputs_ext = ext_sources.as_array().unwrap_unchecked();
+        let challenges = batch_challenges.as_array().unwrap_unchecked();
         K::evaluate::<RB, SB, SE, EXPLICIT_FORM>(kernel, index, inputs, inputs_ext, challenges)
     }
 }
@@ -225,30 +213,10 @@ fn evaluate_mixed_field_in_out_fixed_sizes_evaluation_kernel_first_round<
     debug_assert_eq!(outputs.len(), OUT);
     debug_assert_eq!(batch_challenges.len(), OUT);
     unsafe {
-        let inputs = sources
-            .as_chunks::<IN_BASE>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
-        let inputs_ext = ext_sources
-            .as_chunks::<IN_EXT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
-        let outputs = outputs
-            .as_chunks::<OUT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
-        let challenges = batch_challenges
-            .as_chunks::<OUT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let inputs = sources.as_array().unwrap_unchecked();
+        let inputs_ext = ext_sources.as_array().unwrap_unchecked();
+        let outputs = outputs.as_array().unwrap_unchecked();
+        let challenges = batch_challenges.as_array().unwrap_unchecked();
         K::evaluate_first_round::<SB, SE, SOUT>(
             kernel, index, inputs, inputs_ext, outputs, challenges,
         )
@@ -288,21 +256,9 @@ pub fn forward_evaluate_mixed_input_type_fixed_in_out_kernel_with_extension_inpu
             destinations_refs.push(&mut el[..]);
         }
 
-        let inputs = sources
-            .base_field_inputs
-            .as_chunks::<IN_BASE>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let inputs = sources.base_field_inputs.as_array().unwrap_unchecked();
 
-        let ext_inputs = sources
-            .extension_field_inputs
-            .as_chunks::<IN_EXT>()
-            .0
-            .iter()
-            .next()
-            .unwrap_unchecked();
+        let ext_inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
 
         apply_row_wise::<F, _>(
             vec![],
@@ -364,26 +320,12 @@ pub fn evaluate_mixed_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_outputs.len(), OUT);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
                     let outputs = sources
                         .extension_field_outputs
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
+                        .as_array()
                         .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
@@ -411,19 +353,8 @@ pub fn evaluate_mixed_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_inputs.len(), IN);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
@@ -459,19 +390,8 @@ pub fn evaluate_mixed_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_inputs.len(), IN);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
@@ -509,19 +429,8 @@ pub fn evaluate_mixed_input_type_fixed_in_out_kernel_with_extension_inputs<
                     assert_eq!(sources.extension_field_inputs.len(), IN);
                     assert_eq!(batch_challenges.len(), OUT);
 
-                    let inputs = sources
-                        .extension_field_inputs
-                        .as_chunks::<IN>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
-                    let challenges = batch_challenges
-                        .as_chunks::<OUT>()
-                        .0
-                        .iter()
-                        .next()
-                        .unwrap_unchecked();
+                    let inputs = sources.extension_field_inputs.as_array().unwrap_unchecked();
+                    let challenges = batch_challenges.as_array().unwrap_unchecked();
 
                     apply_row_wise::<F, _>(
                         vec![],
