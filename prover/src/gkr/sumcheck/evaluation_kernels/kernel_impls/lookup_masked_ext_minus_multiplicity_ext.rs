@@ -102,8 +102,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field>
         // a/b - c/d -> (d*a - c*b), bd
         let [a, c] = input;
         let [b, d] = ext_input;
-        let mut ad = a.mul_by_ext_repr::<true>(d, ctx);
-        let cb = c.mul_by_ext_repr::<true>(b, ctx);
+        let mut ad = a.mul_by_ext::<true>(&d.value, ctx);
+        let cb = c.mul_by_ext::<true>(&b.value, ctx);
         ad.sub_assign(&cb);
         let mut den = *b;
         den.repr_mul_assign::<true>(d);

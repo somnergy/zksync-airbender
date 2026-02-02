@@ -217,12 +217,23 @@ impl<F: PrimeField + TwoAdicField, T: ColumnMajorMerkleTreeConstructor<F>>
                 *el = F::from_u32_unchecked(i as u32);
             }
             let mut timestamp_range_check_poly = vec![F::ZERO; trace_len].into_boxed_slice();
-            for (i, el) in timestamp_range_check_poly[..(1 << TIMESTAMP_COLUMNS_NUM_BITS)].iter_mut().enumerate() {
+            for (i, el) in timestamp_range_check_poly[..(1 << TIMESTAMP_COLUMNS_NUM_BITS)]
+                .iter_mut()
+                .enumerate()
+            {
                 *el = F::from_u32_unchecked(i as u32);
             }
 
-            gkr_storage.insert_base_field_at_layer(0, GKRAddress::Setup(0), BaseFieldPoly::new(range_check_16_poly));
-            gkr_storage.insert_base_field_at_layer(0, GKRAddress::Setup(1), BaseFieldPoly::new(timestamp_range_check_poly));
+            gkr_storage.insert_base_field_at_layer(
+                0,
+                GKRAddress::Setup(0),
+                BaseFieldPoly::new(range_check_16_poly),
+            );
+            gkr_storage.insert_base_field_at_layer(
+                0,
+                GKRAddress::Setup(1),
+                BaseFieldPoly::new(timestamp_range_check_poly),
+            );
         }
 
         (

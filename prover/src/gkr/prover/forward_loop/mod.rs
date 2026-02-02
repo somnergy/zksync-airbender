@@ -9,12 +9,12 @@ use cs::{
     gkr_compiler::{GKRLayerDescription, NoFieldGKRCacheRelation},
 };
 
-pub(crate) mod pairwise_product;
+pub(crate) mod copy;
 pub(crate) mod lookup_from_base_inputs;
 pub(crate) mod lookup_from_vector_inputs;
-pub(crate) mod copy;
 pub(crate) mod lookup_pair;
 pub(crate) mod mask_product;
+pub(crate) mod pairwise_product;
 
 fn evaluate_cache_relation<F: PrimeField, E: FieldExtension<F> + Field>(
     layer_idx: usize,
@@ -356,13 +356,32 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
     }
 
     let expected_output_layer = layer_idx + 1;
-    for gate in layer.gates.iter().chain(layer.gates_with_external_connections.iter()) {
+    assert!(layer.gates.is_empty() ^ layer.gates_with_external_connections.is_empty());
+    if layer_idx != compiled_circuit.layers.len() - 1 {
+        assert!(layer.gates_with_external_connections.is_empty());
+    } else {
+        assert!(layer.gates.is_empty());
+    }
+
+    for gate in layer
+        .gates
+        .iter()
+        .chain(layer.gates_with_external_connections.iter())
+    {
         assert_eq!(gate.output_layer, expected_output_layer);
 
+        // println!("Should evaluate {:?}", &gate.enforced_relation);
         match &gate.enforced_relation {
             NoFieldGKRRelation::Copy { input, output } => {
                 // println!("Should evaluate {:?}", &gate.enforced_relation);
-                copy::forward_evaluate_copy(*input, *output, gkr_storage, expected_output_layer, trace_len, worker);
+                copy::forward_evaluate_copy(
+                    *input,
+                    *output,
+                    gkr_storage,
+                    expected_output_layer,
+                    trace_len,
+                    worker,
+                );
             }
             NoFieldGKRRelation::InitialGrandProductFromCaches { input, output } => {
                 // println!("Should evaluate {:?}", &gate.enforced_relation);
@@ -375,7 +394,11 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
                     worker,
                 );
             }
-            NoFieldGKRRelation::MaskIntoIdentityProduct {input, mask, output} => {
+            NoFieldGKRRelation::MaskIntoIdentityProduct {
+                input,
+                mask,
+                output,
+            } => {
                 // println!("Should evaluate {:?}", &gate.enforced_relation);
                 mask_product::forward_evaluate_mask_into_identity(
                     *input,
@@ -384,7 +407,7 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
                     gkr_storage,
                     expected_output_layer,
                     trace_len,
-                    worker
+                    worker,
                 );
             }
             NoFieldGKRRelation::TrivialProduct { input, output } => {
@@ -443,7 +466,31 @@ pub fn evaluate_layer<F: PrimeField, E: FieldExtension<F> + Field>(
             }
             NoFieldGKRRelation::LookupPair { input, output } => {
                 // println!("Should evaluate {:?}", &gate.enforced_relation);
-                lookup_pair::forward_evaluate_lookup_pair(*input, *output, gkr_storage, expected_output_layer, trace_len, worker);
+                lookup_pair::forward_evaluate_lookup_pair(
+                    *input,
+                    *output,
+                    gkr_storage,
+                    expected_output_layer,
+                    trace_len,
+                    worker,
+                );
+            }
+            NoFieldGKRRelation::LookupUnbalancedPairWithMaterializedBaseInputs {
+                input,
+                remainder,
+                output,
+            } => {
+                // println!("Should evaluate {:?}", &gate.enforced_relation);
+                lookup_from_base_inputs::forward_evaluate_lookup_rational_with_base_remainder_input(
+                    *input,
+                    *remainder,
+                    *output,
+                    gkr_storage,
+                    expected_output_layer,
+                    trace_len,
+                    lookup_challenges_additive_part,
+                    worker,
+                );
             }
             rel @ _ => {
                 println!("Should evaluate {:?}", &gate.enforced_relation);

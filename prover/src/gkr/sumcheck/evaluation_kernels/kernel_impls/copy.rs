@@ -12,7 +12,9 @@ impl BaseFieldCopyGKRRelation {
     }
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E> for BaseFieldCopyGKRRelation {
+impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
+    for BaseFieldCopyGKRRelation
+{
     fn num_challenges(&self) -> usize {
         1
     }
@@ -97,7 +99,9 @@ impl<F: PrimeField, E: FieldExtension<F> + Field>
         _output_sources: &[SOUT; 1],
         batch_challenges: &[E; 1],
     ) -> [E; 2] {
-        let output_f0 = sources[0].get_f0_only(index).collapse_for_batch_eval(&(), &batch_challenges[0]);
+        let output_f0 = sources[0]
+            .get_f0_only(index)
+            .collapse_for_batch_eval(&(), &batch_challenges[0]);
 
         // result[1] = 0 because the quadratic coefficient is 0 for a linear function
         [output_f0, E::ZERO]
@@ -124,7 +128,9 @@ impl<F: PrimeField, E: FieldExtension<F> + Field>
         } else {
             // For non-explicit form (intermediate rounds), return [f0, 0]
             // The quadratic coefficient is 0 for a linear function
-            let f0 = sources[0].get_f0_only(index).collapse_for_batch_eval(collapse_ctx, &batch_challenges[0]);
+            let f0 = sources[0]
+                .get_f0_only(index)
+                .collapse_for_batch_eval(collapse_ctx, &batch_challenges[0]);
             [f0, E::ZERO]
         }
     }
@@ -199,7 +205,9 @@ impl ExtensionCopyGKRRelation {
     }
 }
 
-impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E> for ExtensionCopyGKRRelation {
+impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
+    for ExtensionCopyGKRRelation
+{
     fn num_challenges(&self) -> usize {
         1
     }
@@ -272,7 +280,8 @@ pub struct ExtensionCopyGKRRelationKernel<F: PrimeField, E: FieldExtension<F> + 
 }
 
 impl<F: PrimeField, E: FieldExtension<F> + Field>
-    ExtensionFieldInOutFixedSizesEvaluationKernel<F, E, 1, 1> for ExtensionCopyGKRRelationKernel<F, E>
+    ExtensionFieldInOutFixedSizesEvaluationKernel<F, E, 1, 1>
+    for ExtensionCopyGKRRelationKernel<F, E>
 {
     fn evaluate_first_round<
         S: super::EvaluationFormStorage<F, E, ExtensionFieldRepresentation<F, E>>,

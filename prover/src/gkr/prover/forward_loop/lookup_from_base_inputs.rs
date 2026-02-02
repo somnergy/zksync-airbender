@@ -1,5 +1,6 @@
 use crate::gkr::sumcheck::evaluation_kernels::{
-    lookup_base_minus_multiplicity_base, lookup_base_pair, BatchedGKRKernel,
+    lookup_base_minus_multiplicity_base, lookup_base_pair, lookup_rational_with_unbalanced_base,
+    BatchedGKRKernel,
 };
 
 use super::*;
@@ -43,5 +44,29 @@ pub fn forward_evaluate_lookup_base_inputs_pair<F: PrimeField, E: FieldExtension
         lookup_additive_challenge,
         _marker: core::marker::PhantomData,
     };
+    kernel.evaluate_forward_over_storage(gkr_storage, expected_output_layer, trace_len, worker);
+}
+
+pub fn forward_evaluate_lookup_rational_with_base_remainder_input<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+>(
+    inputs: [GKRAddress; 2],
+    remainder: GKRAddress,
+    outputs: [GKRAddress; 2],
+    gkr_storage: &mut GKRStorage<F, E>,
+    expected_output_layer: usize,
+    trace_len: usize,
+    lookup_additive_challenge: E,
+    worker: &Worker,
+) {
+    let kernel =
+        lookup_rational_with_unbalanced_base::LookupRationalPairWithUnbalancedBaseGKRRelation {
+            inputs,
+            remainder,
+            outputs,
+            lookup_additive_challenge,
+            _marker: core::marker::PhantomData,
+        };
     kernel.evaluate_forward_over_storage(gkr_storage, expected_output_layer, trace_len, worker);
 }

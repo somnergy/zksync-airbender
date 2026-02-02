@@ -2,10 +2,7 @@ use crate::gkr::sumcheck::evaluation_kernels::{pairwise_product, BatchedGKRKerne
 
 use super::*;
 
-pub fn forward_evaluate_pairwise_product<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
->(
+pub fn forward_evaluate_pairwise_product<F: PrimeField, E: FieldExtension<F> + Field>(
     inputs: [GKRAddress; 2],
     output: GKRAddress,
     gkr_storage: &mut GKRStorage<F, E>,

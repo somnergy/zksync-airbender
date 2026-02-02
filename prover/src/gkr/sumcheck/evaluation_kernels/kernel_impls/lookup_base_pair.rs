@@ -104,14 +104,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field>
     ) -> [E; 2] {
         // 1/b + 1/d -> (b + d), bd
         let [b, d] = input;
-        let b = b.add_with_ext_repr::<true>(
-            &ExtensionFieldRepresentation::new(self.lookup_additive_challenge),
-            ctx,
-        );
-        let d = d.add_with_ext_repr::<true>(
-            &ExtensionFieldRepresentation::new(self.lookup_additive_challenge),
-            ctx,
-        );
+        let b = b.add_with_ext::<true>(&self.lookup_additive_challenge, ctx);
+        let d = d.add_with_ext::<true>(&self.lookup_additive_challenge, ctx);
         let mut num = b;
         num.add_assign(&d);
 

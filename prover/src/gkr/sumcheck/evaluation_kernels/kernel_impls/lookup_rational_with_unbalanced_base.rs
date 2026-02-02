@@ -3,17 +3,19 @@ use worker::Worker;
 
 use super::*;
 
-pub struct LookupBaseMinusMultiplicityByBaseGKRRelation<F: PrimeField, E: FieldExtension<F> + Field>
-{
-    pub input: GKRAddress,
-    pub setup: [GKRAddress; 2],
+pub struct LookupRationalPairWithUnbalancedBaseGKRRelation<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+> {
+    pub inputs: [GKRAddress; 2],
+    pub remainder: GKRAddress,
     pub outputs: [GKRAddress; 2],
     pub lookup_additive_challenge: E,
     pub _marker: core::marker::PhantomData<F>,
 }
 
 impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
-    for LookupBaseMinusMultiplicityByBaseGKRRelation<F, E>
+    for LookupRationalPairWithUnbalancedBaseGKRRelation<F, E>
 {
     fn num_challenges(&self) -> usize {
         2
@@ -21,8 +23,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
 
     fn get_inputs(&self) -> GKRInputs {
         GKRInputs {
-            inputs_in_base: vec![self.input, self.setup[0], self.setup[1]],
-            inputs_in_extension: Vec::new(),
+            inputs_in_base: vec![self.remainder],
+            inputs_in_extension: self.inputs.to_vec(),
             outputs_in_base: Vec::new(),
             outputs_in_extension: self.outputs.to_vec(),
         }
@@ -35,7 +37,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         trace_len: usize,
         worker: &Worker,
     ) {
-        let kernel = LookupBaseMinusMultiplicityByBaseGKRRelationKernel::<F, E> {
+        let kernel = LookupRationalPairWithUnbalancedBaseGKRRelationKernel::<F, E> {
             lookup_additive_challenge: self.lookup_additive_challenge,
             _marker: core::marker::PhantomData,
         };
@@ -88,7 +90,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
 }
 
 // Assumes reordering of access implementors, to have lhs at 0 and rhs at 1
-pub struct LookupBaseMinusMultiplicityByBaseGKRRelationKernel<
+pub struct LookupRationalPairWithUnbalancedBaseGKRRelationKernel<
     F: PrimeField,
     E: FieldExtension<F> + Field,
 > {
@@ -97,25 +99,25 @@ pub struct LookupBaseMinusMultiplicityByBaseGKRRelationKernel<
 }
 
 impl<F: PrimeField, E: FieldExtension<F> + Field>
-    MixedFieldsInOutFixedSizesEvaluationKernel<F, E, 3, 0, 2>
-    for LookupBaseMinusMultiplicityByBaseGKRRelationKernel<F, E>
+    MixedFieldsInOutFixedSizesEvaluationKernel<F, E, 1, 2, 2>
+    for LookupRationalPairWithUnbalancedBaseGKRRelationKernel<F, E>
 {
     #[inline(always)]
     fn pointwise_eval<RB: EvaluationRepresentation<F, E>>(
         &self,
-        input: &[RB; 3],
-        _ext_input: &[ExtensionFieldRepresentation<F, E>; 0],
+        input: &[RB; 1],
+        ext_input: &[ExtensionFieldRepresentation<F, E>; 2],
         ctx: &RB::CollapseContext,
     ) -> [E; 2] {
-        // 1/b - c/d -> (d - c*b), bd
-        let [b, c, d] = input;
-        let b = b.add_with_ext::<true>(&self.lookup_additive_challenge, ctx);
+        // a/b + 1/d -> (ad + b), bd
+        let [d] = input;
+        let [a, b] = ext_input;
         let d = d.add_with_ext::<true>(&self.lookup_additive_challenge, ctx);
-        let cb = c.mul_by_ext::<true>(&b, ctx);
-        let mut num = d;
-        num.sub_assign(&cb);
+        let mut num = a.value;
+        num.mul_assign(&d);
+        num.add_assign(&b.value);
 
-        let mut den = b;
+        let mut den = b.into_value();
         den.mul_assign(&d);
 
         [num, den]

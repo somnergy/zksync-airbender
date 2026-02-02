@@ -7,7 +7,7 @@ use worker::Worker;
 use crate::gkr::sumcheck::eq_poly::*;
 use crate::gkr::sumcheck::{
     access_and_fold::{ExtensionFieldPoly, GKRLayerSource, GKRStorage},
-    evaluation_kernels::{SameSizeProductGKRRelation, BatchedGKRKernel},
+    evaluation_kernels::{BatchedGKRKernel, SameSizeProductGKRRelation},
 };
 
 // Generic logic - three step sumcheck
