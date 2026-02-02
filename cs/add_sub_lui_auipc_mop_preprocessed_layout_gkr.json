@@ -70,51 +70,7 @@
   "layers": [
     {
       "layer": 1,
-      "gates_with_external_connections": [
-        {
-          "output_layer": 1,
-          "enforced_relation": {
-            "LookupWithCachedDensAndSetup": {
-              "input": [
-                {
-                  "BaseLayerMemory": 17
-                },
-                {
-                  "Cached": {
-                    "layer": 0,
-                    "offset": 14
-                  }
-                }
-              ],
-              "setup": [
-                {
-                  "BaseLayerWitness": 27
-                },
-                {
-                  "Cached": {
-                    "layer": 0,
-                    "offset": 15
-                  }
-                }
-              ],
-              "output": [
-                {
-                  "InnerLayer": {
-                    "layer": 1,
-                    "offset": 19
-                  }
-                },
-                {
-                  "InnerLayer": {
-                    "layer": 1,
-                    "offset": 20
-                  }
-                }
-              ]
-            }
-          }
-        }
-      ],
+      "gates_with_external_connections": [],
       "cached_relations": [
         [
           {
@@ -1114,6 +1070,49 @@
                   "offset": 18
                 }
               }
+            }
+          }
+        },
+        {
+          "output_layer": 1,
+          "enforced_relation": {
+            "LookupWithCachedDensAndSetup": {
+              "input": [
+                {
+                  "BaseLayerMemory": 17
+                },
+                {
+                  "Cached": {
+                    "layer": 0,
+                    "offset": 14
+                  }
+                }
+              ],
+              "setup": [
+                {
+                  "BaseLayerWitness": 27
+                },
+                {
+                  "Cached": {
+                    "layer": 0,
+                    "offset": 15
+                  }
+                }
+              ],
+              "output": [
+                {
+                  "InnerLayer": {
+                    "layer": 1,
+                    "offset": 19
+                  }
+                },
+                {
+                  "InnerLayer": {
+                    "layer": 1,
+                    "offset": 20
+                  }
+                }
+              ]
             }
           }
         },
@@ -3298,13 +3297,53 @@
               }
             }
           }
+        },
+        {
+          "output_layer": 2,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 1,
+                  "offset": 19
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 2,
+                  "offset": 11
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 2,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 1,
+                  "offset": 20
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 2,
+                  "offset": 12
+                }
+              }
+            }
+          }
         }
       ],
       "additional_base_layer_openings": []
     },
     {
       "layer": 3,
-      "gates_with_external_connections": [
+      "gates_with_external_connections": [],
+      "cached_relations": [],
+      "gates": [
         {
           "output_layer": 3,
           "enforced_relation": {
@@ -3395,10 +3434,7 @@
               ]
             }
           }
-        }
-      ],
-      "cached_relations": [],
-      "gates": [
+        },
         {
           "output_layer": 3,
           "enforced_relation": {
@@ -3468,6 +3504,44 @@
               }
             }
           }
+        },
+        {
+          "output_layer": 3,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 2,
+                  "offset": 11
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 7
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 3,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 2,
+                  "offset": 12
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 8
+                }
+              }
+            }
+          }
         }
       ],
       "additional_base_layer_openings": []
@@ -3513,6 +3587,120 @@
                   }
                 }
               ]
+            }
+          }
+        },
+        {
+          "output_layer": 4,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 0
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 4,
+                  "offset": 2
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 4,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 1
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 4,
+                  "offset": 3
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 4,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 2
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 4,
+                  "offset": 4
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 4,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 3
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 4,
+                  "offset": 5
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 4,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 7
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 4,
+                  "offset": 6
+                }
+              }
+            }
+          }
+        },
+        {
+          "output_layer": 4,
+          "enforced_relation": {
+            "Copy": {
+              "input": {
+                "InnerLayer": {
+                  "layer": 3,
+                  "offset": 8
+                }
+              },
+              "output": {
+                "InnerLayer": {
+                  "layer": 4,
+                  "offset": 7
+                }
+              }
             }
           }
         }

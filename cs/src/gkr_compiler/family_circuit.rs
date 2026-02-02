@@ -14,6 +14,7 @@ use crate::definitions::GKRAddress;
 use crate::definitions::Variable;
 use crate::gkr_compiler::graph::GKRGraph;
 use crate::gkr_compiler::graph::GraphHolder;
+use crate::gkr_compiler::layout::LookupOutput;
 use crate::one_row_compiler::compile_layout::ShuffleRamTimestampComparisonPartialData;
 use crate::one_row_compiler::delegation::add_compiler_defined_variable;
 use crate::one_row_compiler::delegation::add_multiple_compiler_defined_variables;
@@ -742,6 +743,12 @@ impl<F: PrimeField> GKRCompiler<F> {
         // let content = svg.finalize();
         // let filename = "gkr_layout.svg";
         // ::layout::core::utils::save_to_file(filename, &content).unwrap();
+
+        let lookup_outputs = BTreeMap::from_iter(
+            lookup_outputs
+                .into_iter()
+                .map(|(k, v)| (k, (v.0, LookupOutput::Direct(v.1)))),
+        );
 
         let layers = graph.layout_layers([final_read_node, final_write_node], lookup_outputs);
 

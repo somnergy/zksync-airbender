@@ -1,4 +1,4 @@
-use crate::gkr_compiler::graph::GKRGraph;
+use crate::gkr_compiler::graph::{CopyNode, GKRGraph};
 use crate::one_row_compiler::gkr::RamAuxComparisonSet;
 
 use super::*;
@@ -22,6 +22,15 @@ pub struct GKRLayerDescription {
     pub additional_base_layer_openings: Vec<GKRAddress>,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum LookupOutput {
+    Direct(NoFieldGKRRelation),
+    Copied {
+        num: NoFieldGKRRelation,
+        den: NoFieldGKRRelation,
+    },
+}
+
 impl GKRGraph {
     fn dump_base_layer_set(&self) -> BTreeSet<GKRAddress> {
         let mut result = BTreeSet::new();
@@ -34,15 +43,113 @@ impl GKRGraph {
 
     pub(crate) fn layout_layers(
         &mut self,
-        grand_product_outputs: [(GKRAddress, NoFieldGKRRelation); 2],
-        mut lookup_outputs: BTreeMap<LookupType, ([GKRAddress; 2], NoFieldGKRRelation)>,
+        mut grand_product_outputs: [(GKRAddress, NoFieldGKRRelation); 2],
+        mut lookup_outputs: BTreeMap<LookupType, ([GKRAddress; 2], LookupOutput)>,
     ) -> Vec<GKRLayerDescription> {
         assert!(self.enforced_relations.len() > 0);
         assert!(self.enforced_relations.get(&0).is_none());
 
-        let mut result = vec![];
+        // We put all external outputs to the same layer
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+        enum OutputType {
+            PermutationProduct,
+            Lookup16Bits,
+            LookupTimestamps,
+            GenericLookup,
+        }
 
         let total_layers = self.enforced_relations.len();
+
+        // stable iteration order
+        let mut output_layers = BTreeMap::new();
+        {
+            for layer in (1..(1 + total_layers)).rev() {
+                let relations = &self.enforced_relations[&layer];
+                'outer: for rel in relations.iter() {
+                    if rel == &grand_product_outputs[0].1 || rel == &grand_product_outputs[1].1 {
+                        output_layers.insert(OutputType::PermutationProduct, layer);
+                        continue 'outer;
+                    }
+                    for (k, (_, el)) in lookup_outputs.iter() {
+                        let LookupOutput::Direct(el) = el else {
+                            unreachable!()
+                        };
+                        if el == rel {
+                            match k {
+                                LookupType::RangeCheck16 => {
+                                    output_layers.insert(OutputType::Lookup16Bits, layer);
+                                }
+                                LookupType::TimestampRangeCheck => {
+                                    output_layers.insert(OutputType::LookupTimestamps, layer);
+                                }
+                                LookupType::Generic => {
+                                    output_layers.insert(OutputType::GenericLookup, layer);
+                                }
+                            }
+                            continue 'outer;
+                        }
+                    }
+                }
+            }
+
+            let max_output_layer = output_layers.iter().map(|(k, v)| *v).max().unwrap();
+            assert!(output_layers.len() <= 4);
+
+            for (k, layer) in output_layers.into_iter() {
+                if layer != max_output_layer {
+                    match k {
+                        OutputType::PermutationProduct => {
+                            let current_output = &mut grand_product_outputs;
+                            for next_layer in (layer + 1)..=max_output_layer {
+                                // copy
+                                *current_output =
+                                    current_output.each_ref().map(|(addr, _relation)| {
+                                        let copy_node = CopyNode::FromIntermediate(*addr);
+                                        copy_node.add_at_layer(self, next_layer)
+                                    });
+                            }
+                        }
+                        a @ _ => {
+                            let current_output = match a {
+                                OutputType::Lookup16Bits => {
+                                    lookup_outputs.get_mut(&LookupType::RangeCheck16).unwrap()
+                                }
+                                OutputType::LookupTimestamps => lookup_outputs
+                                    .get_mut(&LookupType::TimestampRangeCheck)
+                                    .unwrap(),
+                                OutputType::GenericLookup => {
+                                    lookup_outputs.get_mut(&LookupType::Generic).unwrap()
+                                }
+                                _ => {
+                                    todo!()
+                                }
+                            };
+                            for next_layer in (layer + 1)..=max_output_layer {
+                                // copy
+                                let [num, den] = &current_output.0;
+                                let copy_node = CopyNode::FromIntermediate(*num);
+                                let (new_num_addr, new_num_rel) =
+                                    copy_node.add_at_layer(self, next_layer);
+
+                                let copy_node = CopyNode::FromIntermediate(*den);
+                                let (new_den_addr, new_den_rel) =
+                                    copy_node.add_at_layer(self, next_layer);
+                                *current_output = (
+                                    [new_num_addr, new_den_addr],
+                                    LookupOutput::Copied {
+                                        num: new_num_rel,
+                                        den: new_den_rel,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut result = vec![];
 
         // the only difficult topic is if a layer has any connection to the size-reducing part of GKR, otherwise we just take
         // all relations without splitting
@@ -89,37 +196,80 @@ impl GKRGraph {
                     continue 'outer;
                 }
                 for (k, (_, el)) in lookup_outputs.iter() {
-                    if el == rel {
-                        if layer > 1 {
-                            assert!(rel.cached_addresses().is_empty());
-                        } else {
-                            for cached in rel.cached_addresses().into_iter() {
-                                let GKRAddress::Cached { layer: l, offset } = cached else {
-                                    unreachable!();
+                    match el {
+                        LookupOutput::Direct(el) => {
+                            if el == rel {
+                                if layer > 1 {
+                                    assert!(rel.cached_addresses().is_empty());
+                                } else {
+                                    for cached in rel.cached_addresses().into_iter() {
+                                        let GKRAddress::Cached { layer: l, offset } = cached else {
+                                            unreachable!();
+                                        };
+                                        assert_eq!(
+                                            l + 1,
+                                            layer,
+                                            "relation {:?} is at layer {}, but references cache {:?}",
+                                            rel,
+                                            layer,
+                                            cached
+                                        );
+                                        let relation =
+                                            cache_relations_for_this_layer[offset].clone();
+                                        descr.cached_relations.insert(cached, relation);
+                                    }
+                                    for claim in rel.created_claims().into_iter() {
+                                        base_layer_polys_to_open_for_caches.remove(&claim);
+                                    }
+                                }
+
+                                let artifact = GateArtifacts {
+                                    output_layer: layer,
+                                    enforced_relation: rel.clone(),
                                 };
-                                assert_eq!(
-                                    l + 1,
-                                    layer,
-                                    "relation {:?} is at layer {}, but references cache {:?}",
-                                    rel,
-                                    layer,
-                                    cached
-                                );
-                                let relation = cache_relations_for_this_layer[offset].clone();
-                                descr.cached_relations.insert(cached, relation);
-                            }
-                            for claim in rel.created_claims().into_iter() {
-                                base_layer_polys_to_open_for_caches.remove(&claim);
+                                descr.gates_with_external_connections.push(artifact);
+                                external_lookup_connections.insert(*k);
+                                continue 'outer;
                             }
                         }
+                        LookupOutput::Copied { num, den } => {
+                            for el in [num, den] {
+                                if el == rel {
+                                    if layer > 1 {
+                                        assert!(rel.cached_addresses().is_empty());
+                                    } else {
+                                        for cached in rel.cached_addresses().into_iter() {
+                                            let GKRAddress::Cached { layer: l, offset } = cached
+                                            else {
+                                                unreachable!();
+                                            };
+                                            assert_eq!(
+                                                l + 1,
+                                                layer,
+                                                "relation {:?} is at layer {}, but references cache {:?}",
+                                                rel,
+                                                layer,
+                                                cached
+                                            );
+                                            let relation =
+                                                cache_relations_for_this_layer[offset].clone();
+                                            descr.cached_relations.insert(cached, relation);
+                                        }
+                                        for claim in rel.created_claims().into_iter() {
+                                            base_layer_polys_to_open_for_caches.remove(&claim);
+                                        }
+                                    }
 
-                        let artifact = GateArtifacts {
-                            output_layer: layer,
-                            enforced_relation: rel.clone(),
-                        };
-                        descr.gates_with_external_connections.push(artifact);
-                        external_lookup_connections.insert(*k);
-                        continue 'outer;
+                                    let artifact = GateArtifacts {
+                                        output_layer: layer,
+                                        enforced_relation: rel.clone(),
+                                    };
+                                    descr.gates_with_external_connections.push(artifact);
+                                    external_lookup_connections.insert(*k);
+                                    continue 'outer;
+                                }
+                            }
+                        }
                     }
                 }
 
