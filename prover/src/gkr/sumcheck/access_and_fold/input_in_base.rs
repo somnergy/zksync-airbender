@@ -2,7 +2,7 @@ use field::Field;
 
 use super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct BaseFieldPoly<F: PrimeField> {
     pub(crate) values: Box<[F]>,
 }

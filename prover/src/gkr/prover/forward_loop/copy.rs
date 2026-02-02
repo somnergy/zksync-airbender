@@ -1,6 +1,7 @@
 use crate::gkr::sumcheck::evaluation_kernels::{
     lookup_base_minus_multiplicity_base, lookup_base_pair, BatchedGKRKernel,
 };
+use std::sync::Arc;
 
 use super::*;
 
@@ -19,18 +20,18 @@ pub fn forward_evaluate_copy<F: PrimeField, E: FieldExtension<F> + Field>(
     if let Some(source) = gkr_storage.layers[expected_output_layer - 1]
         .base_field_inputs
         .get(&input)
-        .cloned()
+        .map(|el| Arc::clone(el))
     {
         println!("Copying base field {:?} -> {:?}", input, output);
-        gkr_storage.insert_base_field_at_layer(expected_output_layer, output, source);
+        gkr_storage.insert_arc_base_field_at_layer(expected_output_layer, output, source);
     } else {
         if let Some(source) = gkr_storage.layers[expected_output_layer - 1]
             .extension_field_inputs
             .get(&input)
-            .cloned()
+            .map(|el| Arc::clone(el))
         {
             println!("Copying extension field {:?} -> {:?}", input, output);
-            gkr_storage.insert_extension_at_layer(expected_output_layer, output, source);
+            gkr_storage.insert_arc_extension_at_layer(expected_output_layer, output, source);
         } else {
             panic!(
                 "Trying to copy {:?} -> {:?}, but the input is not present in storage",

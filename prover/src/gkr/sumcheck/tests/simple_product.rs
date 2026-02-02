@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use cs::definitions::GKRAddress;
 use field::{Field, FieldExtension, Mersenne31Field, Mersenne31Quartic};
@@ -64,11 +65,11 @@ fn test_simple_product() {
     layer_0.layer_idx = 0;
     layer_0.extension_field_inputs.insert(
         GKRAddress::BaseLayerMemory(0),
-        ExtensionFieldPoly::new(a.into_boxed_slice()),
+        Arc::new(ExtensionFieldPoly::new(a.into_boxed_slice())),
     );
     layer_0.extension_field_inputs.insert(
         GKRAddress::BaseLayerMemory(1),
-        ExtensionFieldPoly::new(b.into_boxed_slice()),
+        Arc::new(ExtensionFieldPoly::new(b.into_boxed_slice())),
     );
 
     storage.layers.push(layer_0);
@@ -79,7 +80,7 @@ fn test_simple_product() {
             layer: 1,
             offset: 0,
         },
-        ExtensionFieldPoly::new(output.into_boxed_slice()),
+        Arc::new(ExtensionFieldPoly::new(output.into_boxed_slice())),
     );
 
     storage.layers.push(layer_1);

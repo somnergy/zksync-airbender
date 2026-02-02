@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ExtensionFieldPoly<F: PrimeField, E: FieldExtension<F> + Field> {
     pub(crate) values: Box<[E]>,
     pub(crate) _marker: core::marker::PhantomData<F>,

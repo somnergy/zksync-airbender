@@ -97,8 +97,16 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
         }
         // and linear part doesn't contribute to quadratic coefficient. We may still have to access(!) source to trigger folding
         if S0::SHOULD_ACCESS_TO_PREPARE_FOR_NEXT_STEP {
-            for (a, _challenge) in self.linear_parts.iter() {
-                let _a = r0_sources[*a].get_f0_and_f1(index);
+            for (a, challenge) in self.linear_parts.iter() {
+                let [a, _] = r0_sources[*a].get_f0_and_f1(index);
+                let contribution = a.collapse_for_batch_eval(ctx, challenge);
+                result[0].add_assign(&contribution);
+            }
+        } else {
+            for (a, challenge) in self.linear_parts.iter() {
+                let a = r0_sources[*a].get_f0_only(index);
+                let contribution = a.collapse_for_batch_eval(ctx, challenge);
+                result[0].add_assign(&contribution);
             }
         }
         result[0].mul_assign(&batch_challenges[0]);
@@ -129,16 +137,18 @@ impl<F: PrimeField, E: FieldExtension<F> + PrimeField>
                 result[i].add_assign(&contribution);
             }
         }
-        for (a, challenge) in self.linear_parts.iter() {
-            let a = r0_sources[*a].get_f0_only(index);
-            // and linear part doesn't contribute to quadratic coefficient
+        if EXPLICIT_FORM {
+            todo!()
+        } else {
+            for (a, challenge) in self.linear_parts.iter() {
+                let a = r0_sources[*a].get_f0_only(index);
+                // and linear part doesn't contribute to quadratic coefficient
 
-            // TODO: verify that it's also valid for the last explicit sumcheck round
-            {
                 let contribution = a.collapse_for_batch_eval(ctx, challenge);
                 result[0].add_assign(&contribution);
             }
         }
+
         result[0].mul_assign(&batch_challenges[0]);
         result[1].mul_assign(&batch_challenges[0]);
 

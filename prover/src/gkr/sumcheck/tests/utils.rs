@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use crate::gkr::sumcheck::{
     access_and_fold::{ExtensionFieldPoly, GKRLayerSource, GKRStorage},
     eq_poly::*,
@@ -9,6 +7,8 @@ use crate::gkr::sumcheck::{
 };
 use cs::definitions::GKRAddress;
 use field::{Field, FieldExtension, PrimeField};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 use worker::Worker;
 
 use rand::RngCore;
@@ -41,18 +41,20 @@ pub(super) fn setup_storage<F: PrimeField, E: FieldExtension<F> + Field>(
     let mut layer_0 = GKRLayerSource::default();
     layer_0.layer_idx = 0;
     for (addr, poly) in inputs {
-        layer_0
-            .extension_field_inputs
-            .insert(addr, ExtensionFieldPoly::new(poly.into_boxed_slice()));
+        layer_0.extension_field_inputs.insert(
+            addr,
+            Arc::new(ExtensionFieldPoly::new(poly.into_boxed_slice())),
+        );
     }
     storage.layers.push(layer_0);
 
     let mut layer_1 = GKRLayerSource::default();
     layer_1.layer_idx = 1;
     for (addr, poly) in outputs {
-        layer_1
-            .extension_field_inputs
-            .insert(addr, ExtensionFieldPoly::new(poly.into_boxed_slice()));
+        layer_1.extension_field_inputs.insert(
+            addr,
+            Arc::new(ExtensionFieldPoly::new(poly.into_boxed_slice())),
+        );
     }
     storage.layers.push(layer_1);
 

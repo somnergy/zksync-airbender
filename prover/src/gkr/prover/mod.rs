@@ -1,6 +1,5 @@
 use std::alloc::Global;
 use std::collections::BTreeMap;
-use std::mem::MaybeUninit;
 
 use cs::gkr_compiler::GKRCircuitArtifact;
 use field::TwoAdicField;
