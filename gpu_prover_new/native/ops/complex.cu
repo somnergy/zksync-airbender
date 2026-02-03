@@ -169,7 +169,6 @@ DEVICE_FORCEINLINE void bit_reverse_naive(const matrix_getter<T, ld_modifier::cs
 BIT_REVERSE_NAIVE(bf);
 BIT_REVERSE_NAIVE(e2);
 BIT_REVERSE_NAIVE(e4);
-BIT_REVERSE_NAIVE(e6);
 BIT_REVERSE_NAIVE(dg);
 
 DEVICE_FORCEINLINE uint2 triangular_index_flat_to_two_dim(const unsigned index, const unsigned m) {
@@ -235,7 +234,6 @@ DEVICE_FORCEINLINE void bit_reverse(const matrix_getter<T, ld_modifier::cs> src,
 BIT_REVERSE(bf, bf, 0);
 BIT_REVERSE(e2, e2, 0);
 BIT_REVERSE(e4, e4, 0);
-BIT_REVERSE(e6, e6, 1);
 BIT_REVERSE(dg, e4, 1);
 
 // EXTERN __global__ void ab_fold_kernel(const e4 *challenge, const e4 *src, e4 *dst, const unsigned root_offset, const unsigned log_count) {

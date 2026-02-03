@@ -11,10 +11,14 @@ categories.workspace = true
 build = "build/main.rs"
 
 [dependencies]
+fft = { workspace = true }
 field = { workspace = true }
 
 era_cudart = "0.154"
 era_cudart_sys = "0.154"
+itertools = "*"
+log = "0.4.29"
+rayon = "*"
 
 [build-dependencies]
 cmake = "0.1"

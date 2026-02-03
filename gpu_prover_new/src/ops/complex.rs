@@ -6,7 +6,7 @@ use era_cudart::result::CudaResult;
 use era_cudart::slice::{DeviceSlice, DeviceVariable};
 use era_cudart::stream::CudaStream;
 use era_cudart::{
-    cuda_kernel, cuda_kernel_declaration, cuda_kernel_signature_arguments_and_function,
+    cuda_kernel_declaration, cuda_kernel_signature_arguments_and_function,
 };
 
 // use crate::device_context::CIRCLE_GROUP_LOG_ORDER;
@@ -82,6 +82,7 @@ macro_rules! get_powers_by_val_impl {
 get_powers_by_val_impl!(BF);
 get_powers_by_val_impl!(E2);
 get_powers_by_val_impl!(E4);
+get_powers_by_val_impl!(E6);
 
 cuda_kernel_signature_arguments_and_function!(
     GetPowersByRef<T>,
@@ -143,6 +144,7 @@ macro_rules! get_powers_by_ref_impl {
 get_powers_by_ref_impl!(BF);
 get_powers_by_ref_impl!(E2);
 get_powers_by_ref_impl!(E4);
+get_powers_by_ref_impl!(E6);
 
 cuda_kernel_signature_arguments_and_function!(
     BatchInv<T>,
@@ -221,6 +223,7 @@ macro_rules! batch_inv_impl {
 batch_inv_impl!(BF, 20);
 batch_inv_impl!(E2, 5);
 batch_inv_impl!(E4, 3);
+batch_inv_impl!(E6, 2);
 
 cuda_kernel_signature_arguments_and_function!(
     Transpose<T>,
@@ -300,6 +303,7 @@ macro_rules! transpose_impl {
 transpose_impl!(BF, 5);
 transpose_impl!(E2, 4);
 transpose_impl!(E4, 3);
+transpose_impl!(E6, 3);
 
 cuda_kernel_signature_arguments_and_function!(
     BitReverse<T>,
@@ -463,14 +467,14 @@ bit_reverse_impl!(DG, E4);
 mod tests {
     use std::fmt::Debug;
 
+    use super::*;
+    use crate::device_structures::{DeviceMatrix, DeviceMatrixMut};
+    use crate::ops::blake2s::DG;
     use era_cudart::memory::{memory_copy_async, DeviceAllocation};
     use field::Field;
     use field::Rand;
     use itertools::Itertools;
     use rand::rng;
-    use crate::device_structures::{DeviceMatrix, DeviceMatrixMut};
-    use crate::ops::blake2s::DG;
-    use super::*;
 
     fn assert_equal<T: PartialEq + Debug>((a, b): (T, T)) {
         assert_eq!(a, b);
@@ -531,6 +535,16 @@ mod tests {
     #[test]
     fn get_powers_by_ref_e4() {
         test_get_powers::<E4>(false);
+    }
+
+    #[test]
+    fn get_powers_by_val_e6() {
+        test_get_powers::<E6>(true);
+    }
+
+    #[test]
+    fn get_powers_by_ref_e6() {
+        test_get_powers::<E6>(false);
     }
 
     fn test_batch_inv<F: BatchInv + Field + Rand>(in_place: bool) {
@@ -626,6 +640,9 @@ mod tests {
     fn transpose_e4() {
         test_transpose::<E4>().unwrap();
     }
+
+    #[test]
+    fn transpose_e6() { test_transpose::<E6>().unwrap(); }
 
     trait BitReverseTest: BitReverse + Default + Copy + Clone + Debug + Eq {
         fn rand(rng: &mut impl rand::Rng) -> Self;

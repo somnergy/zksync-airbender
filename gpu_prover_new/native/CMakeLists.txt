@@ -6,16 +6,13 @@ if ((NOT DEFINED CMAKE_CUDA_ARCHITECTURES) OR (CMAKE_CUDA_ARCHITECTURES STREQUAL
     set(CMAKE_CUDA_ARCHITECTURES native)
 endif ()
 add_library(gpu_prover_new_native STATIC
-        bench/field.cu
-        ops/blake2s.cu
-        ops/complex.cu
-        ops/complex.cuh
-        ops/simple.cu
         common.cuh
         field.cuh
         memory.cuh
         ptx.cuh
 )
+add_subdirectory(bench)
+add_subdirectory(ops)
 set_target_properties(gpu_prover_new_native PROPERTIES CUDA_STANDARD 20)
 set_target_properties(gpu_prover_new_native PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 set_target_properties(gpu_prover_new_native PROPERTIES CUDA_RESOLVE_DEVICE_SYMBOLS ON)
