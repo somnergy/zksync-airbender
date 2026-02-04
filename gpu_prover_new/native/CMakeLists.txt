@@ -11,6 +11,7 @@ add_library(gpu_prover_new_native STATIC
         field.cuh
         field_bench.cu
         memory.cuh
+        ntt/natural_main_evals_to_coset_evals.cu
         ptx.cuh
 )
 set_target_properties(gpu_prover_new_native PROPERTIES CUDA_STANDARD 20)
