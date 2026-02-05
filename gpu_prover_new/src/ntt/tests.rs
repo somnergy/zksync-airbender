@@ -15,7 +15,7 @@ use rand::{Rng, SeedableRng};
 use serial_test::serial;
 use worker::Worker;
 
-// use crate::device_context::DeviceContext;
+use crate::device_context::DeviceContext;
 use crate::device_structures::{
     DeviceMatrixChunk, DeviceMatrixChunkImpl, DeviceMatrixChunkMut, DeviceMatrixChunkMutImpl,
 };
@@ -28,7 +28,7 @@ fn run_main_to_coset(
     log_n_range: Range<usize>,
     num_bf_cols: usize,
 ) {
-    // let ctx = DeviceContext::create(12).unwrap();
+    let ctx = DeviceContext::create(12).unwrap();
     let n_max = 1 << (log_n_range.end - 1);
     let worker = Worker::new();
     let twiddles = precompute_twiddles_for_fft::<BF, Global, true>(n_max, &worker);
@@ -152,7 +152,7 @@ fn run_main_to_coset(
             }
         }
     }
-    // ctx.destroy().unwrap();
+    ctx.destroy().unwrap();
 }
 
 #[test]
