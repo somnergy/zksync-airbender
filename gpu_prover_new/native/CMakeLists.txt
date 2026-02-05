@@ -7,6 +7,8 @@ if ((NOT DEFINED CMAKE_CUDA_ARCHITECTURES) OR (CMAKE_CUDA_ARCHITECTURES STREQUAL
 endif ()
 add_library(gpu_prover_new_native STATIC
         common.cuh
+        context.cu
+        context.cuh
         field.cuh
         memory.cuh
         ntt/natural_main_evals_to_coset_evals.cu

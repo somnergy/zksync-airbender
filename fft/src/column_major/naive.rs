@@ -52,25 +52,25 @@ pub fn ifft_natural_to_natural<
     debug_assert!(input.len() == twiddles.len() * 2);
 
     let log_n = input.len().trailing_zeros();
-    serial_ct_ntt_natural_to_bitreversed(input, log_n, twiddles);
+    // serial_ct_ntt_natural_to_bitreversed(input, log_n, twiddles);
     bitreverse_enumeration_inplace(input);
 
-    if coset != F::ONE {
-        let coset = coset.inverse().expect("inverse of coset must exist");
-        distribute_powers_serial(input, F::ONE, coset);
-    }
+    // if coset != F::ONE {
+    //     let coset = coset.inverse().expect("inverse of coset must exist");
+    //     distribute_powers_serial(input, F::ONE, coset);
+    // }
 
-    if input.len() > 1 {
-        let n_inv = P::from_u32_with_reduction(input.len() as u32)
-            .inverse()
-            .unwrap();
-        let mut i = 0;
-        let work_size = input.len();
-        while i < work_size {
-            input[i].mul_assign_by_base(&n_inv);
-            i += 1;
-        }
-    }
+    // if input.len() > 1 {
+    //     let n_inv = P::from_u32_with_reduction(input.len() as u32)
+    //         .inverse()
+    //         .unwrap();
+    //     let mut i = 0;
+    //     let work_size = input.len();
+    //     while i < work_size {
+    //         input[i].mul_assign_by_base(&n_inv);
+    //         i += 1;
+    //     }
+    // }
 }
 
 // usually used to get monomial from natural bitreversed evaluation
@@ -133,36 +133,36 @@ pub fn serial_ct_ntt_natural_to_bitreversed<F: Field, E: Field + FieldExtension<
         distance /= 2;
     }
 
-    while num_groups < n {
-        debug_assert!(num_groups > 1);
-        let mut k = 0;
-        while k < num_groups {
-            let idx_1 = k * pairs_per_group * 2;
-            let idx_2 = idx_1 + pairs_per_group;
-            let s = omegas_bit_reversed[k];
+    // while num_groups < n {
+    //     debug_assert!(num_groups > 1);
+    //     let mut k = 0;
+    //     while k < num_groups {
+    //         let idx_1 = k * pairs_per_group * 2;
+    //         let idx_2 = idx_1 + pairs_per_group;
+    //         let s = omegas_bit_reversed[k];
 
-            let mut j = idx_1;
-            while j < idx_2 {
-                let u = a[j];
-                let mut v = a[j + distance];
-                v.mul_assign_by_base(&s);
+    //         let mut j = idx_1;
+    //         while j < idx_2 {
+    //             let u = a[j];
+    //             let mut v = a[j + distance];
+    //             v.mul_assign_by_base(&s);
 
-                let mut tmp = u;
-                tmp.sub_assign(&v);
+    //             let mut tmp = u;
+    //             tmp.sub_assign(&v);
 
-                a[j + distance] = tmp;
-                a[j].add_assign(&v);
+    //             a[j + distance] = tmp;
+    //             a[j].add_assign(&v);
 
-                j += 1;
-            }
+    //             j += 1;
+    //         }
 
-            k += 1;
-        }
+    //         k += 1;
+    //     }
 
-        pairs_per_group /= 2;
-        num_groups *= 2;
-        distance /= 2;
-    }
+    //     pairs_per_group /= 2;
+    //     num_groups *= 2;
+    //     distance /= 2;
+    // }
 }
 
 pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<F>>(

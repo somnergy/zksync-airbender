@@ -130,6 +130,7 @@ fn run_main_to_coset(
             let gpu_results_out_of_place = &outputs_host[xs_range.clone()];
             let gpu_results_in_place = &inplace_host[xs_range.clone()];
             let mut cpu_refs: Vec<BF> = (&inputs_host[xs_range.clone()]).to_vec();
+            let mut cpu_dif_refs: Vec<BF> = (&inputs_host[xs_range.clone()]).to_vec();
             ifft_natural_to_natural::<BF, BF, BF>(&mut cpu_refs, BF::ONE, twiddles);
             for k in 0..n {
                 assert_eq!(
