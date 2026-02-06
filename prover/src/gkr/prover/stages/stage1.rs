@@ -186,6 +186,52 @@ pub(crate) fn compute_column_major_lde_from_main_domain_and_output_monomial_form
     (result, ifft)
 }
 
+pub(crate) fn compute_column_major_lde_from_monomial_form<
+    F: PrimeField + TwoAdicField,
+    E: FieldExtension<F> + Field,
+    A: GoodAllocator,
+>(
+    monomial_form_normal_order: &[E],
+    twiddles: &Twiddles<F, A>,
+    // lde_precomputations: &LdePrecomputations<A>,
+    lde_factor: usize,
+) -> Vec<(Box<[E]>, F)> {
+    assert!(lde_factor.is_power_of_two());
+
+    assert!(lde_factor > 1, "No reason to call this function");
+
+    let trace_len_log2 = monomial_form_normal_order.len().trailing_zeros();
+
+    let next_root = domain_generator_for_size::<F>(((1 << trace_len_log2) * lde_factor) as u64);
+    let root_powers =
+        materialize_powers_serial_starting_with_one::<F, Global>(next_root, lde_factor);
+    assert_eq!(root_powers[0], F::ONE);
+
+    let mut result = Vec::with_capacity(lde_factor);
+
+    #[cfg(feature = "timing_logs")]
+    let now = std::time::Instant::now();
+    for i in 0..lde_factor {
+        let mut evals = monomial_form_normal_order.to_vec();
+        let offset = root_powers[i];
+        if i != 0 {
+            distribute_powers_serial(&mut evals[..], F::ONE, offset);
+        }
+        bitreverse_enumeration_inplace(&mut evals[..]);
+        fft::naive::serial_ct_ntt_bitreversed_to_natural(
+            &mut evals[..],
+            trace_len_log2,
+            &twiddles.forward_twiddles,
+        );
+        result.push((evals.into_boxed_slice(), offset));
+    }
+    #[cfg(feature = "timing_logs")]
+    dbg!(now.elapsed());
+
+    assert_eq!(result.len(), lde_factor);
+
+    result
+}
 
 pub(crate) fn compute_column_major_monomial_form_from_main_domain<
     F: PrimeField + TwoAdicField,
@@ -198,6 +244,33 @@ pub(crate) fn compute_column_major_monomial_form_from_main_domain<
     let trace_len_log2 = source_domain.len().trailing_zeros();
 
     let mut ifft: Vec<E> = source_domain.to_vec();
+    let size_inv = F::from_u32_unchecked(1 << trace_len_log2)
+        .inverse()
+        .unwrap();
+    fft::naive::cache_friendly_ntt_natural_to_bitreversed(
+        &mut ifft[..],
+        trace_len_log2,
+        &twiddles.inverse_twiddles[..],
+    );
+    for el in ifft.iter_mut() {
+        el.mul_assign_by_base(&size_inv);
+    }
+    bitreverse_enumeration_inplace(&mut ifft[..]);
+
+    ifft
+}
+
+pub(crate) fn compute_column_major_monomial_form_from_main_domain_owned<
+    F: PrimeField + TwoAdicField,
+    E: FieldExtension<F> + Field,
+    A: GoodAllocator,
+>(
+    source_domain: Vec<E>,
+    twiddles: &Twiddles<F, A>,
+) -> Vec<E> {
+    let trace_len_log2 = source_domain.len().trailing_zeros();
+
+    let mut ifft = source_domain;
     let size_inv = F::from_u32_unchecked(1 << trace_len_log2)
         .inverse()
         .unwrap();
