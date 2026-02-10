@@ -20,7 +20,9 @@ use crate::device_structures::{
     DeviceMatrixChunk, DeviceMatrixChunkImpl, DeviceMatrixChunkMut, DeviceMatrixChunkMutImpl,
 };
 use crate::field::BaseField;
-use crate::ntt::{main_to_coset, main_to_coset_tile_8, main_to_coset_coalesced};
+use crate::ntt::{
+    main_to_coset, main_to_coset_tile_8, main_to_coset_coalesced, main_to_coset_register_pipeline
+};
 
 type BF = BaseField;
 
@@ -92,6 +94,13 @@ fn run_main_to_coset(
                 &stream,
             )
             .unwrap(),
+            3 => main_to_coset_register_pipeline(
+                &inputs_device_matrix,
+                &mut outputs_device_matrix,
+                log_n,
+                &stream,
+            )
+            .unwrap(),
             _ => {},
         };
         memory_copy_async(
@@ -138,6 +147,13 @@ fn run_main_to_coset(
                 &stream,
             )
             .unwrap(),
+            3 => main_to_coset_register_pipeline(
+                &inplace_input_view_matrix,
+                &mut inplace_output_view_matrix,
+                log_n,
+                &stream,
+            )
+            .unwrap(),
             _ => {},
         };
         memory_copy_async(
@@ -149,12 +165,12 @@ fn run_main_to_coset(
 
         stream.synchronize().unwrap();
 
-        // for col in 0..num_bf_cols {
-        //     let start = (col * stride + OFFSET) as usize;
-        //     let range = start..start + n;
-        //     bitreverse_enumeration_inplace(&mut outputs_host[range.clone()]);
-        //     bitreverse_enumeration_inplace(&mut inplace_host[range.clone()]);
-        // }
+        for col in 0..num_bf_cols {
+            let start = (col * stride + OFFSET) as usize;
+            let range = start..start + n;
+            bitreverse_enumeration_inplace(&mut outputs_host[range.clone()]);
+            bitreverse_enumeration_inplace(&mut inplace_host[range.clone()]);
+        }
 
         // Check forward variants against CPU forward results
 
@@ -166,7 +182,7 @@ fn run_main_to_coset(
             let gpu_results_in_place = &inplace_host[xs_range.clone()];
             let mut cpu_refs: Vec<BF> = (&inputs_host[xs_range.clone()]).to_vec();
             let mut cpu_dif_refs: Vec<BF> = (&inputs_host[xs_range.clone()]).to_vec();
-            // ifft_natural_to_natural::<BF, BF, BF>(&mut cpu_refs, BF::ONE, twiddles);
+            ifft_natural_to_natural::<BF, BF, BF>(&mut cpu_refs, BF::ONE, twiddles);
             for k in 0..n {
                 assert_eq!(
                     gpu_results_out_of_place[k],
@@ -206,4 +222,10 @@ fn test_main_to_coset_tile_8() {
 #[serial]
 fn test_main_to_coset_coalesced() {
     run_main_to_coset(24..25, 1, 2);
+}
+
+#[test]
+#[serial]
+fn test_main_to_coset_register_pipeline() {
+    run_main_to_coset(24..25, 1, 3);
 }
