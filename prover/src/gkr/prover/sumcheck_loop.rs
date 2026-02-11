@@ -279,11 +279,11 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
     collector: &KernelCollector<F, E>,
     initial_claim: E,
     prev_challenges: &[E],
-    eq_poly: &[Vec<E>],
+    eq_poly: &[Box<[E]>],
     gkr_storage: &mut GKRStorage<F, E>,
     folding_steps: usize,
     worker: &Worker,
-) -> (Vec<E>, BTreeMap<GKRAddress, [E; 2]>){
+) -> (Vec<E>, BTreeMap<GKRAddress, [E; 2]>) {
     let mut claim = initial_claim;
     let mut folding_challenges = Vec::with_capacity(folding_steps);
     let mut last_evaluations: BTreeMap<GKRAddress, [E; 2]> = BTreeMap::new();
@@ -329,8 +329,8 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
 
         // Verify: s(0) + s(1) == claim / eq_prefactor
         debug_assert!({
-            let s0 = evaluate_small_univariate_poly::<F, E>(&coeffs, &E::ZERO);
-            let s1 = evaluate_small_univariate_poly::<F, E>(&coeffs, &E::ONE);
+            let s0 = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &E::ZERO);
+            let s1 = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &E::ONE);
             let mut sum = s0;
             sum.add_assign(&s1);
             sum.mul_assign(&eq_prefactor);
@@ -338,7 +338,7 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
         });
 
         // TODO: add coeffs to transcript
-        claim = evaluate_small_univariate_poly::<F, E>(&coeffs, &folding_challenge);
+        claim = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &folding_challenge);
         eq_prefactor = evaluate_eq_poly::<F, E>(&folding_challenge, &prev_challenges[step]);
 
         folding_challenges.push(folding_challenge);
@@ -366,7 +366,7 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
         let [f0, f1] = accumulator[0];
 
         // eq_poly[1] = [1 - u_last, u_last]
-        let [eq0, eq1]: [E; 2] = eq_poly[1].as_ref().try_into().unwrap();
+        let [eq0, eq1]: [E; 2] = eq_poly[1].to_vec().try_into().unwrap();
 
         let mut t0 = eq0;
         t0.mul_assign(&f0);
@@ -383,10 +383,7 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
         folding_challenges.push(folding_challenge);
     }
 
-    (
-        folding_challenges,
-        last_evaluations,
-    )
+    (folding_challenges, last_evaluations)
 }
 
 pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
@@ -418,7 +415,7 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
     assert!(folding_steps > 1, "need at least 2 folding steps");
 
     // Precompute eq polynomial evaluations over the boolean hypercube
-    let eq_poly = make_eq_poly_in_full::<F, E>(prev_challenges);
+    let eq_polys = make_eq_poly_in_full::<E>(prev_challenges);
 
     // TODO: get from transcript
     let batch_challenge_base = E::from_base(F::from_u32_unchecked(0xff));
@@ -438,7 +435,7 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
         &collector,
         claim,
         prev_challenges,
-        &eq_poly,
+        &eq_polys,
         gkr_storage,
         folding_steps,
         worker,

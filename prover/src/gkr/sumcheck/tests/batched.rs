@@ -111,7 +111,7 @@ fn test_batched_kernels() {
     // Compute combined claim
     let prev_challenges: Vec<E> = random_poly_in_ext::<F, E>(FOLDING_STEPS);
     let folding_challenges_precomputed: Vec<E> = random_poly_in_ext::<F, E>(FOLDING_STEPS);
-    let eq_precomputed = make_eq_poly_in_full::<F, E>(&prev_challenges);
+    let eq_precomputed = make_eq_poly_in_full::<E>(&prev_challenges);
     let eq_last = eq_precomputed.last().unwrap();
 
     let output_polys = [&copy_output, &product_output, &lookup_num, &lookup_den];
@@ -120,7 +120,7 @@ fn test_batched_kernels() {
     let mut combined_claim = E::ZERO;
     for (poly, bc) in output_polys.iter().zip(batch_challenges.iter()) {
         let mut t = *bc;
-        t.mul_assign(&evaluate_with_precomputed_eq_ext::<F, E>(poly, eq_last));
+        t.mul_assign(&evaluate_with_precomputed_eq_ext::<E>(poly, eq_last));
         combined_claim.add_assign(&t);
     }
 
@@ -128,7 +128,7 @@ fn test_batched_kernels() {
     let worker = Worker::new_with_num_threads(1);
     let mut claim = combined_claim;
     let mut folding_challenges = vec![];
-    let eq_reduced = make_eq_poly_reduced::<F, E>(&prev_challenges);
+    let eq_reduced = make_eq_poly_reduced::<E>(&prev_challenges);
     let mut last_evaluations = BTreeMap::new();
     let mut eq_prefactor = E::ONE;
 
@@ -192,14 +192,14 @@ fn test_batched_kernels() {
             );
 
             // Verify s(0) + s(1) == claim / prefactor
-            let s0 = evaluate_small_univariate_poly::<F, E>(&coeffs, &E::ZERO);
-            let s1 = evaluate_small_univariate_poly::<F, E>(&coeffs, &E::ONE);
+            let s0 = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &E::ZERO);
+            let s1 = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &E::ONE);
             let mut v = s0;
             v.add_assign(&s1);
             v.mul_assign(&eq_prefactor);
             assert_eq!(v, claim, "Sumcheck failed at step {}", step);
 
-            claim = evaluate_small_univariate_poly::<F, E>(&coeffs, &folding_challenge);
+            claim = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &folding_challenge);
             eq_prefactor = evaluate_eq_poly::<F, E>(&folding_challenge, &prev_challenges[step]);
         } else {
             // Final step verification
@@ -216,7 +216,7 @@ fn test_batched_kernels() {
             assert_eq!(claim, recomputed, "Final claim verification failed");
 
             // Verify final evaluations
-            let eq_for_evals = make_eq_poly_in_full::<F, E>(
+            let eq_for_evals = make_eq_poly_in_full::<E>(
                 &[&folding_challenges[..], &[folding_challenge]].concat(),
             );
             let eq_eval_last = eq_for_evals.last().unwrap();
@@ -230,7 +230,7 @@ fn test_batched_kernels() {
                 (addr_lookup_d, &lookup_d),
             ];
             for (addr, poly) in input_polys {
-                let expected = evaluate_with_precomputed_eq_ext::<F, E>(poly, eq_eval_last);
+                let expected = evaluate_with_precomputed_eq_ext::<E>(poly, eq_eval_last);
                 let [f0, f1] = last_evaluations.remove(&addr).unwrap();
                 let mut actual = f1;
                 actual.sub_assign(&f0);

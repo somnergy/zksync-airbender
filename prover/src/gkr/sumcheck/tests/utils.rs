@@ -8,7 +8,6 @@ use crate::gkr::sumcheck::{
 use cs::definitions::GKRAddress;
 use field::{Field, FieldExtension, PrimeField};
 use std::collections::BTreeMap;
-use std::sync::Arc;
 use worker::Worker;
 
 use rand::RngCore;
@@ -71,23 +70,21 @@ pub(super) fn setup_mixed_storage<F: PrimeField, E: FieldExtension<F> + Field>(
     for (addr, poly) in base_inputs {
         layer_0
             .base_field_inputs
-            .insert(addr, Arc::new(BaseFieldPoly::new(poly.into_boxed_slice())));
+            .insert(addr, BaseFieldPoly::new(poly.into_boxed_slice()));
     }
     for (addr, poly) in ext_inputs {
-        layer_0.extension_field_inputs.insert(
-            addr,
-            Arc::new(ExtensionFieldPoly::new(poly.into_boxed_slice())),
-        );
+        layer_0
+            .extension_field_inputs
+            .insert(addr, ExtensionFieldPoly::new(poly.into_boxed_slice()));
     }
     storage.layers.push(layer_0);
 
     let mut layer_1 = GKRLayerSource::default();
     layer_1.layer_idx = 1;
     for (addr, poly) in outputs {
-        layer_1.extension_field_inputs.insert(
-            addr,
-            Arc::new(ExtensionFieldPoly::new(poly.into_boxed_slice())),
-        );
+        layer_1
+            .extension_field_inputs
+            .insert(addr, ExtensionFieldPoly::new(poly.into_boxed_slice()));
     }
     storage.layers.push(layer_1);
 

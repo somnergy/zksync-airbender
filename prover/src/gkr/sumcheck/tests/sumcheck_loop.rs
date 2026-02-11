@@ -52,10 +52,10 @@ fn test_sumcheck_loop_product() {
     };
 
     let prev_challenges: Vec<E> = random_poly_in_ext::<F, E>(FOLDING_STEPS);
-    let eq_precomputed = make_eq_poly_in_full::<F, E>(&prev_challenges);
+    let eq_precomputed = make_eq_poly_in_full::<E>(&prev_challenges);
     let eq_last = eq_precomputed.last().unwrap();
 
-    let output_claim = evaluate_with_precomputed_eq_ext::<F, E>(&output, eq_last);
+    let output_claim = evaluate_with_precomputed_eq_ext::<E>(&output, eq_last);
 
     let mut claims_storage: BTreeMap<usize, BTreeMap<GKRAddress, E>> = BTreeMap::new();
     let mut output_claims = BTreeMap::new();
@@ -110,11 +110,11 @@ fn test_sumcheck_loop_product() {
         "Should have correct number of challenges"
     );
 
-    let eq_for_claims = make_eq_poly_in_full::<F, E>(layer_0_challenges);
+    let eq_for_claims = make_eq_poly_in_full::<E>(layer_0_challenges);
     let eq_claims_last = eq_for_claims.last().unwrap();
 
-    let expected_a = evaluate_with_precomputed_eq_ext::<F, E>(&a, eq_claims_last);
-    let expected_b = evaluate_with_precomputed_eq_ext::<F, E>(&b, eq_claims_last);
+    let expected_a = evaluate_with_precomputed_eq_ext::<E>(&a, eq_claims_last);
+    let expected_b = evaluate_with_precomputed_eq_ext::<E>(&b, eq_claims_last);
 
     assert_eq!(
         layer_0_claims.get(&addr_a).unwrap(),
@@ -190,11 +190,11 @@ fn test_sumcheck_loop_multiple_gates() {
     };
 
     let prev_challenges: Vec<E> = random_poly_in_ext::<F, E>(FOLDING_STEPS);
-    let eq_precomputed = make_eq_poly_in_full::<F, E>(&prev_challenges);
+    let eq_precomputed = make_eq_poly_in_full::<E>(&prev_challenges);
     let eq_last = eq_precomputed.last().unwrap();
 
-    let copy_claim = evaluate_with_precomputed_eq_ext::<F, E>(&copy_out, eq_last);
-    let prod_claim = evaluate_with_precomputed_eq_ext::<F, E>(&prod_out, eq_last);
+    let copy_claim = evaluate_with_precomputed_eq_ext::<E>(&copy_out, eq_last);
+    let prod_claim = evaluate_with_precomputed_eq_ext::<E>(&prod_out, eq_last);
 
     let mut claims_storage: BTreeMap<usize, BTreeMap<GKRAddress, E>> = BTreeMap::new();
     let mut output_claims = BTreeMap::new();
@@ -230,12 +230,12 @@ fn test_sumcheck_loop_multiple_gates() {
     assert!(layer_0_claims.contains_key(&addr_prod_a));
     assert!(layer_0_claims.contains_key(&addr_prod_b));
 
-    let eq_for_claims = make_eq_poly_in_full::<F, E>(layer_0_challenges);
+    let eq_for_claims = make_eq_poly_in_full::<E>(layer_0_challenges);
     let eq_claims_last = eq_for_claims.last().unwrap();
 
-    let expected_copy = evaluate_with_precomputed_eq_ext::<F, E>(&copy_in, eq_claims_last);
-    let expected_a = evaluate_with_precomputed_eq_ext::<F, E>(&prod_a, eq_claims_last);
-    let expected_b = evaluate_with_precomputed_eq_ext::<F, E>(&prod_b, eq_claims_last);
+    let expected_copy = evaluate_with_precomputed_eq_ext::<E>(&copy_in, eq_claims_last);
+    let expected_a = evaluate_with_precomputed_eq_ext::<E>(&prod_a, eq_claims_last);
+    let expected_b = evaluate_with_precomputed_eq_ext::<E>(&prod_b, eq_claims_last);
 
     assert_eq!(layer_0_claims.get(&addr_copy_in).unwrap(), &expected_copy);
     assert_eq!(layer_0_claims.get(&addr_prod_a).unwrap(), &expected_a);

@@ -306,20 +306,42 @@ where
         claim_timecheckden,
         claim_lookupnum,
         claim_lookupden,
-        z
-    ) = todo!();
-    
+        z,
+    ) = {
+        // we will simulate it for now
+
+        todo!()
+    };
+
     let output_map = &compiled_circuit.global_output_map;
     let mut top_layer_claims: BTreeMap<GKRAddress, E> = BTreeMap::new();
 
-    top_layer_claims.insert(output_map[OutputType::PermutationProduct][0], claim_readset);
-    top_layer_claims.insert(output_map[OutputType::PermutationProduct][1], claim_writeset);
-    top_layer_claims.insert(output_map[OutputType::Lookup16Bits][0], claim_rangechecknum);
-    top_layer_claims.insert(output_map[OutputType::Lookup16Bits][1], claim_rangecheckden);
-    top_layer_claims.insert(output_map[OutputType::LookupTimestamps][0], claim_timechecknum);
-    top_layer_claims.insert(output_map[OutputType::LookupTimestamps][1], claim_timecheckden);
-    top_layer_claims.insert(output_map[OutputType::GenericLookup][0], claim_lookupnum);
-    top_layer_claims.insert(output_map[OutputType::GenericLookup][1], claim_lookupden);
+    top_layer_claims.insert(
+        output_map[&OutputType::PermutationProduct][0],
+        claim_readset,
+    );
+    top_layer_claims.insert(
+        output_map[&OutputType::PermutationProduct][1],
+        claim_writeset,
+    );
+    top_layer_claims.insert(
+        output_map[&OutputType::Lookup16Bits][0],
+        claim_rangechecknum,
+    );
+    top_layer_claims.insert(
+        output_map[&OutputType::Lookup16Bits][1],
+        claim_rangecheckden,
+    );
+    top_layer_claims.insert(
+        output_map[&OutputType::LookupTimestamps][0],
+        claim_timechecknum,
+    );
+    top_layer_claims.insert(
+        output_map[&OutputType::LookupTimestamps][1],
+        claim_timecheckden,
+    );
+    top_layer_claims.insert(output_map[&OutputType::GenericLookup][0], claim_lookupnum);
+    top_layer_claims.insert(output_map[&OutputType::GenericLookup][1], claim_lookupden);
 
     // then we go "backward", by taking random point evaluation claims from the previous layer, and producing claims for the next layer
     let mut claims_for_layers: BTreeMap<usize, BTreeMap<GKRAddress, E>> = BTreeMap::new();
