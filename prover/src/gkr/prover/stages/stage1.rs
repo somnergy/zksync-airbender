@@ -7,7 +7,6 @@ use fft::{
 };
 use field::{Field, FieldExtension, PrimeField, TwoAdicField};
 use std::sync::Arc;
-use trace_holder::SendSyncPtrWrapper;
 
 #[derive(Clone, Debug)]
 pub struct ColumnMajorCosetBoundTracePart<

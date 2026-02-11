@@ -2,6 +2,7 @@ use std::alloc::Global;
 use std::collections::BTreeMap;
 
 use cs::gkr_compiler::{GKRCircuitArtifact, OutputType};
+use fft::batch_inverse_inplace_parallel;
 use field::TwoAdicField;
 use field::{Field, FieldExtension, PrimeField};
 use worker::WorkerGeometry;
@@ -280,10 +281,13 @@ where
                 };
                 let layer_source = &gkr_storage.layers[layer_idx];
                 let num_poly = &layer_source.extension_field_inputs[&num_addr].values;
-                let den_poly = &layer_source.extension_field_inputs[&den_addr].values;
+                let mut den_poly =
+                    layer_source.extension_field_inputs[&den_addr].values[..].to_vec();
+                let mut buffer = vec![E::ZERO; den_poly.len()];
+                batch_inverse_inplace_parallel(&mut den_poly, &mut buffer, worker);
                 let mut sum = E::ZERO;
                 for (n, d) in num_poly.iter().zip(den_poly.iter()) {
-                    let den_inv = d.inverse().expect("denominator must be nonzero");
+                    let den_inv = *d;
                     let mut term = *n;
                     term.mul_assign(&den_inv);
                     sum.add_assign(&term);
@@ -306,11 +310,48 @@ where
         claim_timecheckden,
         claim_lookupnum,
         claim_lookupden,
-        z,
+        evaluation_point,
     ) = {
         // we will simulate it for now
+        let challenges =
+            vec![E::from_base(F::from_u32_unchecked(42)); trace_len.trailing_zeros() as usize];
+        use crate::gkr::sumcheck::eq_poly::*;
 
-        todo!()
+        let eq_precomputed = make_eq_poly_in_full::<E>(&challenges);
+
+        let mut evals = vec![];
+
+        for key in [
+            OutputType::PermutationProduct,
+            OutputType::Lookup16Bits,
+            OutputType::LookupTimestamps,
+            OutputType::GenericLookup,
+        ] {
+            let addresses = &compiled_circuit.global_output_map[&key];
+            for address in addresses.iter() {
+                let poly = gkr_storage.get_ext_poly(*address);
+                let evaluation = evaluate_with_precomputed_eq_ext::<E>(
+                    poly,
+                    &eq_precomputed.last().unwrap()[..],
+                );
+                evals.push(evaluation);
+            }
+        }
+
+        let [claim_readset, claim_writeset, claim_rangechecknum, claim_rangecheckden, claim_timechecknum, claim_timecheckden, claim_lookupnum, claim_lookupden] =
+            evals.try_into().unwrap();
+
+        (
+            claim_readset,
+            claim_writeset,
+            claim_rangechecknum,
+            claim_rangecheckden,
+            claim_timechecknum,
+            claim_timecheckden,
+            claim_lookupnum,
+            claim_lookupden,
+            challenges,
+        )
     };
 
     let output_map = &compiled_circuit.global_output_map;
@@ -348,7 +389,7 @@ where
     let mut points_for_claims_at_layer = BTreeMap::new();
 
     claims_for_layers.insert(compiled_circuit.layers.len(), top_layer_claims);
-    points_for_claims_at_layer.insert(compiled_circuit.layers.len(), vec![z]);
+    points_for_claims_at_layer.insert(compiled_circuit.layers.len(), evaluation_point);
 
     // Backward loop: standard layer-by-layer sumcheck
     for (layer_idx, layer) in compiled_circuit.layers.iter().enumerate().rev() {

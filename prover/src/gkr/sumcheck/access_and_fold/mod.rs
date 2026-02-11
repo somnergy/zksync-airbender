@@ -61,6 +61,22 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         }
     }
 
+    pub(crate) fn get_ext_poly(&self, address: GKRAddress) -> &[E] {
+        match address {
+            GKRAddress::InnerLayer { layer, .. } => {
+                let source = &self.layers[layer];
+                &source
+                    .extension_field_inputs
+                    .get(&address)
+                    .expect("must exist")
+                    .values[..]
+            }
+            _ => {
+                todo!()
+            }
+        }
+    }
+
     pub(crate) fn insert_base_field_at_layer(
         &mut self,
         layer: usize,

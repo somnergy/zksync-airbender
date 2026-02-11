@@ -1,8 +1,3 @@
-use crate::gkr::sumcheck::evaluation_kernels::{
-    lookup_base_minus_multiplicity_base, lookup_base_pair, BatchedGKRKernel,
-};
-use std::sync::Arc;
-
 use super::*;
 
 pub fn forward_evaluate_copy<F: PrimeField, E: FieldExtension<F> + Field>(
