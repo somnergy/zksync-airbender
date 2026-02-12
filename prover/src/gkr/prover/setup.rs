@@ -62,14 +62,6 @@ impl<F: PrimeField + TwoAdicField> GKRSetup<F> {
             compiled_circuit.offset_for_decoder_table,
         );
 
-        let range_check_16_table_content_len = range_check_16_table_content.len();
-        let range_check_16_table_content_ref = &range_check_16_table_content;
-
-        let timestamp_range_check_table_content_len = timestamp_range_check_table.len();
-        let timestamp_range_check_table_content_ref = &timestamp_range_check_table;
-
-        let all_generic_tables_ref = &all_generic_tables;
-
         // no parallelism for now
 
         result[0][..(1 << 16)].copy_from_slice(&range_check_16_table_content);

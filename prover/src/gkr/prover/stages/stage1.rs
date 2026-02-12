@@ -316,6 +316,8 @@ fn lde_multiple_polys_parallel_from_hypercubes<F: PrimeField + TwoAdicField>(
                     for i in range {
                         let mut input = evals[i].to_vec();
                         let size_log2 = input.len().trailing_zeros();
+
+                        bitreverse_enumeration_inplace(&mut input);
                         hypercube_to_monomial::multivariate_hypercube_evals_into_coeffs(
                             &mut input, size_log2,
                         );

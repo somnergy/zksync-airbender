@@ -60,11 +60,11 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         let kernel = MaskIntoIdentityProductGKRRelationKernel::default();
         let inputs = <Self as BatchedGKRKernel<F, E>>::get_inputs(self);
 
-        println!(
-            "Evaluating {} with inputs {:?}",
-            std::any::type_name::<Self>(),
-            &inputs
-        );
+        // println!(
+        //     "Evaluating {} with inputs {:?}",
+        //     std::any::type_name::<Self>(),
+        //     &inputs
+        // );
 
         evaluate_mixed_input_type_fixed_in_out_kernel_with_extension_inputs(
             &kernel,

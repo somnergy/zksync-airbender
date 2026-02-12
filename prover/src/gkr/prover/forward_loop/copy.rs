@@ -17,7 +17,7 @@ pub fn forward_evaluate_copy<F: PrimeField, E: FieldExtension<F> + Field>(
         .get(&input)
         .map(|el| el.arc_clone())
     {
-        println!("Copying base field {:?} -> {:?}", input, output);
+        // println!("Copying base field {:?} -> {:?}", input, output);
         gkr_storage.insert_base_field_at_layer(expected_output_layer, output, source);
     } else {
         if let Some(source) = gkr_storage.layers[expected_output_layer - 1]
@@ -25,7 +25,7 @@ pub fn forward_evaluate_copy<F: PrimeField, E: FieldExtension<F> + Field>(
             .get(&input)
             .map(|el| el.arc_clone())
         {
-            println!("Copying extension field {:?} -> {:?}", input, output);
+            // println!("Copying extension field {:?} -> {:?}", input, output);
             gkr_storage.insert_extension_at_layer(expected_output_layer, output, source);
         } else {
             panic!(

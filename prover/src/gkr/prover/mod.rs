@@ -13,10 +13,9 @@ use crate::gkr::prover::setup::GKRSetup;
 use crate::gkr::prover::stages::stage1;
 use crate::gkr::prover::transcript_utils::draw_random_field_els;
 use crate::gkr::sumcheck::access_and_fold::GKRStorage;
-use crate::gkr::whir::{whir_fold, ColumnMajorBaseOracleForLDE};
+use crate::gkr::whir::{whir_fold, ColumnMajorBaseOracleForLDE, WhirPolyCommitProof};
 use crate::gkr::witness_gen::family_circuits::GKRFullWitnessTrace;
 use crate::merkle_trees::ColumnMajorMerkleTreeConstructor;
-use crate::merkle_trees::MerkleTreeCapVarLength;
 use crate::prover_stages::flatten_merkle_caps_iter_into;
 use crate::worker::Worker;
 
@@ -54,36 +53,57 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRExternalChallenges<F, E> {
     }
 }
 
-pub struct GKRProverData<
+// #[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
+pub struct GKRProof<
     F: PrimeField,
     E: FieldExtension<F> + Field,
     T: ColumnMajorMerkleTreeConstructor<F>,
 > {
     pub external_challenges: GKRExternalChallenges<F, E>,
-    // pub stage_1_result: FirstStageOutput<N, A, T>,
-    // pub stage_2_result: SecondStageOutput<N, A, T>,
-    // pub quotient_commitment_result: ThirdStageOutput<N, A, T>,
-    // pub deep_poly_result: FourthStageOutput<N, A, T>,
-    // pub fri_result: FifthStageOutput<A, T>,
-    _marker: core::marker::PhantomData<T>,
+    // TODO: sumcheck intermediate values
+    pub whir_proof: WhirPolyCommitProof<F, E, T>,
 }
 
-#[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
-pub struct GKRProof<F: PrimeField, E: FieldExtension<F> + Field> {
-    pub external_challenges: GKRExternalChallenges<F, E>,
-    pub witness_tree_caps: Vec<MerkleTreeCapVarLength>,
-    pub memory_tree_caps: Vec<MerkleTreeCapVarLength>,
-    pub setup_tree_caps: Vec<MerkleTreeCapVarLength>,
-    pub permutation_grand_product_accumulator: E,
-    pub evaluations_at_random_points: Vec<E>,
+#[derive(Clone, Debug)]
+pub struct WhirSchedule {
+    pub base_lde_factor: usize,
+    pub commitment_per_coset_cap_size: usize,
+    pub whir_steps_schedule: Vec<usize>,
+    pub whir_queries_schedule: Vec<usize>,
+    pub whir_steps_lde_factors: Vec<usize>,
+    pub whir_pow_schedule: Vec<u32>,
+}
 
-    // TODO: WHIR intermediate oracles
-    pub proximity_check_inteermediate_oracles: Vec<MerkleTreeCapVarLength>,
-    pub last_proximity_check_step_plain_leaf_values: Vec<Vec<E>>,
-    pub final_monomial_form: Vec<E>,
-    // TODO: queries
-    // pub queries: Vec<QuerySet>,
-    pub pow_nonce: u64,
+impl WhirSchedule {
+    pub fn default_for_tests_80_bits() -> Self {
+        let mut new = Self {
+            base_lde_factor: 2,
+            commitment_per_coset_cap_size: 16,
+            whir_steps_schedule: vec![1, 4, 4, 4, 4, 4],
+            whir_pow_schedule: vec![24, 24, 24, 24, 24, 24],
+            whir_steps_lde_factors: vec![8, 64, 128, 128, 128],
+            whir_queries_schedule: vec![],
+        };
+
+        assert_eq!(
+            new.whir_steps_lde_factors.len() + 1,
+            new.whir_steps_schedule.len()
+        );
+        assert_eq!(new.whir_pow_schedule.len(), new.whir_steps_schedule.len());
+
+        for (lde, pow) in Some(new.base_lde_factor)
+            .iter()
+            .chain(new.whir_steps_lde_factors.iter())
+            .zip(new.whir_pow_schedule.iter())
+        {
+            let sec_bits = 80 - *pow;
+            let bits_per_query = lde.trailing_zeros();
+            let num_queries = (sec_bits * 120).div_ceil(bits_per_query * 100); // roughly extra 20% on top of conjecture. Latest paper decrease conjectured value by 5-10% depending on rate
+            new.whir_queries_schedule.push(num_queries as usize);
+        }
+
+        new
+    }
 }
 
 pub(crate) fn split_destinations<T: Sized>(
@@ -157,13 +177,11 @@ pub fn prove_configured_with_gkr<
     setup: &GKRSetup<F>,
     setup_commitment: &ColumnMajorBaseOracleForLDE<F, T>,
     twiddles: &Twiddles<F, Global>,
-    lde_factor: usize,
-    num_queries: usize,
-    pow_bits: u32,
+    whir_schedule: &WhirSchedule,
     inits_and_teardowns_top_bits: Option<u32>,
     trace_len: usize,
     worker: &Worker,
-) -> (GKRProverData<F, E, T>, GKRProof<F, E>)
+) -> GKRProof<F, E, T>
 where
     [(); F::DEGREE]: Sized,
     [(); E::DEGREE]: Sized,
@@ -178,9 +196,9 @@ where
     let (mem_oracle, wit_oracle) = stage1::stage1::<F, T>(
         &witness_eval_data,
         twiddles,
-        lde_factor,
-        lde_factor.trailing_zeros() as usize,
-        1,
+        whir_schedule.base_lde_factor,
+        whir_schedule.whir_steps_schedule[0],
+        whir_schedule.commitment_per_coset_cap_size,
         trace_len.trailing_zeros() as usize,
         worker,
     );
@@ -243,7 +261,6 @@ where
     );
 
     // now we should perform "forward" evaluation, and fill the GKR storage
-    let num_layers = compiled_circuit.layers.len();
     let mut witness_eval_data = witness_eval_data;
     // Go from layer 0 to the end, and produce intermediate polynomials. We do not need to commit to them
     for (layer_idx, layer) in compiled_circuit.layers.iter().enumerate() {
@@ -362,6 +379,7 @@ where
                 GKRAddress::BaseLayerWitness(_)
                 | GKRAddress::BaseLayerMemory(_)
                 | GKRAddress::Setup(_) => {
+                    println!("Explicitly computing value for {:?}", dep);
                     let values = gkr_storage.get_base_layer(dep);
                     let evaluation = evaluate_with_precomputed_eq::<F, E>(values, &eq_at_z[..]);
                     base_layer_claims.insert(dep, evaluation);
@@ -382,7 +400,6 @@ where
         external_challenges,
     ));
 
-    drop(gkr_storage);
     drop(preprocessed_range_check_16);
     drop(preprocessed_timestamp_range_checks);
     drop(preprocessed_generic_lookup);
@@ -393,6 +410,12 @@ where
         let Some(value) = claims_for_layers[&0].get(&key).copied() else {
             panic!("Missing claim for {:?}", key);
         };
+        {
+            // self-check
+            let poly = gkr_storage.get_base_layer(key);
+            let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &eq_at_z[..]);
+            assert_eq!(evaluation, value, "diverged for {:?}", key);
+        }
         mem_polys_claims.push(value);
     }
     let mut wit_polys_claims = Vec::with_capacity(compiled_circuit.witness_layout.total_width);
@@ -401,6 +424,12 @@ where
         let Some(value) = claims_for_layers[&0].get(&key).copied() else {
             panic!("Missing claim for {:?}", key);
         };
+        {
+            // self-check
+            let poly = gkr_storage.get_base_layer(key);
+            let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &eq_at_z[..]);
+            assert_eq!(evaluation, value, "diverged for {:?}", key);
+        }
         wit_polys_claims.push(value);
     }
     let mut setup_polys_claims = Vec::with_capacity(setup.hypercube_evals.len());
@@ -409,35 +438,49 @@ where
         let Some(value) = claims_for_layers[&0].get(&key).copied() else {
             panic!("Missing claim for {:?}", key);
         };
+        {
+            // self-check
+            let poly = gkr_storage.get_base_layer(key);
+            let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &eq_at_z[..]);
+            assert_eq!(evaluation, value, "diverged for {:?}", key);
+        }
         setup_polys_claims.push(value);
     }
-    let original_evaluation_point = points_for_claims_at_layer[&0].clone();
+
+    drop(gkr_storage);
 
     let whir_batching_challenge = draw_random_field_els::<F, E>(&mut seed, 1);
     let whir_batching_challenge = whir_batching_challenge[0];
 
+    let WhirSchedule {
+        base_lde_factor,
+        commitment_per_coset_cap_size,
+        whir_steps_schedule,
+        whir_queries_schedule,
+        whir_steps_lde_factors,
+        whir_pow_schedule,
+    } = whir_schedule.clone();
+
+    let whir_proof = whir_fold(
+        mem_oracle,
+        mem_polys_claims,
+        wit_oracle,
+        wit_polys_claims,
+        setup_commitment,
+        setup_polys_claims,
+        base_layer_z.clone(),
+        base_lde_factor,
+        whir_batching_challenge,
+        whir_steps_schedule,
+        whir_queries_schedule,
+        whir_steps_lde_factors,
+        whir_pow_schedule,
+        twiddles,
+        seed,
+        commitment_per_coset_cap_size,
+        trace_len.trailing_zeros() as usize,
+        worker,
+    );
+
     todo!();
-
-    // let whir_proof = whir_fold(
-    //     mem_oracle,
-    //     mem_polys_claims,
-    //     wit_oracle,
-    //     wit_polys_claims,
-    //     setup_commitment,
-    //     setup_polys_claims,
-    //     original_evaluation_point,
-    //     lde_factor,
-    //     whir_batching_challenge,
-    //     whir_steps_schedule,
-    //     whir_queries_schedule,
-    //     whir_steps_lde_factors,
-    //     whir_pow_schedule,
-    //     twiddles,
-    //     seed,
-    //     tree_cap_size,
-    //     trace_len.trailing_zeros() as usize,
-    //     worker
-    // );
-
-    // todo!();
 }

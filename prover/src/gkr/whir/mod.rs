@@ -68,7 +68,9 @@ use crate::gkr::prover::stages::stage1::{
 use crate::gkr::prover::transcript_utils::{
     add_whir_commitment_to_transcript, commit_field_els, draw_query_bits, draw_random_field_els,
 };
-use crate::gkr::sumcheck::eq_poly::{make_domain_eq_poly_in_full, make_eq_poly_in_full};
+use crate::gkr::sumcheck::eq_poly::{
+    evaluate_with_precomputed_eq_ext, make_domain_eq_poly_in_full, make_eq_poly_in_full,
+};
 use crate::gkr::sumcheck::*;
 use crate::gkr::whir::hypercube_to_monomial::multivariate_coeffs_into_hypercube_evals;
 use crate::prover_stages::query_producer::assemble_query_index;
@@ -305,7 +307,7 @@ pub fn whir_fold<
     setup_polys_claims: Vec<E>,
     original_evaluation_point: Vec<E>,
     original_lde_factor: usize,
-    batching_challenge: &E,
+    batching_challenge: E,
     whir_steps_schedule: Vec<usize>,
     whir_queries_schedule: Vec<usize>,
     whir_steps_lde_factors: Vec<usize>,
@@ -384,11 +386,12 @@ where
         assert_eq!(a.cosets[0].original_values_normal_order.len(), b.len());
     }
 
-    let challenge_powers = materialize_powers_serial_starting_with_one::<E, Global>(
-        *batching_challenge,
+    let mut challenge_powers = materialize_powers_serial_starting_with_one::<E, Global>(
+        batching_challenge,
         total_base_oracles,
     );
-    // let challenge_powers = vec![E::ONE, E::ZERO, E::ZERO];
+    challenge_powers[1..].fill(E::ZERO);
+
     let (base_mem_powers, rest) = challenge_powers.split_at(evals_refs[0].len());
     let (base_witness_powers, base_setup_powers) = rest.split_at(evals_refs[1].len());
     assert_eq!(base_setup_powers.len(), evals_refs[2].len());
@@ -494,6 +497,13 @@ where
     let mut monomial_form_buffer = Vec::with_capacity(sumchecked_poly_monomial_form.len());
 
     let mut claim = batched_claim;
+
+    // self-check
+    {
+        // claim is correct
+        let recomputed_claim = dot_product(&sumchecked_poly_evaluation_form, &eq_poly, worker);
+        assert_eq!(recomputed_claim, claim);
+    }
 
     assert_eq!(eq_poly.len(), sumchecked_poly_evaluation_form.len());
     assert_eq!(eq_poly.len(), sumchecked_poly_monomial_form.len());
@@ -723,6 +733,10 @@ where
             for (set_idx, (oracle, batching_challenges)) in
                 oracle_refs.iter().zip(batch_challenges.iter()).enumerate()
             {
+                assert_eq!(
+                    oracle.cosets[0].original_values_normal_order.len(),
+                    batching_challenges.len()
+                );
                 let (_idx, leaf, query) = oracle.query_for_folded_index(query_index);
                 match set_idx {
                     0 => {
@@ -1671,7 +1685,6 @@ fn evaluate_multivariate_at_base_for_domain_hypercube<
 ) -> E {
     let mut eqs = make_domain_eq_poly_in_full::<F, F>(point);
     let eq = eqs.pop().unwrap();
-    dbg!(&eq);
     assert_eq!(eq.len(), evals.len());
     let mut result = E::ZERO;
     for (a, b) in eq.iter().zip(evals.iter()) {
@@ -1791,12 +1804,13 @@ mod test {
     fn make_base_oracle(
         size: usize,
         worker: &Worker,
+        offset: usize,
     ) -> (
         ColumnMajorBaseOracleForLDE<F, Blake2sU32MerkleTreeWithCap>,
         Vec<F>,
     ) {
         let coeffs: Vec<F> = (1..=size)
-            .map(|el| F::from_u32_unchecked(el as u32))
+            .map(|el| F::from_u32_with_reduction((el + offset) as u32))
             .collect();
         let twiddles = Twiddles::<F, Global>::new(size, worker);
 
@@ -1857,8 +1871,8 @@ mod test {
 
         let mut inputs = vec![];
         let mut monomial_forms = vec![];
-        for _ in 0..3 {
-            let (input, monomial) = make_base_oracle(size, &worker);
+        for i in 0..3 {
+            let (input, monomial) = make_base_oracle(size, &worker, i * 32);
             inputs.push(input);
             monomial_forms.push(monomial);
         }
@@ -1894,7 +1908,7 @@ mod test {
             c,
             original_evaluation_point,
             2,
-            &E::ONE,
+            E::from_base(F::from_u32_with_reduction(7)),
             vec![1, 2, 3],
             vec![4, 4, 4],
             vec![8, 16],

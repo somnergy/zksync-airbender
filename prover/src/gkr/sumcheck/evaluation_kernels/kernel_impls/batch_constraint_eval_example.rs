@@ -123,7 +123,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
         worker: &Worker,
     ) {
-        println!("Evaluating {}", std::any::type_name::<Self>());
+        // println!("Evaluating {}", std::any::type_name::<Self>());
 
         assert_eq!(
             batch_challenges.len(),

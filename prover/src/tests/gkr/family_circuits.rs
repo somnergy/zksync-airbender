@@ -14,6 +14,7 @@ use cs::machine::ops::unrolled::opcodes_for_full_machine_with_unsigned_mul_div_o
 use crate::gkr::prover::prove_configured_with_gkr;
 use crate::gkr::prover::setup::GKRSetup;
 use crate::gkr::prover::GKRExternalChallenges;
+use crate::gkr::prover::WhirSchedule;
 use crate::gkr::witness_gen::family_circuits::evaluate_gkr_memory_witness_for_executor_family;
 use crate::gkr::witness_gen::family_circuits::evaluate_gkr_witness_for_executor_family;
 use crate::unrolled::NonMemoryCircuitOracle;
@@ -429,10 +430,13 @@ pub fn gkr_run_basic_unrolled_test_impl(
             //     None
             // };
 
+            let whir_schedule = WhirSchedule::default_for_tests_80_bits();
+            dbg!(&whir_schedule);
+
             println!("Trying to prove");
 
             let now = std::time::Instant::now();
-            let (prover_data, proof) =
+            let proof =
                 prove_configured_with_gkr::<BabyBearField, BabyBearExt4, DefaultTreeConstructor>(
                     &add_sub_circuit,
                     &external_challenges,
@@ -440,9 +444,7 @@ pub fn gkr_run_basic_unrolled_test_impl(
                     &setup,
                     &setup_commitment,
                     &twiddles,
-                    lde_factor,
-                    53,
-                    28,
+                    &whir_schedule,
                     None,
                     trace_len,
                     &worker,
