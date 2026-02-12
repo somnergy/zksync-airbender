@@ -1,6 +1,7 @@
-use crate::gkr::prover::split_destinations;
-
 use super::*;
+use crate::gkr::prover::apply_row_wise;
+use crate::gkr::prover::split_destinations;
+use crate::gkr::sumcheck::access_and_fold::BaseFieldPolySource;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct GKRInputs {
@@ -104,80 +105,204 @@ pub fn evaluate_single_input_kernel_with_base_inputs<
     inputs: &GKRInputs,
     storage: &mut GKRStorage<F, E>,
     step: usize,
-    batch_challenges: &[E],
+    challenges: &[E],
     folding_challenges: &[E],
     accumulator: &mut [[E; 2]],
     total_sumcheck_rounds: usize,
     last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
     worker: &Worker,
 ) {
+    assert_eq!(challenges.len(), kernel.num_challenges());
+
     let work_size = accumulator.len();
     assert!(work_size.is_power_of_two());
-    let mut accumulator_chunks =
-        split_destinations(vec![accumulator], worker.get_geometry(work_size));
     match step {
         0 => {
             let sources = storage.get_for_sumcheck_round_0(inputs);
+            let inputs = &sources.base_field_inputs;
             assert!(sources.extension_field_inputs.is_empty());
             if sources.base_field_outputs.is_empty() == false {
-                for index in 0..accumulator.len() {
-                    let value = kernel.evaluate_first_round(
-                        index,
-                        &sources.base_field_inputs,
-                        &sources.base_field_outputs,
-                        batch_challenges,
-                    );
-                    for i in 0..2 {
-                        accumulator[index][i].add_assign(&value[i]);
-                    }
-                }
+                let outputs = &sources.base_field_outputs;
+                apply_row_wise::<F, _>(
+                    vec![],
+                    vec![accumulator],
+                    work_size,
+                    worker,
+                    |_, mut ext_dest, chunk_start, chunk_size| {
+                        assert_eq!(ext_dest.len(), 1);
+                        let accumulator = ext_dest.pop().unwrap();
+                        for index in 0..chunk_size {
+                            let absolute_index = chunk_start + index;
+                            let value = kernel.evaluate_first_round(
+                                absolute_index,
+                                inputs,
+                                outputs,
+                                challenges,
+                                &(),
+                            );
+                            for i in 0..2 {
+                                accumulator[index][i].add_assign(&value[i]);
+                            }
+                        }
+                    },
+                );
             } else if sources.extension_field_outputs.is_empty() == false {
-                for index in 0..accumulator.len() {
-                    let value = kernel.evaluate_first_round(
-                        index,
-                        &sources.base_field_inputs,
-                        &sources.extension_field_outputs,
-                        batch_challenges,
-                    );
-                    for i in 0..2 {
-                        accumulator[index][i].add_assign(&value[i]);
-                    }
-                }
+                let outputs = &sources.extension_field_outputs;
+                apply_row_wise::<F, _>(
+                    vec![],
+                    vec![accumulator],
+                    work_size,
+                    worker,
+                    |_, mut ext_dest, chunk_start, chunk_size| {
+                        assert_eq!(ext_dest.len(), 1);
+                        let accumulator = ext_dest.pop().unwrap();
+                        for index in 0..chunk_size {
+                            let absolute_index = chunk_start + index;
+                            let value = kernel.evaluate_first_round(
+                                absolute_index,
+                                inputs,
+                                outputs,
+                                challenges,
+                                &(),
+                            );
+                            for i in 0..2 {
+                                accumulator[index][i].add_assign(&value[i]);
+                            }
+                        }
+                    },
+                );
             } else {
-                for index in 0..accumulator.len() {
-                    let value = kernel.evaluate::<_, _, false>(
-                        index,
-                        &sources.base_field_inputs,
-                        batch_challenges,
-                    );
-                    for i in 0..2 {
-                        accumulator[index][i].add_assign(&value[i]);
-                    }
-                }
+                let outputs: &[BaseFieldPolySource<F>] = &[][..];
+                apply_row_wise::<F, _>(
+                    vec![],
+                    vec![accumulator],
+                    work_size,
+                    worker,
+                    |_, mut ext_dest, chunk_start, chunk_size| {
+                        assert_eq!(ext_dest.len(), 1);
+                        let accumulator = ext_dest.pop().unwrap();
+                        for index in 0..chunk_size {
+                            let absolute_index = chunk_start + index;
+                            let value = kernel.evaluate_first_round(
+                                absolute_index,
+                                inputs,
+                                outputs,
+                                challenges,
+                                &(),
+                            );
+                            for i in 0..2 {
+                                accumulator[index][i].add_assign(&value[i]);
+                            }
+                        }
+                    },
+                );
             }
-        }
-        i if i + 1 == total_sumcheck_rounds => {
-            todo!();
         }
         1 => {
             let sources = storage.get_for_sumcheck_round_1(inputs, folding_challenges);
-            assert!(sources.base_field_inputs.is_empty());
-            for index in 0..accumulator.len() {
-                let value = kernel.evaluate::<_, _, false>(
-                    index,
-                    &sources.base_field_inputs,
-                    batch_challenges,
-                );
-                for i in 0..2 {
-                    accumulator[index][i].add_assign(&value[i]);
-                }
-            }
+            let inputs = &sources.base_field_inputs;
+            assert!(sources.extension_field_inputs.is_empty());
+            apply_row_wise::<F, _>(
+                vec![],
+                vec![accumulator],
+                work_size,
+                worker,
+                |_, mut ext_dest, chunk_start, chunk_size| {
+                    assert_eq!(ext_dest.len(), 1);
+                    let accumulator = ext_dest.pop().unwrap();
+                    let ctx = inputs[0].get_collapse_context();
+                    for index in 0..chunk_size {
+                        let absolute_index = chunk_start + index;
+                        let value =
+                            kernel.evaluate::<_, _, false>(absolute_index, inputs, challenges, ctx);
+                        for i in 0..2 {
+                            accumulator[index][i].add_assign(&value[i]);
+                        }
+                    }
+                },
+            );
         }
         2 => {
-            todo!()
+            let sources = storage.get_for_sumcheck_round_2(inputs, folding_challenges);
+            let inputs = &sources.base_field_inputs;
+            assert!(sources.extension_field_inputs.is_empty());
+            apply_row_wise::<F, _>(
+                vec![],
+                vec![accumulator],
+                work_size,
+                worker,
+                |_, mut ext_dest, chunk_start, chunk_size| {
+                    assert_eq!(ext_dest.len(), 1);
+                    let accumulator = ext_dest.pop().unwrap();
+                    let ctx = inputs[0].get_collapse_context();
+                    for index in 0..chunk_size {
+                        let absolute_index = chunk_start + index;
+                        let value =
+                            kernel.evaluate::<_, _, false>(absolute_index, inputs, challenges, ctx);
+                        for i in 0..2 {
+                            accumulator[index][i].add_assign(&value[i]);
+                        }
+                    }
+                },
+            );
+        }
+        i if i + 1 == total_sumcheck_rounds => {
+            assert!(i >= 3);
+
+            let sources = storage.get_for_sumcheck_round_3_and_beyond(inputs, folding_challenges);
+            {
+                let inputs = &sources.base_field_inputs;
+                assert!(sources.extension_field_inputs.is_empty());
+                apply_row_wise::<F, _>(
+                    vec![],
+                    vec![accumulator],
+                    work_size,
+                    worker,
+                    |_, mut ext_dest, chunk_start, chunk_size| {
+                        assert_eq!(ext_dest.len(), 1);
+                        let accumulator = ext_dest.pop().unwrap();
+                        let ctx = inputs[0].get_collapse_context();
+                        for index in 0..chunk_size {
+                            let absolute_index = chunk_start + index;
+                            let value = kernel.evaluate::<_, _, true>(
+                                absolute_index,
+                                inputs,
+                                challenges,
+                                ctx,
+                            );
+                            for i in 0..2 {
+                                accumulator[index][i].add_assign(&value[i]);
+                            }
+                        }
+                    },
+                );
+            }
+
+            sources.collect_last_values(inputs, last_evaluations);
         }
         3.. => {
-            todo!()
+            let sources = storage.get_for_sumcheck_round_3_and_beyond(inputs, folding_challenges);
+            let inputs = &sources.base_field_inputs;
+            assert!(sources.extension_field_inputs.is_empty());
+            apply_row_wise::<F, _>(
+                vec![],
+                vec![accumulator],
+                work_size,
+                worker,
+                |_, mut ext_dest, chunk_start, chunk_size| {
+                    assert_eq!(ext_dest.len(), 1);
+                    let accumulator = ext_dest.pop().unwrap();
+                    let ctx = inputs[0].get_collapse_context();
+                    for index in 0..chunk_size {
+                        let absolute_index = chunk_start + index;
+                        let value =
+                            kernel.evaluate::<_, _, false>(absolute_index, inputs, challenges, ctx);
+                        for i in 0..2 {
+                            accumulator[index][i].add_assign(&value[i]);
+                        }
+                    }
+                },
+            );
         }
     }
 }

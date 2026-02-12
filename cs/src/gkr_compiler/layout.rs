@@ -45,7 +45,10 @@ impl GKRGraph {
         &mut self,
         mut grand_product_outputs: [(GKRAddress, NoFieldGKRRelation); 2],
         mut lookup_outputs: BTreeMap<LookupType, ([GKRAddress; 2], LookupOutput)>,
-    ) -> (Vec<GKRLayerDescription>, BTreeMap<OutputType, Vec<GKRAddress>>) {
+    ) -> (
+        Vec<GKRLayerDescription>,
+        BTreeMap<OutputType, Vec<GKRAddress>>,
+    ) {
         assert!(self.enforced_relations.len() > 0);
         assert!(self.enforced_relations.get(&0).is_none());
 
@@ -145,7 +148,10 @@ impl GKRGraph {
         let mut global_output_map = BTreeMap::new();
         global_output_map.insert(
             OutputType::PermutationProduct,
-            grand_product_outputs.iter().map(|(addr, _)| *addr).collect(),
+            grand_product_outputs
+                .iter()
+                .map(|(addr, _)| *addr)
+                .collect(),
         );
         for (lookup_type, (addrs, _)) in lookup_outputs.iter() {
             let output_type = match lookup_type {

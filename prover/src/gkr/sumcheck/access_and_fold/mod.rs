@@ -63,50 +63,50 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
 
     pub(crate) fn try_get_base_poly(&self, address: GKRAddress) -> Option<&[F]> {
         match address {
-            GKRAddress::InnerLayer { layer, .. } => {
+            GKRAddress::InnerLayer { layer, .. } | GKRAddress::Cached { layer, .. } => {
                 let source = &self.layers[layer];
                 source
                     .base_field_inputs
                     .get(&address)
                     .map(|el| &el.values[..])
             }
-            GKRAddress::BaseLayerMemory(..) | GKRAddress::BaseLayerWitness(..) => {
+            GKRAddress::BaseLayerMemory(..)
+            | GKRAddress::BaseLayerWitness(..)
+            | GKRAddress::Setup(..) => {
                 let source = &self.layers[0];
                 source
                     .base_field_inputs
                     .get(&address)
                     .map(|el| &el.values[..])
             }
-            _ => {
-                todo!()
+            a @ _ => {
+                unreachable!("trying to get poly for address {:?}", a);
+            }
+        }
+    }
+
+    pub(crate) fn try_get_ext_poly(&self, address: GKRAddress) -> Option<&[E]> {
+        match address {
+            GKRAddress::InnerLayer { layer, .. } | GKRAddress::Cached { layer, .. } => {
+                let source = &self.layers[layer];
+                source
+                    .extension_field_inputs
+                    .get(&address)
+                    .map(|el| &el.values[..])
+            }
+            GKRAddress::BaseLayerMemory(..)
+            | GKRAddress::BaseLayerWitness(..)
+            | GKRAddress::Setup(..) => {
+                unreachable!("base layer is only in base field");
+            }
+            a @ _ => {
+                unreachable!("trying to gey poly for address {:?}", a);
             }
         }
     }
 
     pub(crate) fn purge_up_to_layer(&mut self, layer: usize) {
         self.layers.truncate(layer + 1);
-    }
-
-    pub(crate) fn try_get_ext_poly(&self, address: GKRAddress) -> Option<&[E]> {
-        match address {
-            GKRAddress::InnerLayer { layer, .. } => {
-                let source = &self.layers[layer];
-                source
-                    .extension_field_inputs
-                    .get(&address)
-                    .map(|el| &el.values[..])
-            }
-            GKRAddress::BaseLayerMemory(..) | GKRAddress::BaseLayerWitness(..) => {
-                let source = &self.layers[0];
-                source
-                    .extension_field_inputs
-                    .get(&address)
-                    .map(|el| &el.values[..])
-            }
-            _ => {
-                todo!()
-            }
-        }
     }
 
     pub(crate) fn get_ext_poly(&self, address: GKRAddress) -> &[E] {
@@ -171,9 +171,12 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         folding_challenges: &[E],
     ) -> BaseFieldPolySourceAfterOneFolding<F, E> {
         assert_eq!(folding_challenges.len(), 1);
+
         let layer = match poly {
             GKRAddress::InnerLayer { layer, .. } | GKRAddress::Cached { layer, .. } => layer,
-            GKRAddress::BaseLayerMemory(..) | GKRAddress::BaseLayerWitness(..) => 0,
+            GKRAddress::BaseLayerMemory(..)
+            | GKRAddress::BaseLayerWitness(..)
+            | GKRAddress::Setup(..) => 0,
             _ => {
                 unreachable!()
             }
@@ -206,16 +209,18 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         poly: GKRAddress,
         folding_challenges: &[E],
     ) -> BaseFieldPolySourceAfterTwoFoldings<F, E> {
+        assert_eq!(folding_challenges.len(), 2);
+
         let layer = match poly {
             GKRAddress::InnerLayer { layer, .. } | GKRAddress::Cached { layer, .. } => layer,
-            GKRAddress::BaseLayerMemory(..) | GKRAddress::BaseLayerWitness(..) => 0,
+            GKRAddress::BaseLayerMemory(..)
+            | GKRAddress::BaseLayerWitness(..)
+            | GKRAddress::Setup(..) => 0,
             _ => {
                 unreachable!()
             }
         };
         let sumcheck_step = folding_challenges.len();
-
-        assert_eq!(folding_challenges.len(), 2);
         let (base_poly_len, base_poly_ptr) = {
             let poly = self.layers[layer]
                 .base_field_inputs
@@ -285,9 +290,13 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         poly: GKRAddress,
         folding_challenges: &[E],
     ) -> ExtensionFieldPolyContinuingSource<F, E> {
+        assert!(folding_challenges.len() >= 3);
+
         let layer = match poly {
             GKRAddress::InnerLayer { layer, .. } | GKRAddress::Cached { layer, .. } => layer,
-            GKRAddress::BaseLayerMemory(..) | GKRAddress::BaseLayerWitness(..) => 0,
+            GKRAddress::BaseLayerMemory(..)
+            | GKRAddress::BaseLayerWitness(..)
+            | GKRAddress::Setup(..) => 0,
             _ => {
                 unreachable!()
             }
@@ -336,6 +345,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> GKRStorage<F, E> {
         poly: GKRAddress,
         folding_challenges: &[E],
     ) -> ExtensionFieldPolyContinuingSource<F, E> {
+        assert!(folding_challenges.len() >= 1);
         let layer = match poly {
             GKRAddress::InnerLayer { layer, .. } | GKRAddress::Cached { layer, .. } => layer,
             GKRAddress::BaseLayerMemory(..) | GKRAddress::BaseLayerWitness(..) => 0,

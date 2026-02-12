@@ -60,7 +60,11 @@ impl<F: PrimeField, E: FieldExtension<F> + Field>
     const SHOULD_ACCESS_TO_PREPARE_FOR_NEXT_STEP: bool = false;
 
     fn dummy() -> Self {
-        todo!();
+        Self {
+            start: null_mut(),
+            next_layer_size: 0,
+            _marker: core::marker::PhantomData,
+        }
     }
     #[inline(always)]
     fn get_collapse_context(
@@ -182,7 +186,15 @@ impl<F: PrimeField, E: FieldExtension<F> + Field>
     const SHOULD_ACCESS_TO_PREPARE_FOR_NEXT_STEP: bool = true;
 
     fn dummy() -> Self {
-        todo!();
+        Self {
+            previous_layer_start: null_mut(),
+            this_layer_start: null_mut(),
+            this_layer_size: 0,
+            next_layer_size: 0,
+            folding_challenge: E::ZERO,
+            first_access: false,
+            _marker: core::marker::PhantomData,
+        }
     }
     #[inline(always)]
     fn get_collapse_context(

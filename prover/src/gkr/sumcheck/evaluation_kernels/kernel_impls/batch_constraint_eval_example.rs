@@ -35,7 +35,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchConstraintEvalGKRRelation
             match a {
                 GKRAddress::BaseLayerMemory(offset) => offset,
                 GKRAddress::BaseLayerWitness(offset) => offset + num_memory_polys,
-                GKRAddress::Setup(offset) => {
+                GKRAddress::Setup(..) => {
                     unreachable!()
                     // offset + self.num_memory_polys + self.num_witness_polys
                 }
@@ -104,10 +104,10 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
 
     fn evaluate_forward_over_storage(
         &self,
-        storage: &mut GKRStorage<F, E>,
-        expected_output_layer: usize,
-        trace_len: usize,
-        worker: &Worker,
+        _storage: &mut GKRStorage<F, E>,
+        _expected_output_layer: usize,
+        _trace_len: usize,
+        _worker: &Worker,
     ) {
         unreachable!();
     }
@@ -175,9 +175,9 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEv
         r0_sources: &[S0],
         _output_sources: &[SOUT],
         batch_challenges: &[E],
+        ctx: &R0::CollapseContext,
     ) -> [E; 2] {
         let mut result = [E::ZERO; 2];
-        let ctx = r0_sources[0].get_collapse_context();
         for ((a, b), challenge) in self.quadratic_parts.iter() {
             let (a, b) = if *a != *b {
                 let a = r0_sources[*a].get_f1_minus_f0_only(index);
@@ -226,9 +226,9 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEv
         index: usize,
         r0_sources: &[S0],
         batch_challenges: &[E],
+        ctx: &R0::CollapseContext,
     ) -> [E; 2] {
         let mut result = [E::ZERO; 2];
-        let ctx = r0_sources[0].get_collapse_context();
         for ((a, b), challenge) in self.quadratic_parts.iter() {
             let (a, b) = if *a != *b {
                 let a = r0_sources[*a].get_two_points::<EXPLICIT_FORM>(index);
@@ -248,7 +248,19 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEv
             }
         }
         if EXPLICIT_FORM {
-            todo!()
+            // just evaluate at the point
+            for (a, challenge) in self.linear_parts.iter() {
+                let [a, b] = r0_sources[*a].get_two_points::<true>(index);
+
+                let contribution = a.collapse_for_batch_eval(ctx, challenge);
+                result[0].add_assign(&contribution);
+
+                let contribution = b.collapse_for_batch_eval(ctx, challenge);
+                result[1].add_assign(&contribution);
+            }
+
+            result[0].add_assign(&self.constant_offset);
+            result[1].add_assign(&self.constant_offset);
         } else {
             for (a, challenge) in self.linear_parts.iter() {
                 let a = r0_sources[*a].get_f0_only(index);
@@ -257,8 +269,9 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEv
                 let contribution = a.collapse_for_batch_eval(ctx, challenge);
                 result[0].add_assign(&contribution);
             }
+
+            result[0].add_assign(&self.constant_offset);
         }
-        result[0].add_assign(&self.constant_offset);
 
         result[0].mul_assign(&batch_challenges[0]);
         result[1].mul_assign(&batch_challenges[0]);

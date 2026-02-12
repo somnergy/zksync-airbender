@@ -418,7 +418,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field, R: EvaluationRepresentation<F,
     }
 }
 
-pub trait SingleInputTypeBatchSumcheckEvaluationKernel<F: PrimeField, E: FieldExtension<F> + Field>
+pub trait SingleInputTypeBatchSumcheckEvaluationKernel<F: PrimeField, E: FieldExtension<F> + Field>:
+    Send + Sync
 {
     fn num_challenges(&self) -> usize;
     fn evaluate_first_round<
@@ -432,8 +433,9 @@ pub trait SingleInputTypeBatchSumcheckEvaluationKernel<F: PrimeField, E: FieldEx
         r0_sources: &[S0],
         _output_sources: &[SOUT],
         batch_challenges: &[E],
+        collapse_ctx: &R0::CollapseContext,
     ) -> [E; 2] {
-        self.evaluate::<R0, S0, false>(index, r0_sources, batch_challenges)
+        self.evaluate::<R0, S0, false>(index, r0_sources, batch_challenges, collapse_ctx)
     }
 
     fn evaluate<
@@ -445,6 +447,7 @@ pub trait SingleInputTypeBatchSumcheckEvaluationKernel<F: PrimeField, E: FieldEx
         index: usize,
         r0_sources: &[S0],
         batch_challenges: &[E],
+        collapse_ctx: &R0::CollapseContext,
     ) -> [E; 2];
 }
 

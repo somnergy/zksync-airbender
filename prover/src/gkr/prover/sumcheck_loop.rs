@@ -88,8 +88,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelVariant<F, E> {
 struct KernelCollector<F: PrimeField, E: FieldExtension<F> + Field> {
     kernels: Vec<KernelVariant<F, E>>,
     batch_challenges_per_kernel: Vec<Vec<E>>,
-    kernel_outputs_in_base: Vec<Vec<GKRAddress>>,
-    kernel_outputs_in_ext: Vec<Vec<GKRAddress>>,
+    kernel_outputs: Vec<Vec<GKRAddress>>,
     current_batch_challenge: E,
     batch_challenge_base: E,
 }
@@ -99,8 +98,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
         Self {
             kernels: Vec::new(),
             batch_challenges_per_kernel: Vec::new(),
-            kernel_outputs_in_base: Vec::new(),
-            kernel_outputs_in_ext: Vec::new(),
+            kernel_outputs: Vec::new(),
             current_batch_challenge: E::ONE,
             batch_challenge_base,
         }
@@ -117,17 +115,23 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
             })
             .collect();
         let inputs = kernel.get_inputs();
-        if inputs.outputs_in_extension.is_empty() || inputs.outputs_in_base.is_empty() {
+        if !inputs.outputs_in_extension.is_empty() || !inputs.outputs_in_base.is_empty() {
             assert!(
                 inputs.outputs_in_base.is_empty() ^ inputs.outputs_in_extension.is_empty(),
                 "failed to register kernel {:?}",
                 &kernel
             );
         }
-        self.kernel_outputs_in_base.push(inputs.outputs_in_base);
-        self.kernel_outputs_in_ext.push(inputs.outputs_in_extension);
+        let mut outputs = inputs.outputs_in_base;
+        outputs.extend(inputs.outputs_in_extension);
+        self.kernel_outputs.push(outputs);
         self.kernels.push(kernel);
         self.batch_challenges_per_kernel.push(challenges);
+
+        assert_eq!(
+            self.batch_challenges_per_kernel.len(),
+            self.kernel_outputs.len()
+        );
     }
 
     fn is_empty(&self) -> bool {
@@ -136,11 +140,15 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
 
     fn compute_combined_claim(&self, output_claims: &BTreeMap<GKRAddress, E>) -> E {
         let mut combined = E::ZERO;
-        for (challenges, outputs) in self.batch_challenges_per_kernel.iter().zip(
-            self.kernel_outputs_in_base
-                .iter()
-                .chain(self.kernel_outputs_in_ext.iter()),
-        ) {
+        assert_eq!(
+            self.batch_challenges_per_kernel.len(),
+            self.kernel_outputs.len()
+        );
+        for (challenges, outputs) in self
+            .batch_challenges_per_kernel
+            .iter()
+            .zip(self.kernel_outputs.iter())
+        {
             for (challenge, addr) in challenges.iter().zip(outputs.iter()) {
                 if let Some(claim) = output_claims.get(addr) {
                     let mut weighted = *claim;

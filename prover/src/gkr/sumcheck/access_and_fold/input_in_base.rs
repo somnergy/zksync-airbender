@@ -186,7 +186,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BaseFieldPolyIntermediateFoldi
             let mut input_offset = self.continuous_buffer.as_mut_ptr();
             let mut input_size = self.size_after_two_folds;
             let mut next_step_offset = input_offset.add(input_size);
-            for _ in 2..step {
+            for _ in 3..step {
                 input_offset = next_step_offset;
                 input_size /= 2;
                 next_step_offset = next_step_offset.add(input_size);
