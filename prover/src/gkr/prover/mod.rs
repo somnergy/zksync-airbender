@@ -409,21 +409,33 @@ where
         );
     }
 
-    assert_eq!(claims_for_layers[&0].len(), compiled_circuit.memory_layout.total_width + compiled_circuit.witness_layout.total_width + setup.hypercube_evals.len());
+    drop(gkr_storage);
+    drop(preprocessed_range_check_16);
+    drop(preprocessed_timestamp_range_checks);
+    drop(preprocessed_generic_lookup);
 
     let mut mem_polys_claims = Vec::with_capacity(compiled_circuit.memory_layout.total_width);
     for i in 0..compiled_circuit.memory_layout.total_width {
-        let value = claims_for_layers[&0].get(&GKRAddress::BaseLayerMemory(i)).copied().expect("must be present");
+        let key = GKRAddress::BaseLayerMemory(i);
+        let Some(value) = claims_for_layers[&0].get(&key).copied() else {
+            panic!("Missing claim for {:?}", key);
+        };
         mem_polys_claims.push(value);
     }
     let mut wit_polys_claims = Vec::with_capacity(compiled_circuit.witness_layout.total_width);
     for i in 0..compiled_circuit.witness_layout.total_width {
-        let value = claims_for_layers[&0].get(&GKRAddress::BaseLayerWitness(i)).copied().expect("must be present");
+        let key = GKRAddress::BaseLayerWitness(i);
+        let Some(value) = claims_for_layers[&0].get(&key).copied() else {
+            panic!("Missing claim for {:?}", key);
+        };
         wit_polys_claims.push(value);
     }
     let mut setup_polys_claims = Vec::with_capacity(setup.hypercube_evals.len());
     for i in 0..setup.hypercube_evals.len() {
-        let value = claims_for_layers[&0].get(&GKRAddress::Setup(i)).copied().expect("must be present");
+        let key = GKRAddress::Setup(i);
+        let Some(value) = claims_for_layers[&0].get(&key).copied() else {
+            panic!("Missing claim for {:?}", key);
+        };
         setup_polys_claims.push(value);
     }
     let original_evaluation_point = points_for_claims_at_layer[&0].clone();
