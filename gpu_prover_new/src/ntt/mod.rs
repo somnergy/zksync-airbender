@@ -158,28 +158,28 @@ pub fn main_to_coset_register_pipeline(
             smem_bytes as i32
         ).wrap()?;
     }
+    function.launch(&config, &args)?;
+    let BF_VALS_PER_BLOCK = 16384;
+    let smem_bytes = BF_VALS_PER_BLOCK * size_of::<BF>();
+    let threads = 512;
+    let blocks = n.get_chunks_count(BF_VALS_PER_BLOCK);
+    let mut config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
+    config.dynamic_smem_bytes = smem_bytes;
+    let args = MainToCosetMiddle28StagesArguments::new(
+        outputs_matrix_const,
+        outputs_matrix_mut,
+        num_ntts as i32,
+    );
+    let function = MainToCosetMiddle28StagesFunction(ab_main_to_coset_middle_28_stages_megakernel);
+    let func_ptr = function.as_ptr();
+    unsafe {
+        cudaFuncSetAttribute(
+            func_ptr,
+            CudaFuncAttribute::MaxDynamicSharedMemorySize,
+            smem_bytes as i32
+        ).wrap()?;
+    }
     function.launch(&config, &args)
-    // let BF_VALS_PER_BLOCK = 16384;
-    // let smem_bytes = BF_VALS_PER_BLOCK * size_of::<BF>();
-    // let threads = 512;
-    // let blocks = n.get_chunks_count(BF_VALS_PER_BLOCK);
-    // let mut config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
-    // config.dynamic_smem_bytes = smem_bytes;
-    // let args = MainToCosetMiddle28StagesArguments::new(
-    //     outputs_matrix_const,
-    //     outputs_matrix_mut,
-    //     num_ntts as i32,
-    // );
-    // let function = MainToCosetMiddle28StagesFunction(ab_main_to_coset_middle_28_stages_megakernel);
-    // let func_ptr = function.as_ptr();
-    // unsafe {
-    //     cudaFuncSetAttribute(
-    //         func_ptr,
-    //         CudaFuncAttribute::MaxDynamicSharedMemorySize,
-    //         smem_bytes as i32
-    //     ).wrap()?;
-    // }
-    // function.launch(&config, &args)
 }
 
 pub fn main_to_coset_pipeline_tile_8(

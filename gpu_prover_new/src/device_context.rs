@@ -17,6 +17,10 @@ pub const TWO_ADICITY: u32 = 27;
 pub const NTT_COARSE_TWO_ADIC_LOG_COUNT: u32 = 13;
 // "- 1" accounts for NTT twiddle arrays only covering half the range
 pub const NTT_FINE_TWO_ADIC_LOG_COUNT: u32 = TWO_ADICITY - NTT_COARSE_TWO_ADIC_LOG_COUNT - 1;
+pub const CMEM_TWO_ADICITY: u32 = 19;
+pub const CMEM_COARSE_LOG_COUNT: u32 = 10;
+pub const CMEM_FINE_LOG_COUNT: u32 = CMEM_TWO_ADICITY - CMEM_COARSE_LOG_COUNT - 1;
+pub const LENGTH_CMEM_COARSE: u32 = 1 << CMEM_COARSE_LOG_COUNT;
 
 #[repr(C)]
 struct PowersLayerData {
@@ -95,8 +99,10 @@ unsafe impl Sync for PowersData2Layer {}
 cuda_struct_and_stub! { static ab_powers_data_w_bitrev_for_ntt: PowersData2Layer; }
 cuda_struct_and_stub! { static ab_powers_data_w_inv_bitrev_for_ntt: PowersData2Layer; }
 cuda_struct_and_stub! { static ab_inv_sizes: [BF; TWO_ADICITY as usize]; }
-cuda_struct_and_stub! { static ab_inv_twiddles_first_10_stages: [BF; 1 << 10]; }
-cuda_struct_and_stub! { static ab_fwd_twiddles_last_10_stages: [BF; 1 << 10]; }
+cuda_struct_and_stub! { static ab_fwd_cmem_twiddles_coarse: [BF; 1 << CMEM_COARSE_LOG_COUNT as usize]; }
+cuda_struct_and_stub! { static ab_inv_cmem_twiddles_coarse: [BF; 1 << CMEM_COARSE_LOG_COUNT as usize]; }
+cuda_struct_and_stub! { static ab_fwd_cmem_twiddles_fine: [BF; 1 << CMEM_FINE_LOG_COUNT as usize]; }
+cuda_struct_and_stub! { static ab_inv_cmem_twiddles_fine: [BF; 1 << CMEM_FINE_LOG_COUNT as usize]; }
 
 unsafe fn copy_to_symbol<T>(symbol: &T, src: &T) -> CudaResult<()> {
     cudaMemcpyToSymbol(
@@ -120,8 +126,10 @@ unsafe fn copy_to_symbols(
     powers_of_w_inv_fine_bitrev_for_ntt: *const BF,
     powers_of_w_inv_coarse_bitrev_for_ntt: *const BF,
     inv_sizes_host: [BF; TWO_ADICITY as usize],
-    fwd_twiddles_last_10_stages_host: [BF; 1 << 10],
-    inv_twiddles_first_10_stages_host: [BF; 1 << 10],
+    fwd_cmem_twiddles_coarse: [BF; 1 << CMEM_COARSE_LOG_COUNT as usize],
+    inv_cmem_twiddles_coarse: [BF; 1 << CMEM_COARSE_LOG_COUNT as usize],
+    fwd_cmem_twiddles_fine: [BF; 1 << CMEM_FINE_LOG_COUNT as usize],
+    inv_cmem_twiddles_fine: [BF; 1 << CMEM_FINE_LOG_COUNT as usize],
 ) -> CudaResult<()> {
     // let coarsest_log_count = powers_of_w_coarsest_log_count;
     // let coarser_log_count = OMEGA_LOG_ORDER - coarsest_log_count;
@@ -157,14 +165,10 @@ unsafe fn copy_to_symbols(
         ),
     )?;
     copy_to_symbol(&ab_inv_sizes, &inv_sizes_host)?;
-    copy_to_symbol(
-        &ab_fwd_twiddles_last_10_stages,
-        &fwd_twiddles_last_10_stages_host,
-    )?;
-    copy_to_symbol(
-        &ab_inv_twiddles_first_10_stages,
-        &inv_twiddles_first_10_stages_host,
-    )?;
+    copy_to_symbol(&ab_fwd_cmem_twiddles_coarse, &fwd_cmem_twiddles_coarse)?;
+    copy_to_symbol(&ab_inv_cmem_twiddles_coarse, &inv_cmem_twiddles_coarse)?;
+    copy_to_symbol(&ab_fwd_cmem_twiddles_fine, &fwd_cmem_twiddles_fine)?;
+    copy_to_symbol(&ab_inv_cmem_twiddles_fine, &inv_cmem_twiddles_fine)?;
     Ok(())
 }
 
@@ -249,23 +253,40 @@ impl DeviceContext {
         let two_inv = BF::new(2).inverse().expect("must exist");
         let mut inv_sizes_host = [BF::ONE; TWO_ADICITY as usize];
         distribute_powers_serial(&mut inv_sizes_host, BF::ONE, two_inv);
-        let generator_fwd_last_10_stages = domain_generator_for_size::<BF>(2048);
-        let mut fwd_twiddles_last_10_stages_host = [BF::ONE; 1024];
+        // trust me
+        let generator_fwd_cmem_coarse =
+            domain_generator_for_size::<BF>((LENGTH_CMEM_COARSE * 2) as u64);
+        let mut fwd_cmem_twiddles_coarse = [BF::ONE; 1 << CMEM_COARSE_LOG_COUNT as usize];
         distribute_powers_serial(
-            &mut fwd_twiddles_last_10_stages_host,
+            &mut fwd_cmem_twiddles_coarse,
             BF::ONE,
-            generator_fwd_last_10_stages,
+            generator_fwd_cmem_coarse,
         );
-        bitreverse_enumeration_inplace(&mut fwd_twiddles_last_10_stages_host);
-        let generator_inv_first_10_stages =
-            generator_fwd_last_10_stages.inverse().expect("must exist");
-        let mut inv_twiddles_first_10_stages_host = [BF::ONE; 1024];
+        bitreverse_enumeration_inplace(&mut fwd_cmem_twiddles_coarse);
+        let generator_inv_cmem_coarse = generator_fwd_cmem_coarse.inverse().expect("must exist");
+        let mut inv_cmem_twiddles_coarse = [BF::ONE; 1 << CMEM_COARSE_LOG_COUNT as usize];
         distribute_powers_serial(
-            &mut inv_twiddles_first_10_stages_host,
+            &mut inv_cmem_twiddles_coarse,
             BF::ONE,
-            generator_inv_first_10_stages,
+            generator_inv_cmem_coarse,
         );
-        bitreverse_enumeration_inplace(&mut inv_twiddles_first_10_stages_host);
+        bitreverse_enumeration_inplace(&mut inv_cmem_twiddles_coarse);
+        let generator_fwd_cmem_fine = domain_generator_for_size::<BF>(1u64 << CMEM_TWO_ADICITY);
+        let mut fwd_cmem_twiddles_fine = [BF::ONE; 1 << CMEM_FINE_LOG_COUNT as usize];
+        distribute_powers_serial(
+            &mut fwd_cmem_twiddles_fine,
+            BF::ONE,
+            generator_fwd_cmem_fine,
+        );
+        bitreverse_enumeration_inplace(&mut fwd_cmem_twiddles_fine);
+        let generator_inv_cmem_fine = generator_fwd_cmem_fine.inverse().expect("must exist");
+        let mut inv_cmem_twiddles_fine = [BF::ONE; 1 << CMEM_FINE_LOG_COUNT as usize];
+        distribute_powers_serial(
+            &mut inv_cmem_twiddles_fine,
+            BF::ONE,
+            generator_inv_cmem_fine,
+        );
+        bitreverse_enumeration_inplace(&mut inv_cmem_twiddles_fine);
         unsafe {
             copy_to_symbols(
                 // powers_of_w_coarsest_log_count,
@@ -277,8 +298,10 @@ impl DeviceContext {
                 powers_of_w_inv_fine_bitrev_for_ntt.as_ptr(),
                 powers_of_w_inv_coarse_bitrev_for_ntt.as_ptr(),
                 inv_sizes_host,
-                fwd_twiddles_last_10_stages_host,
-                inv_twiddles_first_10_stages_host,
+                fwd_cmem_twiddles_coarse,
+                inv_cmem_twiddles_coarse,
+                fwd_cmem_twiddles_fine,
+                inv_cmem_twiddles_fine,
             )?;
         }
         Ok(Self {
