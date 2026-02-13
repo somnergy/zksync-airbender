@@ -55,12 +55,8 @@ pub fn add_whir_commitment_to_transcript<F: PrimeField, T: ColumnMajorMerkleTree
     seed: &mut Seed,
     commitment: &WhirCommitment<F, T>,
 ) {
-    let mut transcript_input = Vec::with_capacity(
-        commitment.coset_caps.len() * commitment.coset_caps[0].cap.len() * DIGEST_SIZE_U32_WORDS,
-    );
-    for el in commitment.coset_caps.iter() {
-        el.add_into_buffer(&mut transcript_input);
-    }
+    let mut transcript_input = Vec::with_capacity(commitment.cap.cap.len() * DIGEST_SIZE_U32_WORDS);
+    commitment.cap.add_into_buffer(&mut transcript_input);
 
     Transcript::commit_with_seed(seed, &transcript_input);
 }

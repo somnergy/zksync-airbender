@@ -216,19 +216,19 @@ where
 
     // commit our setup
     flatten_merkle_caps_iter_into(
-        setup_commitment.cosets.iter().map(|el| el.tree.get_cap()),
+        Some(setup_commitment.tree.get_cap()).into_iter(),
         &mut transcript_input,
     );
 
     // memory
     flatten_merkle_caps_iter_into(
-        mem_oracle.cosets.iter().map(|el| el.tree.get_cap()),
+        Some(mem_oracle.tree.get_cap()).into_iter(),
         &mut transcript_input,
     );
 
     // and witness
     flatten_merkle_caps_iter_into(
-        wit_oracle.cosets.iter().map(|el| el.tree.get_cap()),
+        Some(wit_oracle.tree.get_cap()).into_iter(),
         &mut transcript_input,
     );
 

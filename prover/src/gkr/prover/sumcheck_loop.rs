@@ -149,6 +149,11 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
             .iter()
             .zip(self.kernel_outputs.iter())
         {
+            if challenges.len() != outputs.len() {
+                // only the case for constraints batch eval kernel
+                assert_eq!(challenges.len(), 1);
+                assert_eq!(outputs.len(), 0);
+            }
             for (challenge, addr) in challenges.iter().zip(outputs.iter()) {
                 if let Some(claim) = output_claims.get(addr) {
                     let mut weighted = *claim;
