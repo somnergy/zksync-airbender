@@ -1,6 +1,9 @@
 use super::*;
 use std::collections::BTreeMap;
 
+use crate::gkr::prover::dimension_reduction::forward::DimensionReducingInputOutput;
+use crate::gkr::prover::dimension_reduction::kernels::logup::LookupPairDimensionReducingGKRRelation;
+use crate::gkr::prover::dimension_reduction::kernels::pairwise_product::PairwiseProductDimensionReducingGKRRelation;
 use crate::gkr::sumcheck::access_and_fold::GKRStorage;
 use crate::gkr::sumcheck::eq_poly::{
     evaluate_constant_and_quadratic_coeffs_with_precomputed_eq, evaluate_with_precomputed_eq,
@@ -20,6 +23,7 @@ use crate::worker::Worker;
 
 use cs::definitions::GKRAddress;
 use cs::gkr_compiler::{GKRLayerDescription, NoFieldGKRRelation};
+use transcript::Seed;
 
 #[derive(Debug)]
 pub enum KernelVariant<F: PrimeField, E: FieldExtension<F> + Field> {
@@ -33,6 +37,8 @@ pub enum KernelVariant<F: PrimeField, E: FieldExtension<F> + Field> {
     LookupUnbalanced(LookupRationalPairWithUnbalancedBaseGKRRelation<F, E>),
     LookupWithCachedDensAndSetup(LookupBaseExtMinusBaseExtGKRRelation),
     EnforceConstraintsMaxQuadratic(BatchConstraintEvalGKRRelation<F, E>),
+    PairwiseProductDimensionReducing(PairwiseProductDimensionReducingGKRRelation),
+    LookupPairDimensionReducing(LookupPairDimensionReducingGKRRelation),
 }
 
 macro_rules! dispatch_kernel {
@@ -48,6 +54,8 @@ macro_rules! dispatch_kernel {
             KernelVariant::LookupUnbalanced(ref $k) => $body,
             KernelVariant::LookupWithCachedDensAndSetup(ref $k) => $body,
             KernelVariant::EnforceConstraintsMaxQuadratic(ref $k) => $body,
+            KernelVariant::PairwiseProductDimensionReducing(ref $k) => $body,
+            KernelVariant::LookupPairDimensionReducing(ref $k) => $body,
         }
     };
 }
@@ -57,7 +65,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelVariant<F, E> {
         dispatch_kernel!(self, |k| BatchedGKRKernel::<F, E>::num_challenges(k))
     }
 
-    pub fn evaluate_over_storage(
+    pub fn evaluate_over_storage<const N: usize>(
         &self,
         storage: &mut GKRStorage<F, E>,
         step: usize,
@@ -65,7 +73,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelVariant<F, E> {
         folding_challenges: &[E],
         accumulator: &mut [[E; 2]],
         total_sumcheck_rounds: usize,
-        last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
+        last_evaluations: &mut BTreeMap<GKRAddress, [E; N]>,
         worker: &Worker,
     ) {
         dispatch_kernel!(self, |k| k.evaluate_over_storage(
@@ -306,14 +314,49 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
         collector
     }
 
-    fn evaluate_kernels_over_storage(
+    fn from_dimension_reducing_relations(
+        layer: &BTreeMap<OutputType, DimensionReducingInputOutput>,
+        _layer_idx: usize,
+        batch_challenge_base: E,
+    ) -> Self {
+        let mut collector = Self::new(batch_challenge_base);
+
+        for (k, v) in layer.iter() {
+            match *k {
+                OutputType::PermutationProduct => {
+                    for (inp, out) in v.inputs.iter().zip(v.output.iter()) {
+                        collector.register(KernelVariant::PairwiseProductDimensionReducing(
+                            PairwiseProductDimensionReducingGKRRelation {
+                                input: *inp,
+                                output: *out,
+                            },
+                        ));
+                    }
+                }
+                OutputType::Lookup16Bits
+                | OutputType::LookupTimestamps
+                | OutputType::GenericLookup => {
+                    collector.register(KernelVariant::LookupPairDimensionReducing(
+                        LookupPairDimensionReducingGKRRelation {
+                            inputs: v.inputs.clone().try_into().unwrap(),
+                            outputs: v.output.clone().try_into().unwrap(),
+                        },
+                    ));
+                }
+            }
+        }
+
+        collector
+    }
+
+    fn evaluate_kernels_over_storage<const N: usize>(
         &self,
         gkr_storage: &mut GKRStorage<F, E>,
         step: usize,
         folding_challenges: &[E],
         accumulator: &mut [[E; 2]],
         folding_steps: usize,
-        last_evaluations: &mut BTreeMap<GKRAddress, [E; 2]>,
+        last_evaluations: &mut BTreeMap<GKRAddress, [E; N]>,
         worker: &Worker,
     ) {
         for (kernel, batch_challenges) in self
@@ -335,7 +378,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
     }
 }
 
-fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
+fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field, const N: usize>(
     collector: &KernelCollector<F, E>,
     initial_claim: E,
     prev_challenges: &[E],
@@ -343,10 +386,10 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
     gkr_storage: &mut GKRStorage<F, E>,
     folding_steps: usize,
     worker: &Worker,
-) -> (Vec<E>, BTreeMap<GKRAddress, [E; 2]>) {
+) -> (Vec<E>, BTreeMap<GKRAddress, [E; N]>) {
     let mut claim = initial_claim;
     let mut folding_challenges = Vec::with_capacity(folding_steps);
-    let mut last_evaluations: BTreeMap<GKRAddress, [E; 2]> = BTreeMap::new();
+    let mut last_evaluations: BTreeMap<GKRAddress, [E; N]> = BTreeMap::new();
 
     let mut eq_prefactor = E::ONE;
 
@@ -420,9 +463,6 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
             worker,
         );
 
-        // TODO: get from transcript
-        let folding_challenge = E::from_base(F::from_u32_unchecked(42 + step as u32));
-
         let [f0, f1] = accumulator[0];
 
         // eq_poly[1] = [1 - u_last, u_last]
@@ -439,8 +479,6 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field>(
         recomputed_claim.mul_assign(&eq_prefactor);
 
         debug_assert_eq!(claim, recomputed_claim, "Final claim verification failed");
-
-        folding_challenges.push(folding_challenge);
     }
 
     (folding_challenges, last_evaluations)
@@ -452,13 +490,16 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
     claim_points: &mut BTreeMap<usize, Vec<E>>,
     claims_storage: &mut BTreeMap<usize, BTreeMap<GKRAddress, E>>,
     gkr_storage: &mut GKRStorage<F, E>,
+    batching_challenge: &mut E,
     compiled_circuit: &cs::gkr_compiler::GKRCircuitArtifact<F>,
-    _external_challenges: &crate::gkr::prover::GKRExternalChallenges<F, E>,
     trace_len: usize,
     lookup_challenges_additive_part: E,
     constraints_batch_challenge: E,
+    seed: &mut Seed,
     worker: &Worker,
-) {
+) where
+    [(); E::DEGREE]: Sized,
+{
     println!("Evaluating layer {} in sumcheck direction", layer_idx);
 
     let output_layer_idx = layer_idx + 1;
@@ -477,8 +518,7 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
     // Precompute eq polynomial evaluations over the boolean hypercube
     let eq_polys = make_eq_poly_in_full::<E>(prev_challenges);
 
-    // TODO: get from transcript
-    let batch_challenge_base = E::from_base(F::from_u32_unchecked(0xff));
+    let batch_challenge_base = *batching_challenge;
 
     let collector = KernelCollector::from_gates(
         layer,
@@ -494,7 +534,7 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
 
     let claim = collector.compute_combined_claim(output_claims);
 
-    let (folding_challenges, last_evaluations) = run_sumcheck_loop(
+    let (mut folding_challenges, last_evaluations) = run_sumcheck_loop(
         &collector,
         claim,
         prev_challenges,
@@ -505,13 +545,21 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
     );
 
     // After sumcheck completes, extract claims for the input layer
-    let last_r = folding_challenges
-        .last()
-        .expect("must have at least one folding challenge");
+    let transcript_inputs: Vec<E> = last_evaluations
+        .iter()
+        .map(|el| el.1.iter())
+        .flatten()
+        .copied()
+        .collect();
+    commit_field_els(seed, &transcript_inputs);
+
+    let challenges = draw_random_field_els::<F, E>(seed, 2);
+    let [last_r, next_batching_challenge] = challenges.try_into().unwrap();
+    folding_challenges.push(last_r);
 
     let new_claims: BTreeMap<_, _> = last_evaluations
         .iter()
-        .map(|(addr, &[f0, f1])| (*addr, interpolate_linear::<F, E>(f0, f1, last_r)))
+        .map(|(addr, &[f0, f1])| (*addr, interpolate_linear::<F, E>(f0, f1, &last_r)))
         .collect();
 
     // self-check
@@ -538,6 +586,117 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
 
     // and we can purge the storage
     gkr_storage.purge_up_to_layer(layer_idx);
+
+    *batching_challenge = next_batching_challenge;
+}
+
+pub fn evaluate_dimension_reducing_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
+    layer_idx: usize,
+    layer: &BTreeMap<OutputType, DimensionReducingInputOutput>,
+    claim_points: &mut BTreeMap<usize, Vec<E>>,
+    claims_storage: &mut BTreeMap<usize, BTreeMap<GKRAddress, E>>,
+    gkr_storage: &mut GKRStorage<F, E>,
+    batching_challenge: &mut E,
+    seed: &mut Seed,
+    trace_len_after_reduction: usize,
+    worker: &Worker,
+) where
+    [(); E::DEGREE]: Sized,
+{
+    println!(
+        "Evaluating layer {} (dimension reducing) in sumcheck direction",
+        layer_idx
+    );
+    println!(
+        "Trace length of reduced poly is {}",
+        trace_len_after_reduction
+    );
+    let output_layer_idx = layer_idx + 1;
+
+    let output_claims = claims_storage
+        .get(&output_layer_idx)
+        .expect("claims for output layer must exist");
+    let prev_challenges = claim_points
+        .get(&output_layer_idx)
+        .expect("claim points for output layer must exist");
+
+    debug_assert!(trace_len_after_reduction.is_power_of_two());
+    let folding_steps = trace_len_after_reduction.trailing_zeros() as usize;
+    assert!(folding_steps >= 2, "need at least 2 folding steps");
+
+    // Precompute eq polynomial evaluations over the boolean hypercube
+    let eq_polys = make_eq_poly_in_full::<E>(prev_challenges);
+
+    let collector =
+        KernelCollector::from_dimension_reducing_relations(layer, layer_idx, *batching_challenge);
+    debug_assert!(!collector.is_empty());
+
+    let claim = collector.compute_combined_claim(output_claims);
+
+    let (mut folding_challenges, last_evaluations) = run_sumcheck_loop::<F, E, 4>(
+        &collector,
+        claim,
+        prev_challenges,
+        &eq_polys,
+        gkr_storage,
+        folding_steps,
+        worker,
+    );
+
+    let transcript_inputs: Vec<E> = last_evaluations
+        .iter()
+        .map(|el| el.1.iter())
+        .flatten()
+        .copied()
+        .collect();
+    commit_field_els(seed, &transcript_inputs);
+
+    let challenges = draw_random_field_els::<F, E>(seed, 3);
+    let [r_before_last, r_last, next_batching_challenge] = challenges.try_into().unwrap();
+    folding_challenges.push(r_before_last);
+    folding_challenges.push(r_last);
+
+    // After sumcheck completes, extract claims for the input layer
+
+    // we have evaluations of some poly f(r1, r2, ...., 0/1, 0/1) - in total of 4 values;
+
+    let eq_polys = make_eq_poly_in_full(&[r_before_last, r_last]);
+
+    let new_claims: BTreeMap<_, _> = last_evaluations
+        .iter()
+        .map(|(addr, evals)| {
+            let eval = evaluate_with_precomputed_eq_ext(evals, &eq_polys.last().unwrap()[..]);
+
+            (*addr, eval)
+        })
+        .collect();
+
+    // self-check
+    {
+        let eq_polys = make_eq_poly_in_full::<E>(&folding_challenges);
+        for (k, v) in new_claims.iter() {
+            if let Some(poly) = gkr_storage.try_get_base_poly(*k) {
+                let eval = evaluate_with_precomputed_eq(poly, &eq_polys.last().unwrap()[..]);
+                assert_eq!(eval, *v, "claim diverged for poly {:?}", k);
+            } else {
+                if let Some(poly) = gkr_storage.try_get_ext_poly(*k) {
+                    let eval =
+                        evaluate_with_precomputed_eq_ext(poly, &eq_polys.last().unwrap()[..]);
+                    assert_eq!(eval, *v, "claim diverged for poly {:?}", k);
+                } else {
+                    unreachable!()
+                }
+            }
+        }
+    }
+
+    claims_storage.insert(layer_idx, new_claims);
+    claim_points.insert(layer_idx, folding_challenges);
+
+    // and we can purge the storage
+    gkr_storage.purge_up_to_layer(layer_idx);
+
+    *batching_challenge = next_batching_challenge;
 }
 
 #[inline(always)]

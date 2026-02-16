@@ -27,6 +27,7 @@ where
     Transcript::commit_with_seed(seed, &transcript_input);
 }
 
+#[track_caller]
 pub fn draw_random_field_els<F: PrimeField, E: FieldExtension<F>>(
     seed: &mut Seed,
     num_challenges: usize,
@@ -45,7 +46,7 @@ where
         .map(|el| E::from_base_coeffs_array(&el.map(|el| F::from_u32_with_reduction(el))))
         .collect();
 
-    assert!(all_challenges.len() > num_challenges);
+    assert!(all_challenges.len() >= num_challenges);
     all_challenges.truncate(num_challenges);
 
     all_challenges

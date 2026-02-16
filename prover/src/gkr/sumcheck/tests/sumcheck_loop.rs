@@ -4,6 +4,7 @@ use std::mem::MaybeUninit;
 use cs::definitions::GKRAddress;
 use cs::gkr_compiler::{GKRLayerDescription, GateArtifacts, NoFieldGKRRelation};
 use field::{Field, FieldExtension, Mersenne31Field, Mersenne31Quartic, PrimeField};
+use transcript::Seed;
 use worker::Worker;
 
 use super::utils::*;
@@ -74,17 +75,21 @@ fn test_sumcheck_loop_product() {
     let lookup_additive_part = E::from_base(F::from_u64_with_reduction(42));
     let constraints_batch_challenge = E::from_base(F::from_u64_with_reduction(127));
 
+    let mut batching_challenge = E::from_base(F::from_u64_with_reduction(0xff));
+    let mut seed = Seed::default();
+
     evaluate_sumcheck_for_layer::<F, E>(
         0,
         &layer,
         &mut claim_points,
         &mut claims_storage,
         &mut storage,
-        unsafe { MaybeUninit::uninit().assume_init_ref() }, // unused
+        &mut batching_challenge,
         unsafe { MaybeUninit::uninit().assume_init_ref() }, // unused
         POLY_SIZE,
         lookup_additive_part,
         constraints_batch_challenge,
+        &mut seed,
         &worker,
     );
 
@@ -223,17 +228,21 @@ fn test_sumcheck_loop_multiple_gates() {
     let lookup_additive_part = E::from_base(F::from_u64_with_reduction(42));
     let constraints_batch_challenge = E::from_base(F::from_u64_with_reduction(127));
 
+    let mut batching_challenge = E::from_base(F::from_u64_with_reduction(0xff));
+    let mut seed = Seed::default();
+
     evaluate_sumcheck_for_layer::<F, E>(
         0,
         &layer,
         &mut claim_points,
         &mut claims_storage,
         &mut storage,
-        unsafe { MaybeUninit::uninit().assume_init_ref() }, // unused
+        &mut batching_challenge,
         unsafe { MaybeUninit::uninit().assume_init_ref() }, // unused
         POLY_SIZE,
         lookup_additive_part,
         constraints_batch_challenge,
+        &mut seed,
         &worker,
     );
 
