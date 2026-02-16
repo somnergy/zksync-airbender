@@ -415,7 +415,7 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field, const N: usize
         let folding_challenge = E::from_base(F::from_u32_unchecked(42 + step as u32));
 
         let eq = &eq_poly[folding_steps - step - 1];
-        debug_assert_eq!(eq.len(), acc_size);
+        assert_eq!(eq.len(), acc_size);
 
         let [c0, c2] =
             evaluate_constant_and_quadratic_coeffs_with_precomputed_eq::<F, E>(&accumulator, eq);
@@ -431,7 +431,7 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field, const N: usize
         );
 
         // Verify: s(0) + s(1) == claim / eq_prefactor
-        debug_assert!({
+        assert!({
             let s0 = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &E::ZERO);
             let s1 = evaluate_small_univariate_poly::<F, E, _>(&coeffs, &E::ONE);
             let mut sum = s0;
@@ -478,7 +478,7 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field, const N: usize
         let mut recomputed_claim = claim_inner;
         recomputed_claim.mul_assign(&eq_prefactor);
 
-        debug_assert_eq!(claim, recomputed_claim, "Final claim verification failed");
+        assert_eq!(claim, recomputed_claim, "Final claim verification failed");
     }
 
     (folding_challenges, last_evaluations)
@@ -511,7 +511,7 @@ pub fn evaluate_sumcheck_for_layer<F: PrimeField, E: FieldExtension<F> + Field>(
         .get(&output_layer_idx)
         .expect("claim points for output layer must exist");
 
-    debug_assert!(trace_len.is_power_of_two());
+    assert!(trace_len.is_power_of_two());
     let folding_steps = trace_len.trailing_zeros() as usize;
     assert!(folding_steps >= 4, "need at least 4 folding steps");
 
@@ -620,7 +620,7 @@ pub fn evaluate_dimension_reducing_sumcheck_for_layer<F: PrimeField, E: FieldExt
         .get(&output_layer_idx)
         .expect("claim points for output layer must exist");
 
-    debug_assert!(trace_len_after_reduction.is_power_of_two());
+    assert!(trace_len_after_reduction.is_power_of_two());
     let folding_steps = trace_len_after_reduction.trailing_zeros() as usize;
     assert!(folding_steps >= 2, "need at least 2 folding steps");
 
