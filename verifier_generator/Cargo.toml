@@ -12,7 +12,7 @@ categories.workspace = true
 [dependencies]
 prover = { workspace = true, features = ["prover"] }
 serde.workspace = true
-syn = { version = "2", features = ["extra-traits", "printing", "full"]}
+syn = { version = "2", features = ["extra-traits", "printing", "full", "visit-mut"]}
 quote = { version = "1" }
 proc-macro2 = "1"
 proc-macro-error2 = "2.0"

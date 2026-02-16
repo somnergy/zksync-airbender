@@ -1,8 +1,8 @@
 use super::*;
 
 use proc_macro2::{Span, TokenStream};
-use quote::quote;
-use syn::Ident;
+use quote::{quote, ToTokens};
+use syn::{visit_mut::VisitMut, Expr, File, Ident, Item};
 
 mod everywhere_except_last;
 mod memory_accumulators;
@@ -563,7 +563,7 @@ pub fn generate_inlined(compiled_circuit: CompiledCircuitArtifact<Mersenne31Fiel
 
     let num_different_divisors = NUM_DIFFERENT_DIVISORS;
 
-    quote! {
+    rewrite_field_ops_calls(quote! {
 
         #[allow(unused_braces, unused_mut, unused_variables)]
         unsafe fn evaluate_every_row_except_last(
@@ -842,6 +842,96 @@ pub fn generate_inlined(compiled_circuit: CompiledCircuitArtifact<Mersenne31Fiel
             quotient.add_assign(&last_row_and_zero_contribution);
 
             quotient
+        }
+    })
+}
+
+// The inlining generator still builds expressions using field trait methods.
+// For verifier code, we rewrite those method calls into `verifier_common::field_ops`
+// wrappers so host builds can switch to `#[inline(never)]` implementations.
+fn rewrite_field_ops_calls(tokens: TokenStream) -> TokenStream {
+    let mut file: File = syn::parse2(tokens).expect("generated verifier code must parse");
+    let mut rewriter = FieldOpsCallRewriter::default();
+    rewriter.visit_file_mut(&mut file);
+
+    if rewriter.rewrite_happened {
+        let has_field_ops_import = file.items.iter().any(|item| {
+            if let Item::Use(item_use) = item {
+                item_use
+                    .to_token_stream()
+                    .to_string()
+                    .contains("verifier_common :: field_ops")
+            } else {
+                false
+            }
+        });
+
+        if !has_field_ops_import {
+            file.items
+                .insert(0, syn::parse_quote! { use ::verifier_common::field_ops; });
+        }
+    }
+
+    quote! { #file }
+}
+
+#[derive(Default)]
+struct FieldOpsCallRewriter {
+    rewrite_happened: bool,
+}
+
+impl VisitMut for FieldOpsCallRewriter {
+    fn visit_expr_mut(&mut self, expr: &mut Expr) {
+        syn::visit_mut::visit_expr_mut(self, expr);
+
+        let Expr::MethodCall(method_call) = expr else {
+            return;
+        };
+
+        let method_name = method_call.method.to_string();
+        let receiver = (*method_call.receiver).clone();
+        let args: Vec<Expr> = method_call.args.iter().cloned().collect();
+
+        let replacement = match method_name.as_str() {
+            "add_assign" if args.len() == 1 => {
+                let arg = args[0].clone();
+                Some(syn::parse_quote! { field_ops::add_assign(&mut #receiver, #arg) })
+            }
+            "sub_assign" if args.len() == 1 => {
+                let arg = args[0].clone();
+                Some(syn::parse_quote! { field_ops::sub_assign(&mut #receiver, #arg) })
+            }
+            "mul_assign" if args.len() == 1 => {
+                let arg = args[0].clone();
+                Some(syn::parse_quote! { field_ops::mul_assign(&mut #receiver, #arg) })
+            }
+            "add_assign_base" if args.len() == 1 => {
+                let arg = args[0].clone();
+                Some(syn::parse_quote! { field_ops::add_assign_base(&mut #receiver, #arg) })
+            }
+            "sub_assign_base" if args.len() == 1 => {
+                let arg = args[0].clone();
+                Some(syn::parse_quote! { field_ops::sub_assign_base(&mut #receiver, #arg) })
+            }
+            "mul_assign_by_base" if args.len() == 1 => {
+                let arg = args[0].clone();
+                Some(syn::parse_quote! { field_ops::mul_assign_by_base(&mut #receiver, #arg) })
+            }
+            "negate" if args.is_empty() => {
+                Some(syn::parse_quote! { field_ops::negate(&mut #receiver) })
+            }
+            "square" if args.is_empty() => {
+                Some(syn::parse_quote! { field_ops::square(&mut #receiver) })
+            }
+            "double" if args.is_empty() => {
+                Some(syn::parse_quote! { field_ops::double(&mut #receiver) })
+            }
+            _ => None,
+        };
+
+        if let Some(replacement) = replacement {
+            self.rewrite_happened = true;
+            *expr = replacement;
         }
     }
 }

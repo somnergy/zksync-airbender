@@ -22,6 +22,21 @@ pub mod fri_folding;
 #[cfg(any(test, feature = "proof_utils"))]
 pub mod proof_flattener;
 
+pub mod inline_ops;
+pub mod no_inline_ops;
+
+/// Wrappers for common field operations used by the verifier.
+/// We use inline operations when compiling to RISC-V to maximize performance,
+/// but using inline operations on x86_64 causes compile time to explode.
+/// On host platforms we disable inlining to keep compile times sane.
+pub mod field_ops {
+    #[cfg(target_arch = "riscv32")]
+    pub use crate::inline_ops::*;
+
+    #[cfg(not(target_arch = "riscv32"))]
+    pub use crate::no_inline_ops::*;
+}
+
 pub mod structs;
 
 #[cfg(not(target_arch = "riscv32"))]
