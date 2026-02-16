@@ -278,7 +278,8 @@ where
         );
     }
 
-    debug_assert!(debug_utils::check_logup_identity(
+    #[cfg(feature = "gkr_self_checks")]
+    assert!(debug_utils::check_logup_identity(
         compiled_circuit,
         &gkr_storage,
         worker
@@ -482,7 +483,8 @@ where
         }
     }
 
-    debug_assert!(debug_utils::verify_cache_relations(
+    #[cfg(feature = "gkr_self_checks")]
+    assert!(debug_utils::verify_cache_relations(
         layer_desc,
         &base_layer_claims,
         external_challenges,
@@ -498,8 +500,8 @@ where
         let Some(value) = claims_for_layers[&0].get(&key).copied() else {
             panic!("Missing claim for {:?}", key);
         };
+        #[cfg(feature = "gkr_self_checks")]
         {
-            // self-check
             let poly = gkr_storage.get_base_layer(key);
             let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &eq_at_z[..]);
             assert_eq!(evaluation, value, "diverged for {:?}", key);
@@ -512,8 +514,8 @@ where
         let Some(value) = claims_for_layers[&0].get(&key).copied() else {
             panic!("Missing claim for {:?}", key);
         };
+        #[cfg(feature = "gkr_self_checks")]
         {
-            // self-check
             let poly = gkr_storage.get_base_layer(key);
             let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &eq_at_z[..]);
             assert_eq!(evaluation, value, "diverged for {:?}", key);
@@ -526,8 +528,8 @@ where
         let Some(value) = claims_for_layers[&0].get(&key).copied() else {
             panic!("Missing claim for {:?}", key);
         };
+        #[cfg(feature = "gkr_self_checks")]
         {
-            // self-check
             let poly = gkr_storage.get_base_layer(key);
             let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &eq_at_z[..]);
             assert_eq!(evaluation, value, "diverged for {:?}", key);
