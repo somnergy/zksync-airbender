@@ -14,6 +14,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchConstraintEvalGKRRelation
         num_witness_polys: usize,
         challenge_for_constraints: E,
     ) -> Self {
+        dbg!(num_memory_polys);
+        dbg!(num_witness_polys);
         let mut inputs = vec![GKRAddress::placeholder(); num_memory_polys + num_witness_polys];
         let mut kernel = BatchConstraintEvalGKRRelationKernel {
             quadratic_parts: vec![],
@@ -24,8 +26,14 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchConstraintEvalGKRRelation
 
         let remap_offset = |a: GKRAddress| {
             match a {
-                GKRAddress::BaseLayerMemory(offset) => offset,
-                GKRAddress::BaseLayerWitness(offset) => offset + num_memory_polys,
+                GKRAddress::BaseLayerMemory(offset) => {
+                    assert!(offset < num_memory_polys);
+                    offset
+                }
+                GKRAddress::BaseLayerWitness(offset) => {
+                    assert!(offset < num_witness_polys);
+                    offset + num_memory_polys
+                },
                 GKRAddress::Setup(..) => {
                     unreachable!()
                     // offset + self.num_memory_polys + self.num_witness_polys
@@ -38,9 +46,24 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchConstraintEvalGKRRelation
 
         for ((a, b), set) in input.quadratic_terms.iter() {
             let a_offset = remap_offset(*a);
-            inputs[a_offset] = *a;
-            let b_offset = remap_offset(*b);
-            inputs[b_offset] = *b;
+            if inputs[a_offset] == GKRAddress::placeholder() {
+                inputs[a_offset] = *a;
+            } else {
+                assert_eq!(inputs[a_offset], *a);
+            }
+
+            let b_offset = if *a != *b {
+                let b_offset = remap_offset(*b);
+                if inputs[b_offset] == GKRAddress::placeholder() {
+                    inputs[b_offset] = *b;
+                } else {
+                    assert_eq!(inputs[b_offset], *b);
+                }
+
+                b_offset
+            } else {
+                a_offset
+            };
             let mut total_prefactor = E::ZERO;
             for (c, pow) in set.iter() {
                 let mut t = challenge_for_constraints.pow(*pow as u32);
@@ -55,7 +78,11 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchConstraintEvalGKRRelation
 
         for (a, set) in input.linear_terms.iter() {
             let a_offset = remap_offset(*a);
-            inputs[a_offset] = *a;
+            if inputs[a_offset] == GKRAddress::placeholder() {
+                inputs[a_offset] = *a;
+            } else {
+                assert_eq!(inputs[a_offset], *a);
+            }
             let mut total_prefactor = E::ZERO;
             for (c, pow) in set.iter() {
                 let mut t = challenge_for_constraints.pow(*pow as u32);
@@ -72,6 +99,9 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchConstraintEvalGKRRelation
             t.mul_assign_by_base(&c);
             kernel.constant_offset.add_assign(&t);
         }
+
+        dbg!(&inputs);
+        dbg!(&kernel);
 
         Self { inputs, kernel }
     }
@@ -169,6 +199,53 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> SingleInputTypeBatchSumcheckEv
         ctx: &R0::CollapseContext,
     ) -> [E; 2] {
         let mut result = [E::ZERO; 2];
+
+        #[cfg(feature = "gkr_self_checks")]
+        {
+            let mut buffers = [E::ZERO; 2];
+            for ((a, b), challenge) in self.quadratic_parts.iter() {
+                let (a, b) = if *a != *b {
+                    let a = r0_sources[*a].get_two_points::<true>(index);
+                    let b = r0_sources[*b].get_two_points::<true>(index);
+
+                    (a, b)
+                } else {
+                    let a = r0_sources[*a].get_two_points::<true>(index);
+                    (a, a)
+                };
+
+                for i in 0..2 {
+                    let mut t = a[i];
+                    t.repr_mul_assign::<true>(&b[i]);
+                    let contribution = t.collapse_for_batch_eval(ctx, challenge);
+                    buffers[i].add_assign(&contribution);
+                }
+            }
+            for (a, challenge) in self.linear_parts.iter() {
+                let [a, b] = r0_sources[*a].get_two_points::<true>(index);
+
+                let contribution = a.collapse_for_batch_eval(ctx, challenge);
+                buffers[0].add_assign(&contribution);
+
+                let contribution = b.collapse_for_batch_eval(ctx, challenge);
+                buffers[1].add_assign(&contribution);
+            }
+
+            buffers[0].add_assign(&self.constant_offset);
+            buffers[1].add_assign(&self.constant_offset);
+
+            for i in 0..2 {
+                let part = if i == 0 { "low" } else { "high" };
+                assert_eq!(
+                    buffers[i],
+                    E::ZERO,
+                    "unsatisfied for index {} for {} part",
+                    index,
+                    part
+                );
+            }
+        }
+
         for ((a, b), challenge) in self.quadratic_parts.iter() {
             let (a, b) = if *a != *b {
                 let a = r0_sources[*a].get_f1_minus_f0_only(index);

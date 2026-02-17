@@ -75,7 +75,7 @@ pub fn evaluate_dimension_reducing_sumcheck_for_layer<F: PrimeField, E: FieldExt
         folding_steps,
         worker,
         seed,
-        true,
+        false,
     );
 
     // TODO: re-evaluate kernels over last evaluations

@@ -727,7 +727,7 @@ impl<F: PrimeField> GKRCompiler<F> {
         // - then we compute execute * (quadratic + \sum linears + \sum constants
         // let _ = layout_constraints(&mut graph, constraints, executor_machine_state.execute);
 
-        let constraints = vec![constraints[5].clone()];
+        let constraints = vec![constraints[0].clone()];
         dbg!(&constraints);
 
         let (degree_2_constraints, degree_1_constraints) =

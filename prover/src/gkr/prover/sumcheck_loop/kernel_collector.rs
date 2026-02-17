@@ -94,6 +94,8 @@ macro_rules! define_kernel_variants {
                                 let mut weighted = *claim;
                                 weighted.mul_assign(challenge);
                                 res.add_assign(&weighted);
+                            } else {
+                                panic!("Claim missing for {:?}", addr);
                             }
                         }
                         res
@@ -327,6 +329,16 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
         }
     }
 
+    pub(super) fn special_debug_register(&mut self, kernel: KernelVariant<F, E>) {
+        // TODO: these kernels have a bug in them
+        match kernel {
+            KernelVariant::EnforceConstraintsMaxQuadratic(..) => {
+                self.kernels.push(kernel);
+            }
+            _ => {},
+        }
+    }
+
     pub(super) fn compute_combined_claim(&self, output_claims: &BTreeMap<GKRAddress, E>) -> E {
         self.kernels.iter().fold(E::ZERO, |mut acc, kernel| {
             acc.add_assign(&kernel.compute_output_claim(output_claims));
@@ -366,7 +378,11 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
                 &mut collector.current_batch_challenge,
                 &batch_base,
             );
-            collector.register(kernel);
+            if layer_idx == 0 {
+                collector.special_debug_register(kernel);
+            } else {
+                collector.register(kernel);
+            }
         }
 
         collector

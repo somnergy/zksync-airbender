@@ -1,142 +1,94 @@
 use std::collections::BTreeMap;
 
 use cs::definitions::GKRAddress;
+use cs::gkr_compiler::NoFieldMaxQuadraticConstraintsGKRRelation;
 use field::{Field, FieldExtension, Mersenne31Field, Mersenne31Quartic};
 use worker::Worker;
 
 use crate::gkr::sumcheck::access_and_fold::BaseFieldPoly;
 use crate::gkr::sumcheck::eq_poly::*;
+use crate::gkr::sumcheck::evaluation_kernels::BatchConstraintEvalGKRRelation;
 use crate::gkr::sumcheck::{
-    access_and_fold::{ExtensionFieldPoly, GKRLayerSource, GKRStorage},
-    evaluation_kernels::{BatchedGKRKernel, LookupBaseMinusMultiplicityByBaseGKRRelation},
+    access_and_fold::{GKRLayerSource, GKRStorage},
+    evaluation_kernels::BatchedGKRKernel,
 };
 
 use super::*;
 
 #[test]
-fn test_base_minus_multiplicity_by_base() {
+fn test_quadratic_constraint_with_constant() {
     type F = Mersenne31Field;
     type E = Mersenne31Quartic;
 
-    const FOLDING_STEPS: usize = 4;
+    const FOLDING_STEPS: usize = 5;
     const POLY_SIZE: usize = 1 << FOLDING_STEPS;
     let worker = Worker::new_with_num_threads(1);
 
-    let a: Vec<F> = (10..(10 + POLY_SIZE))
-        .map(|el| F::from_u64_with_reduction(el as u64))
+    let a: Vec<F> = (0..POLY_SIZE)
+        .map(|el| F::from_u64_with_reduction(2))
         .collect();
-
-    // let b: Vec<F> = (10..(10 + POLY_SIZE))
-    //     .map(|el| F::from_u64_with_reduction(el as u64))
-    //     .collect();
-
-    let b: Vec<F> = vec![F::TWO; POLY_SIZE];
-
-    let c: Vec<F> = (64..(64 + POLY_SIZE))
-        .map(|el| F::from_u64_with_reduction(el as u64))
+    let b: Vec<F> = (0..POLY_SIZE)
+        .map(|el| F::from_u64_with_reduction(4))
         .collect();
-
-    let gamma = E::from_base(F::from_u64_with_reduction(2 as u64));
-
-    let mut nums = vec![];
-    let mut dens = vec![];
-
-    for ((a, b), c) in a.iter().zip(b.iter()).zip(c.iter()) {
-        // 1/a - b/c -> c - ab, ac
-
-        let mut a_den = gamma;
-        a_den.add_assign_base(a);
-
-        let mut c_den = gamma;
-        c_den.add_assign_base(c);
-
-        let mut t = a_den;
-        t.mul_assign_by_base(b);
-        let mut num = c_den;
-        num.sub_assign_base(&t);
-
-        let mut den = a_den;
-        den.mul_assign(&c_den);
-
-        nums.push(num);
-        dens.push(den);
-    }
-
-    dbg!(&nums);
-    dbg!(&dens);
 
     let mut storage = GKRStorage::<F, E>::default();
     let mut layer_0 = GKRLayerSource::default();
     layer_0.layer_idx = 0;
     layer_0.base_field_inputs.insert(
-        GKRAddress::InnerLayer {
-            layer: 0,
-            offset: 0,
-        },
+        GKRAddress::BaseLayerMemory(0),
         BaseFieldPoly::new(a.into_boxed_slice()),
     );
     layer_0.base_field_inputs.insert(
-        GKRAddress::InnerLayer {
-            layer: 0,
-            offset: 1,
-        },
+        GKRAddress::BaseLayerMemory(1),
         BaseFieldPoly::new(b.into_boxed_slice()),
-    );
-    layer_0.base_field_inputs.insert(
-        GKRAddress::InnerLayer {
-            layer: 0,
-            offset: 2,
-        },
-        BaseFieldPoly::new(c.into_boxed_slice()),
     );
     storage.layers.push(layer_0);
 
-    let mut layer_1 = GKRLayerSource::default();
-    layer_1.layer_idx = 1;
-    layer_1.extension_field_inputs.insert(
-        GKRAddress::InnerLayer {
-            layer: 1,
-            offset: 0,
-        },
-        ExtensionFieldPoly::new(nums.into_boxed_slice()),
-    );
-    layer_1.extension_field_inputs.insert(
-        GKRAddress::InnerLayer {
-            layer: 1,
-            offset: 1,
-        },
-        ExtensionFieldPoly::new(dens.into_boxed_slice()),
-    );
-    storage.layers.push(layer_1);
+    let mut minus_6 = F::from_u32_with_reduction(6);
+    minus_6.negate();
 
-    let kernel = LookupBaseMinusMultiplicityByBaseGKRRelation {
-        input: GKRAddress::InnerLayer {
-            layer: 0,
-            offset: 0,
-        },
-        setup: [
-            GKRAddress::InnerLayer {
-                layer: 0,
-                offset: 1,
-            },
-            GKRAddress::InnerLayer {
-                layer: 0,
-                offset: 2,
-            },
-        ],
-        outputs: [
-            GKRAddress::InnerLayer {
-                layer: 1,
-                offset: 0,
-            },
-            GKRAddress::InnerLayer {
-                layer: 1,
-                offset: 1,
-            },
-        ],
-        lookup_additive_challenge: gamma,
-        _marker: core::marker::PhantomData,
+    let mut minus_4 = F::from_u32_with_reduction(4);
+    minus_4.negate();
+
+    let constraint = NoFieldMaxQuadraticConstraintsGKRRelation {
+        quadratic_terms: vec![
+            (
+                (
+                    GKRAddress::BaseLayerMemory(0),
+                    GKRAddress::BaseLayerMemory(0),
+                ),
+                vec![(F::ONE.to_reduced_u32(), 0)].into_boxed_slice(),
+            ),
+            (
+                (
+                    GKRAddress::BaseLayerMemory(0),
+                    GKRAddress::BaseLayerMemory(1),
+                ),
+                vec![(F::ONE.to_reduced_u32(), 1)].into_boxed_slice(),
+            ),
+        ]
+        .into_boxed_slice(),
+        linear_terms: vec![
+            (
+                GKRAddress::BaseLayerMemory(0),
+                vec![(F::ONE.to_reduced_u32(), 0)].into_boxed_slice(),
+            ),
+            (
+                GKRAddress::BaseLayerMemory(1),
+                vec![(F::MINUS_ONE.to_reduced_u32(), 1)].into_boxed_slice(),
+            ),
+        ]
+        .into_boxed_slice(),
+        constants: vec![(minus_6.to_reduced_u32(), 0), (minus_4.to_reduced_u32(), 1)]
+            .into_boxed_slice(),
     };
+
+    let kernel = BatchConstraintEvalGKRRelation::new(
+        &constraint,
+        2,
+        0,
+        E::from_base(F::from_u32_with_reduction(0xff)),
+    );
 
     let previous_round_challenges: Vec<E> = (0..FOLDING_STEPS)
         .map(|el| E::from_base(F::from_u64_with_reduction(1u64 << (el + 1))))
@@ -146,26 +98,9 @@ fn test_base_minus_multiplicity_by_base() {
     let eq_precomputed = make_eq_poly_in_full::<E>(&previous_round_challenges);
     // dbg!(&eq_precomputed);
 
-    let batching_challenges = vec![E::ONE, E::from_base(F::from_nonreduced_u32(123))];
+    let batching_challenges = vec![E::from_base(F::from_u32_with_reduction(42))];
 
-    let mut claim = E::ZERO;
-    for i in 0..2 {
-        let mut subclaim = evaluate_with_precomputed_eq_ext::<E>(
-            &storage.layers[1]
-                .extension_field_inputs
-                .get(&GKRAddress::InnerLayer {
-                    layer: 1,
-                    offset: i,
-                })
-                .unwrap()
-                .values[..],
-            &eq_precomputed.last().unwrap()[..],
-        );
-        subclaim.mul_assign(&batching_challenges[i]);
-        claim.add_assign(&subclaim);
-    }
-
-    dbg!(claim);
+    let mut claim = E::ZERO; // constraints are satisified, so randomized sum is also 0
 
     dbg!(&batching_challenges);
 
@@ -295,20 +230,7 @@ fn test_base_minus_multiplicity_by_base() {
             // derive new claims
 
             let eq_precomputed = make_eq_poly_in_full::<E>(&folding_challenges);
-            for poly in [
-                GKRAddress::InnerLayer {
-                    layer: 0,
-                    offset: 0,
-                },
-                GKRAddress::InnerLayer {
-                    layer: 0,
-                    offset: 1,
-                },
-                GKRAddress::InnerLayer {
-                    layer: 0,
-                    offset: 2,
-                },
-            ] {
+            for poly in [GKRAddress::BaseLayerMemory(0)] {
                 let evals = &storage.layers[0]
                     .base_field_inputs
                     .get(&poly)
