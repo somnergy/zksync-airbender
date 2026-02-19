@@ -1,5 +1,4 @@
 use era_cudart::execution::{CudaLaunchConfig, Dim3, KernelFunction};
-use era_cudart::paste::paste;
 use era_cudart::result::CudaResult;
 use era_cudart::slice::DeviceSlice;
 use era_cudart::stream::CudaStream;
@@ -17,52 +16,41 @@ enum KernelFamily {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum IntraWarpBackend {
-    Shuffle,
-    WarpShared,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 struct LaunchSpec {
     family: KernelFamily,
     rounds: u32,
-    backend: IntraWarpBackend,
 }
 
-const fn spec(family: KernelFamily, rounds: u32, backend: IntraWarpBackend) -> LaunchSpec {
-    LaunchSpec {
-        family,
-        rounds,
-        backend,
-    }
+const fn spec(family: KernelFamily, rounds: u32) -> LaunchSpec {
+    LaunchSpec { family, rounds }
 }
 
 // These are the pre-tuned defaults used by the public API.
 const DEFAULT_SCHEDULES: [[LaunchSpec; 3]; 5] = [
     [
-        spec(KernelFamily::Initial, 8, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 6, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 6, IntraWarpBackend::WarpShared),
+        spec(KernelFamily::Initial, 8),
+        spec(KernelFamily::NonInitial, 6),
+        spec(KernelFamily::NonInitial, 6),
     ],
     [
-        spec(KernelFamily::Initial, 9, IntraWarpBackend::WarpShared),
-        spec(KernelFamily::NonInitial, 6, IntraWarpBackend::WarpShared),
-        spec(KernelFamily::NonInitial, 6, IntraWarpBackend::WarpShared),
+        spec(KernelFamily::Initial, 9),
+        spec(KernelFamily::NonInitial, 6),
+        spec(KernelFamily::NonInitial, 6),
     ],
     [
-        spec(KernelFamily::Initial, 9, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 7, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 6, IntraWarpBackend::WarpShared),
+        spec(KernelFamily::Initial, 8),
+        spec(KernelFamily::NonInitial, 8),
+        spec(KernelFamily::NonInitial, 6),
     ],
     [
-        spec(KernelFamily::Initial, 9, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 7, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 7, IntraWarpBackend::Shuffle),
+        spec(KernelFamily::Initial, 10),
+        spec(KernelFamily::NonInitial, 7),
+        spec(KernelFamily::NonInitial, 6),
     ],
     [
-        spec(KernelFamily::Initial, 8, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 8, IntraWarpBackend::Shuffle),
-        spec(KernelFamily::NonInitial, 8, IntraWarpBackend::WarpShared),
+        spec(KernelFamily::Initial, 8),
+        spec(KernelFamily::NonInitial, 8),
+        spec(KernelFamily::NonInitial, 8),
     ],
 ];
 
@@ -76,44 +64,37 @@ cuda_kernel_signature_arguments_and_function!(
 );
 
 macro_rules! declare_h2m_kernel {
-    ($family:ident, $rounds:literal, $backend:ident) => {
-        paste! {
-            cuda_kernel_declaration!(
-                [<ab_h2m_bitrev_bf_ $family _ $rounds _ $backend _kernel>](
-                    src: *const BF,
-                    dst: *mut BF,
-                    use_cg_loads: u32,
-                    start_stage: u32,
-                    log_rows: u32,
-                )
-            );
-        }
+    ($name:ident) => {
+        cuda_kernel_declaration!(
+            $name(
+                src: *const BF,
+                dst: *mut BF,
+                use_cg_loads: u32,
+                start_stage: u32,
+                log_rows: u32,
+            )
+        );
     };
 }
 
-declare_h2m_kernel!(initial, 8, shuffle);
-declare_h2m_kernel!(initial, 9, shuffle);
-declare_h2m_kernel!(initial, 10, shuffle);
-declare_h2m_kernel!(initial, 11, shuffle);
-declare_h2m_kernel!(initial, 12, shuffle);
-declare_h2m_kernel!(initial, 8, warp_shared);
-declare_h2m_kernel!(initial, 9, warp_shared);
-declare_h2m_kernel!(initial, 10, warp_shared);
-declare_h2m_kernel!(initial, 11, warp_shared);
-declare_h2m_kernel!(initial, 12, warp_shared);
-declare_h2m_kernel!(noninitial, 6, shuffle);
-declare_h2m_kernel!(noninitial, 7, shuffle);
-declare_h2m_kernel!(noninitial, 8, shuffle);
-declare_h2m_kernel!(noninitial, 6, warp_shared);
-declare_h2m_kernel!(noninitial, 7, warp_shared);
-declare_h2m_kernel!(noninitial, 8, warp_shared);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_initial_8_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_initial_9_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_initial_10_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_initial_11_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_initial_12_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_noninitial_6_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_noninitial_7_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_noninitial_8_kernel);
+declare_h2m_kernel!(ab_h2m_bitrev_bf_noninitial_7_128_kernel);
 
 fn default_schedule(log_rows: u32) -> [LaunchSpec; 3] {
     DEFAULT_SCHEDULES[(log_rows - MIN_LOG_ROWS) as usize]
 }
 
 fn block_threads_for_spec(spec: LaunchSpec) -> u32 {
-    if spec.family == KernelFamily::NonInitial {
+    if spec.family == KernelFamily::NonInitial && spec.rounds == 7 {
+        128
+    } else if spec.family == KernelFamily::NonInitial {
         256
     } else if spec.rounds <= 7 {
         128
@@ -122,65 +103,32 @@ fn block_threads_for_spec(spec: LaunchSpec) -> u32 {
     }
 }
 
-fn noninitial_tile_subproblems(rounds: u32) -> usize {
-    match rounds {
-        6 => 128,
-        7 => 64,
-        8 => 32,
-        _ => panic!("unsupported noninitial rounds: {rounds}"),
+fn noninitial_tile_subproblems(spec: LaunchSpec) -> usize {
+    match (spec.rounds, block_threads_for_spec(spec)) {
+        (6, 256) => 128,
+        (7, 256) => 64,
+        (7, 128) => 32,
+        (8, 256) => 32,
+        _ => panic!("unsupported noninitial spec: {spec:?}"),
     }
 }
 
 fn resolve_kernel(spec: LaunchSpec) -> HypercubeBitrevBfSignature {
-    match (spec.family, spec.rounds, spec.backend) {
-        (KernelFamily::Initial, 8, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_initial_8_shuffle_kernel
+    match (spec.family, spec.rounds) {
+        (KernelFamily::Initial, 8) => ab_h2m_bitrev_bf_initial_8_kernel,
+        (KernelFamily::Initial, 9) => ab_h2m_bitrev_bf_initial_9_kernel,
+        (KernelFamily::Initial, 10) => ab_h2m_bitrev_bf_initial_10_kernel,
+        (KernelFamily::Initial, 11) => ab_h2m_bitrev_bf_initial_11_kernel,
+        (KernelFamily::Initial, 12) => ab_h2m_bitrev_bf_initial_12_kernel,
+        (KernelFamily::NonInitial, 6) => ab_h2m_bitrev_bf_noninitial_6_kernel,
+        (KernelFamily::NonInitial, 7) => {
+            if block_threads_for_spec(spec) == 128 {
+                ab_h2m_bitrev_bf_noninitial_7_128_kernel
+            } else {
+                ab_h2m_bitrev_bf_noninitial_7_kernel
+            }
         }
-        (KernelFamily::Initial, 9, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_initial_9_shuffle_kernel
-        }
-        (KernelFamily::Initial, 10, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_initial_10_shuffle_kernel
-        }
-        (KernelFamily::Initial, 11, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_initial_11_shuffle_kernel
-        }
-        (KernelFamily::Initial, 12, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_initial_12_shuffle_kernel
-        }
-        (KernelFamily::Initial, 8, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_initial_8_warp_shared_kernel
-        }
-        (KernelFamily::Initial, 9, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_initial_9_warp_shared_kernel
-        }
-        (KernelFamily::Initial, 10, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_initial_10_warp_shared_kernel
-        }
-        (KernelFamily::Initial, 11, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_initial_11_warp_shared_kernel
-        }
-        (KernelFamily::Initial, 12, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_initial_12_warp_shared_kernel
-        }
-        (KernelFamily::NonInitial, 6, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_noninitial_6_shuffle_kernel
-        }
-        (KernelFamily::NonInitial, 7, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_noninitial_7_shuffle_kernel
-        }
-        (KernelFamily::NonInitial, 8, IntraWarpBackend::Shuffle) => {
-            ab_h2m_bitrev_bf_noninitial_8_shuffle_kernel
-        }
-        (KernelFamily::NonInitial, 6, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_noninitial_6_warp_shared_kernel
-        }
-        (KernelFamily::NonInitial, 7, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_noninitial_7_warp_shared_kernel
-        }
-        (KernelFamily::NonInitial, 8, IntraWarpBackend::WarpShared) => {
-            ab_h2m_bitrev_bf_noninitial_8_warp_shared_kernel
-        }
+        (KernelFamily::NonInitial, 8) => ab_h2m_bitrev_bf_noninitial_8_kernel,
         _ => panic!("unsupported launch spec: {spec:?}"),
     }
 }
@@ -216,7 +164,7 @@ fn launch_with_schedule(
         let grid_x = if spec.family == KernelFamily::Initial {
             subproblems
         } else {
-            let tile = noninitial_tile_subproblems(spec.rounds);
+            let tile = noninitial_tile_subproblems(spec);
             assert_eq!(subproblems % tile, 0);
             subproblems / tile
         };
@@ -284,7 +232,7 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf_in_place(
         let grid_x = if spec.family == KernelFamily::Initial {
             subproblems
         } else {
-            let tile = noninitial_tile_subproblems(spec.rounds);
+            let tile = noninitial_tile_subproblems(spec);
             assert_eq!(subproblems % tile, 0);
             subproblems / tile
         };
@@ -438,29 +386,6 @@ mod tests {
     #[test]
     #[ignore]
     fn tune_schedules_log20_to_24() {
-        let backend_sets = [
-            [
-                IntraWarpBackend::Shuffle,
-                IntraWarpBackend::Shuffle,
-                IntraWarpBackend::Shuffle,
-            ],
-            [
-                IntraWarpBackend::WarpShared,
-                IntraWarpBackend::Shuffle,
-                IntraWarpBackend::Shuffle,
-            ],
-            [
-                IntraWarpBackend::Shuffle,
-                IntraWarpBackend::Shuffle,
-                IntraWarpBackend::WarpShared,
-            ],
-            [
-                IntraWarpBackend::WarpShared,
-                IntraWarpBackend::WarpShared,
-                IntraWarpBackend::WarpShared,
-            ],
-        ];
-
         let split_candidates: &[(u32, &[[u32; 3]])] = &[
             (20, &[[8, 6, 6]]),
             (21, &[[8, 7, 6], [9, 6, 6]]),
@@ -492,34 +417,31 @@ mod tests {
                     continue;
                 }
 
-                for backends in backend_sets {
-                    let schedule = [
-                        spec(KernelFamily::Initial, split[0], backends[0]),
-                        spec(KernelFamily::NonInitial, split[1], backends[1]),
-                        spec(KernelFamily::NonInitial, split[2], backends[2]),
-                    ];
-                    let now = Instant::now();
-                    for repeat_idx in 0..repeats {
-                        if let Err(err) = launch_with_schedule(&d_src, &mut d_dst, &schedule, &stream)
-                        {
-                            panic!(
-                                "launch failure: log_rows={log_rows}, split={split:?}, backends={backends:?}, repeat={repeat_idx}, error={err:?}"
-                            );
-                        }
-                        if let Err(err) = stream.synchronize() {
-                            panic!(
-                                "sync failure: log_rows={log_rows}, split={split:?}, backends={backends:?}, repeat={repeat_idx}, error={err:?}"
-                            );
-                        }
+                let schedule = [
+                    spec(KernelFamily::Initial, split[0]),
+                    spec(KernelFamily::NonInitial, split[1]),
+                    spec(KernelFamily::NonInitial, split[2]),
+                ];
+                let now = Instant::now();
+                for repeat_idx in 0..repeats {
+                    if let Err(err) = launch_with_schedule(&d_src, &mut d_dst, &schedule, &stream) {
+                        panic!(
+                            "launch failure: log_rows={log_rows}, split={split:?}, repeat={repeat_idx}, error={err:?}"
+                        );
                     }
-                    let elapsed = now.elapsed().as_secs_f64();
+                    if let Err(err) = stream.synchronize() {
+                        panic!(
+                            "sync failure: log_rows={log_rows}, split={split:?}, repeat={repeat_idx}, error={err:?}"
+                        );
+                    }
+                }
+                let elapsed = now.elapsed().as_secs_f64();
 
-                    let bytes_per_run = (rows * size_of::<BF>() * 2 * 3) as f64;
-                    let gbps = (bytes_per_run * repeats as f64) / elapsed / 1e9;
-                    if gbps > best_gbps {
-                        best_gbps = gbps;
-                        best_label = format!("split={split:?}, backends={backends:?}");
-                    }
+                let bytes_per_run = (rows * size_of::<BF>() * 2 * 3) as f64;
+                let gbps = (bytes_per_run * repeats as f64) / elapsed / 1e9;
+                if gbps > best_gbps {
+                    best_gbps = gbps;
+                    best_label = format!("split={split:?}");
                 }
             }
 
