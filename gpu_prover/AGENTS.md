@@ -28,6 +28,8 @@
 - Test: `cargo test -p gpu_prover`
 - Benches: `cargo bench -p gpu_prover`
 - Some tests are compute-intensive and should not be run in debug mode; use release mode for those tests: `cargo test -p gpu_prover --release`.
+- When cargo warnings are not relevant to the task, run cargo commands with `RUSTFLAGS="-Awarnings"` to keep output focused.
+- For profiling (`ncu`, `nsys`), first build the target binary/test, then run the profiler on the produced executable directly (do not profile `cargo ...` invocation).
 
 ## Build Script Boundaries
 - `build/main.rs` is the only Rust entrypoint that wires CMake.
