@@ -40,7 +40,7 @@ pub trait BaseFieldInOutFixedSizesEvaluationKernel<
             }
             {
                 let sources = sources.each_ref().map(|el| el.get_f1_minus_f0_only(index));
-                let evals = self.pointwise_eval(&sources);
+                let evals = self.pointwise_eval_quadratic_term_only(&sources);
                 let mut eval = batch_challenges[0];
                 eval.mul_assign_by_base(&evals[0].0);
                 for i in 0..OUT {
@@ -94,9 +94,13 @@ pub trait BaseFieldInOutFixedSizesEvaluationKernel<
                 result[0].write(eval);
             }
 
-            // quadratic ony only
+            // quadratic ony only, unless we want plain evaluations
             {
-                let evals = self.pointwise_eval_quadratic_term_only(&p1s);
+                let evals = if EXPLICIT_FORM {
+                    self.pointwise_eval(&p1s)
+                } else {
+                    self.pointwise_eval_quadratic_term_only(&p1s)
+                };
                 let mut eval =
                     evals[0].collapse_into_ext_with_challenge(collapse_ctx, &batch_challenges[0]);
                 for i in 0..OUT {

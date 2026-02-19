@@ -1231,14 +1231,6 @@ where
             );
 
             query_references.push((query_index, query_point, folded));
-
-            // check against explicit form
-            let eval_from_monomial = evaluate_monomial_form(
-                &sumchecked_poly_monomial_form,
-                &E::from_base(query_point),
-                worker,
-            );
-            // assert_eq!(eval_from_monomial, folded);
         }
         drop(rs_oracle_to_query);
 

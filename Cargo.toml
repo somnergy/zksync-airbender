@@ -201,6 +201,16 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 debug = false
+strip = true
+
+[profile.verifier]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+debug = false
+strip = true
+incremental = false
 
 # Special profile for compiling the cli tool.
 # that is doing some optimizations (otherwise proving is too slow)

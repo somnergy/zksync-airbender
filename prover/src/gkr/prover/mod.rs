@@ -245,8 +245,8 @@ where
 
     // Now we can use lookup challenges to preprocess tables into values like (column_0 + alpha * column_1 + ... + additive_part)
     let (
-        preprocessed_range_check_16,
-        preprocessed_timestamp_range_checks,
+        _preprocessed_range_check_16,
+        _preprocessed_timestamp_range_checks,
         preprocessed_generic_lookup,
     ) = setup.preprocess_lookups(
         compiled_circuit,
@@ -269,8 +269,6 @@ where
             external_challenges,
             &mut witness_eval_data,
             trace_len,
-            &preprocessed_range_check_16,
-            &preprocessed_timestamp_range_checks,
             &preprocessed_generic_lookup,
             lookup_additive_part,
             constraints_batch_challenge,
@@ -487,8 +485,6 @@ where
         external_challenges,
     ));
 
-    drop(preprocessed_range_check_16);
-    drop(preprocessed_timestamp_range_checks);
     drop(preprocessed_generic_lookup);
 
     let mut mem_polys_claims = Vec::with_capacity(compiled_circuit.memory_layout.total_width);
