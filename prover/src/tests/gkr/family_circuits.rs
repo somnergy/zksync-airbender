@@ -450,6 +450,11 @@ pub fn gkr_run_basic_unrolled_test_impl(
                 );
             println!("Proving time is {:?}", now.elapsed());
 
+            println!(
+                "Estimated proof size without compression is {} bytes",
+                proof.estimate_size()
+            );
+
             if is_empty {
                 assert_eq!(proof.grand_product_accumulator_computed, BabyBearExt4::ONE);
             }

@@ -74,6 +74,23 @@ pub struct GKRProof<
     pub grand_product_accumulator_computed: E,
 }
 
+impl<F: PrimeField, E: FieldExtension<F> + Field, T: ColumnMajorMerkleTreeConstructor<F>>
+    GKRProof<F, E, T>
+{
+    pub fn estimate_size(&self) -> usize {
+        self.final_explicit_evaluations
+            .iter()
+            .map(|(_, v)| E::DEGREE * core::mem::size_of::<u32>() * (v[0].len() + v[1].len()))
+            .sum::<usize>()
+            + self
+                .sumcheck_intermediate_values
+                .iter()
+                .map(|(_, v)| v.estimate_size())
+                .sum::<usize>()
+            + self.whir_proof.estimate_size()
+    }
+}
+
 #[serde_with::serde_as]
 #[derive(Clone, Debug, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(
@@ -85,6 +102,17 @@ pub struct SumcheckIntermediateProofValues<F: PrimeField, E: FieldExtension<F> +
     #[serde_as(as = "Vec<(_, _)>")]
     pub final_step_evaluations: BTreeMap<GKRAddress, Vec<E>>,
     pub _marker: core::marker::PhantomData<F>,
+}
+
+impl<F: PrimeField, E: FieldExtension<F> + Field> SumcheckIntermediateProofValues<F, E> {
+    pub fn estimate_size(&self) -> usize {
+        self.internal_round_coefficients.len() * E::DEGREE * 4 * core::mem::size_of::<u32>()
+            + self
+                .final_step_evaluations
+                .iter()
+                .map(|(_, v)| E::DEGREE * core::mem::size_of::<u32>() * v.len())
+                .sum::<usize>()
+    }
 }
 
 #[derive(Clone, Debug)]
