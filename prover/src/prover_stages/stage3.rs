@@ -123,13 +123,13 @@ pub fn prover_stage_3<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
     );
 
     let mut it = transcript_challenges.as_chunks::<4>().0.iter();
-    let quotient_alpha = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let quotient_alpha = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );
-    let quotient_beta = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let quotient_beta = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );

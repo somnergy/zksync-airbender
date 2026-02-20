@@ -183,9 +183,7 @@ pub fn prove_configured_for_unrolled_circuits<
     flatten_merkle_caps_into(&stage_2_output.trees, &mut transcript_input);
     // and memory grand product
     transcript_input.extend(
-        stage_2_output
-            .grand_product_accumulator
-            .into_coeffs_in_base()
+        mersenne_quartic_into_base_coeffs(stage_2_output.grand_product_accumulator)
             .map(|el: Mersenne31Field| el.to_reduced_u32()),
     );
     // and delegation argument scalar
@@ -195,9 +193,7 @@ pub fn prove_configured_for_unrolled_circuits<
         .is_some()
     {
         transcript_input.extend(
-            stage_2_output
-                .sum_over_delegation_poly
-                .into_coeffs_in_base()
+            mersenne_quartic_into_base_coeffs(stage_2_output.sum_over_delegation_poly)
                 .map(|el: Mersenne31Field| el.to_reduced_u32()),
         );
     }

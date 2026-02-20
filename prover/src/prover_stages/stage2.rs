@@ -76,14 +76,14 @@ pub fn prover_stage_2<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
     let mut it = transcript_challenges.as_chunks::<4>().0.iter();
     let lookup_argument_linearization_challenges: [Mersenne31Quartic;
         NUM_LOOKUP_ARGUMENT_LINEARIZATION_CHALLENGES] = std::array::from_fn(|_| {
-        Mersenne31Quartic::from_coeffs_in_base(
-            &it.next()
+        mersenne_quartic_from_base_coeffs(
+            it.next()
                 .unwrap()
                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
         )
     });
-    let lookup_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let lookup_argument_gamma = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );

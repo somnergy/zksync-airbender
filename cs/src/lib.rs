@@ -1,5 +1,5 @@
-#![allow(type_alias_bounds)]
 #![cfg_attr(not(feature = "compiler"), no_std)]
+#![allow(type_alias_bounds)]
 #![allow(incomplete_features)]
 #![feature(generic_const_exprs)]
 #![feature(iter_advance_by)]

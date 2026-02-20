@@ -153,8 +153,8 @@ pub fn prover_stage_5<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
             foldings_pow_challenges.push(pow_challenge);
 
             let mut it = transcript_challenges.as_chunks::<4>().0.iter();
-            let challenge = Mersenne31Quartic::from_coeffs_in_base(
-                &it.next()
+            let challenge = mersenne_quartic_from_base_coeffs(
+                it.next()
                     .unwrap()
                     .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
             );
@@ -294,8 +294,7 @@ pub fn prover_stage_5<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
                 let mut subvec = Vec::with_capacity(domain.len());
                 for el in domain.iter() {
                     subvec.push(*el);
-                    let el = el
-                        .into_coeffs_in_base()
+                    let el = mersenne_quartic_into_base_coeffs(*el)
                         .map(|el: Mersenne31Field| el.to_reduced_u32());
                     transcript_input.extend(el);
                 }
@@ -340,8 +339,8 @@ pub fn prover_stage_5<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
             foldings_pow_challenges.push(pow_challenge);
 
             let mut it = transcript_challenges.as_chunks::<4>().0.iter();
-            let challenge = Mersenne31Quartic::from_coeffs_in_base(
-                &it.next()
+            let challenge = mersenne_quartic_from_base_coeffs(
+                it.next()
                     .unwrap()
                     .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
             );
@@ -426,7 +425,7 @@ pub fn prover_stage_5<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
         monomial_coefficients
             .iter()
             .map(|el| {
-                el.into_coeffs_in_base()
+                mersenne_quartic_into_base_coeffs(*el)
                     .map(|el: Mersenne31Field| el.to_reduced_u32())
             })
             .flatten(),

@@ -2,6 +2,7 @@ use super::*;
 use crate::definitions::*;
 use crate::merkle_trees::DefaultTreeConstructor;
 use crate::merkle_trees::MerkleTreeConstructor;
+use crate::utils::*;
 use ::field::*;
 use blake2s_u32::BLAKE2S_DIGEST_SIZE_U32_WORDS;
 use cs::definitions::*;
@@ -610,9 +611,7 @@ pub fn prove_configured<const N: usize, A: GoodAllocator, T: MerkleTreeConstruct
     flatten_merkle_caps_into(&stage_2_output.trees, &mut transcript_input);
     // and memory grand product
     transcript_input.extend(
-        stage_2_output
-            .grand_product_accumulator
-            .into_coeffs_in_base()
+        mersenne_quartic_into_base_coeffs(stage_2_output.grand_product_accumulator)
             .map(|el: Mersenne31Field| el.to_reduced_u32()),
     );
     // and delegation argument scalar
@@ -622,9 +621,7 @@ pub fn prove_configured<const N: usize, A: GoodAllocator, T: MerkleTreeConstruct
         .is_some()
     {
         transcript_input.extend(
-            stage_2_output
-                .sum_over_delegation_poly
-                .into_coeffs_in_base()
+            mersenne_quartic_into_base_coeffs(stage_2_output.sum_over_delegation_poly)
                 .map(|el: Mersenne31Field| el.to_reduced_u32()),
         );
     }

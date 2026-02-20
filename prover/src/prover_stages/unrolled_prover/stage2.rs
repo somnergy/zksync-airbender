@@ -62,14 +62,14 @@ pub fn prover_stage_2_for_unrolled_circuit<
         let mut it = transcript_challenges.as_chunks::<4>().0.into_iter();
         let lookup_argument_linearization_challenges: [Mersenne31Quartic;
             NUM_LOOKUP_ARGUMENT_LINEARIZATION_CHALLENGES] = std::array::from_fn(|_| {
-            Mersenne31Quartic::from_coeffs_in_base(
-                &it.next()
+            mersenne_quartic_from_base_coeffs(
+                it.next()
                     .unwrap()
                     .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
             )
         });
-        let lookup_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-            &it.next()
+        let lookup_argument_gamma = mersenne_quartic_from_base_coeffs(
+            it.next()
                 .unwrap()
                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
         );
@@ -77,14 +77,14 @@ pub fn prover_stage_2_for_unrolled_circuit<
         let decoder_lookup_linearization_challenges: [Mersenne31Quartic;
             EXECUTOR_FAMILY_CIRCUIT_DECODER_TABLE_LINEARIZATION_CHALLENGES] =
             std::array::from_fn(|_| {
-                Mersenne31Quartic::from_coeffs_in_base(
-                    &it.next()
+                mersenne_quartic_from_base_coeffs(
+                    it.next()
                         .unwrap()
                         .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                 )
             });
-        let decoder_lookup_gamma = Mersenne31Quartic::from_coeffs_in_base(
-            &it.next()
+        let decoder_lookup_gamma = mersenne_quartic_from_base_coeffs(
+            it.next()
                 .unwrap()
                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
         );
@@ -108,14 +108,14 @@ pub fn prover_stage_2_for_unrolled_circuit<
         let mut it = transcript_challenges.as_chunks::<4>().0.into_iter();
         let lookup_argument_linearization_challenges: [Mersenne31Quartic;
             NUM_LOOKUP_ARGUMENT_LINEARIZATION_CHALLENGES] = std::array::from_fn(|_| {
-            Mersenne31Quartic::from_coeffs_in_base(
-                &it.next()
+            mersenne_quartic_from_base_coeffs(
+                it.next()
                     .unwrap()
                     .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
             )
         });
-        let lookup_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-            &it.next()
+        let lookup_argument_gamma = mersenne_quartic_from_base_coeffs(
+            it.next()
                 .unwrap()
                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
         );

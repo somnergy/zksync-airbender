@@ -8,6 +8,9 @@ mod leaf_inclusion_verifier;
 mod optimal_folding;
 pub mod sumcheck_kernel;
 
+use crate::utils::mersenne_quartic_from_base_coeffs;
+use crate::utils::mersenne_quartic_into_base_coeffs;
+
 pub use self::hash_like_holder::*;
 pub use self::leaf_inclusion_verifier::*;
 pub use self::optimal_folding::*;
@@ -38,17 +41,14 @@ impl ExternalMemoryArgumentChallenges {
         let mut it = result.iter_mut();
 
         for el in self.memory_argument_linearization_challenges.iter() {
-            let flattened = el
-                .into_coeffs_in_base()
+            let flattened = mersenne_quartic_into_base_coeffs(*el)
                 .map(|el: Mersenne31Field| el.to_reduced_u32());
             for src in flattened.into_iter() {
                 *it.next().unwrap() = src;
             }
         }
 
-        let flattened = self
-            .memory_argument_gamma
-            .into_coeffs_in_base()
+        let flattened = mersenne_quartic_into_base_coeffs(self.memory_argument_gamma)
             .map(|el: Mersenne31Field| el.to_reduced_u32());
         for src in flattened.into_iter() {
             *it.next().unwrap() = src;
@@ -83,17 +83,14 @@ impl ExternalDelegationArgumentChallenges {
         let mut it = result.iter_mut();
 
         for el in self.delegation_argument_linearization_challenges.iter() {
-            let flattened = el
-                .into_coeffs_in_base()
+            let flattened = mersenne_quartic_into_base_coeffs(*el)
                 .map(|el: Mersenne31Field| el.to_reduced_u32());
             for src in flattened.into_iter() {
                 *it.next().unwrap() = src;
             }
         }
 
-        let flattened = self
-            .delegation_argument_gamma
-            .into_coeffs_in_base()
+        let flattened = mersenne_quartic_into_base_coeffs(self.delegation_argument_gamma)
             .map(|el: Mersenne31Field| el.to_reduced_u32());
         for src in flattened.into_iter() {
             *it.next().unwrap() = src;
@@ -121,17 +118,14 @@ impl ExternalMachineStateArgumentChallenges {
         let mut it = result.iter_mut();
 
         for el in self.linearization_challenges.iter() {
-            let flattened = el
-                .into_coeffs_in_base()
+            let flattened = mersenne_quartic_into_base_coeffs(*el)
                 .map(|el: Mersenne31Field| el.to_reduced_u32());
             for src in flattened.into_iter() {
                 *it.next().unwrap() = src;
             }
         }
 
-        let flattened = self
-            .additive_term
-            .into_coeffs_in_base()
+        let flattened = mersenne_quartic_into_base_coeffs(self.additive_term)
             .map(|el: Mersenne31Field| el.to_reduced_u32());
         for src in flattened.into_iter() {
             *it.next().unwrap() = src;
@@ -160,17 +154,14 @@ impl ExternalMachineIntermediateStateArgumentChallenges {
         let mut it = result.iter_mut();
 
         for el in self.linearization_challenges.iter() {
-            let flattened = el
-                .into_coeffs_in_base()
+            let flattened = mersenne_quartic_into_base_coeffs(*el)
                 .map(|el: Mersenne31Field| el.to_reduced_u32());
             for src in flattened.into_iter() {
                 *it.next().unwrap() = src;
             }
         }
 
-        let flattened = self
-            .additive_term
-            .into_coeffs_in_base()
+        let flattened = mersenne_quartic_into_base_coeffs(self.additive_term)
             .map(|el: Mersenne31Field| el.to_reduced_u32());
         for src in flattened.into_iter() {
             *it.next().unwrap() = src;
@@ -212,14 +203,14 @@ impl ExternalChallenges {
                     let mut it = transcript_challenges[1..].as_chunks::<4>().0.iter();
                     let memory_argument_linearization_challenges: [Mersenne31Quartic;
                         NUM_MEM_ARGUMENT_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                        Mersenne31Quartic::from_coeffs_in_base(
-                            &it.next()
+                        mersenne_quartic_from_base_coeffs(
+                            it.next()
                                 .unwrap_unchecked()
                                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                         )
                     });
-                    let memory_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    let memory_argument_gamma = mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -243,14 +234,14 @@ impl ExternalChallenges {
                     let mut it = transcript_challenges.as_chunks::<4>().0.iter();
                     let memory_argument_linearization_challenges: [Mersenne31Quartic;
                         NUM_MEM_ARGUMENT_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                        Mersenne31Quartic::from_coeffs_in_base(
-                            &it.next()
+                        mersenne_quartic_from_base_coeffs(
+                            it.next()
                                 .unwrap_unchecked()
                                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                         )
                     });
-                    let memory_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    let memory_argument_gamma = mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -281,14 +272,14 @@ impl ExternalChallenges {
                     let mut it = transcript_challenges[1..].as_chunks::<4>().0.iter();
                     let memory_argument_linearization_challenges: [Mersenne31Quartic;
                         NUM_MEM_ARGUMENT_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                        Mersenne31Quartic::from_coeffs_in_base(
-                            &it.next()
+                        mersenne_quartic_from_base_coeffs(
+                            it.next()
                                 .unwrap_unchecked()
                                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                         )
                     });
-                    let memory_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    let memory_argument_gamma = mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -296,14 +287,14 @@ impl ExternalChallenges {
                     let delegation_argument_linearization_challenges: [Mersenne31Quartic;
                         NUM_DELEGATION_ARGUMENT_LINEARIZATION_CHALLENGES] =
                         core::array::from_fn(|_| {
-                            Mersenne31Quartic::from_coeffs_in_base(
-                                &it.next()
+                            mersenne_quartic_from_base_coeffs(
+                                it.next()
                                     .unwrap_unchecked()
                                     .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                             )
                         });
-                    let delegation_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    let delegation_argument_gamma = mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -336,14 +327,14 @@ impl ExternalChallenges {
                     let mut it = transcript_challenges.as_chunks::<4>().0.iter();
                     let memory_argument_linearization_challenges: [Mersenne31Quartic;
                         NUM_MEM_ARGUMENT_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                        Mersenne31Quartic::from_coeffs_in_base(
-                            &it.next()
+                        mersenne_quartic_from_base_coeffs(
+                            it.next()
                                 .unwrap_unchecked()
                                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                         )
                     });
-                    let memory_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    let memory_argument_gamma = mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -351,14 +342,14 @@ impl ExternalChallenges {
                     let delegation_argument_linearization_challenges: [Mersenne31Quartic;
                         NUM_DELEGATION_ARGUMENT_LINEARIZATION_CHALLENGES] =
                         core::array::from_fn(|_| {
-                            Mersenne31Quartic::from_coeffs_in_base(
-                                &it.next()
+                            mersenne_quartic_from_base_coeffs(
+                                it.next()
                                     .unwrap_unchecked()
                                     .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                             )
                         });
-                    let delegation_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    let delegation_argument_gamma = mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -409,14 +400,14 @@ impl ExternalChallenges {
                 let mut it = transcript_challenges[1..].as_chunks::<4>().0.iter();
                 let memory_argument_linearization_challenges: [Mersenne31Quartic;
                     NUM_MEM_ARGUMENT_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                    Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     )
                 });
-                let memory_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                    &it.next()
+                let memory_argument_gamma = mersenne_quartic_from_base_coeffs(
+                    it.next()
                         .unwrap_unchecked()
                         .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                 );
@@ -424,30 +415,30 @@ impl ExternalChallenges {
                 let delegation_argument_linearization_challenges: [Mersenne31Quartic;
                     NUM_DELEGATION_ARGUMENT_LINEARIZATION_CHALLENGES] =
                     core::array::from_fn(|_| {
-                        Mersenne31Quartic::from_coeffs_in_base(
-                            &it.next()
+                        mersenne_quartic_from_base_coeffs(
+                            it.next()
                                 .unwrap_unchecked()
                                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                         )
                     });
-                let delegation_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                    &it.next()
+                let delegation_argument_gamma = mersenne_quartic_from_base_coeffs(
+                    it.next()
                         .unwrap_unchecked()
                         .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                 );
 
                 let machine_state_permutation_argument_linearization_challenges: [Mersenne31Quartic;
                     NUM_MACHINE_STATE_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                    Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     )
                 });
 
                 let machine_state_permutation_argument_additive_term =
-                    Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );
@@ -488,14 +479,14 @@ impl ExternalChallenges {
                 let mut it = transcript_challenges.as_chunks::<4>().0.iter();
                 let memory_argument_linearization_challenges: [Mersenne31Quartic;
                     NUM_MEM_ARGUMENT_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                    Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     )
                 });
-                let memory_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                    &it.next()
+                let memory_argument_gamma = mersenne_quartic_from_base_coeffs(
+                    it.next()
                         .unwrap_unchecked()
                         .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                 );
@@ -503,30 +494,30 @@ impl ExternalChallenges {
                 let delegation_argument_linearization_challenges: [Mersenne31Quartic;
                     NUM_DELEGATION_ARGUMENT_LINEARIZATION_CHALLENGES] =
                     core::array::from_fn(|_| {
-                        Mersenne31Quartic::from_coeffs_in_base(
-                            &it.next()
+                        mersenne_quartic_from_base_coeffs(
+                            it.next()
                                 .unwrap_unchecked()
                                 .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                         )
                     });
-                let delegation_argument_gamma = Mersenne31Quartic::from_coeffs_in_base(
-                    &it.next()
+                let delegation_argument_gamma = mersenne_quartic_from_base_coeffs(
+                    it.next()
                         .unwrap_unchecked()
                         .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                 );
 
                 let machine_state_permutation_argument_linearization_challenges: [Mersenne31Quartic;
                     NUM_MACHINE_STATE_LINEARIZATION_CHALLENGES] = core::array::from_fn(|_| {
-                    Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     )
                 });
 
                 let machine_state_permutation_argument_additive_term =
-                    Mersenne31Quartic::from_coeffs_in_base(
-                        &it.next()
+                    mersenne_quartic_from_base_coeffs(
+                        it.next()
                             .unwrap_unchecked()
                             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
                     );

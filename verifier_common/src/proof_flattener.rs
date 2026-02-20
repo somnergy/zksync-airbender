@@ -6,6 +6,7 @@ use prover::field::*;
 use prover::merkle_trees::MerkleTreeCapVarLength;
 use prover::prover_stages::unrolled_prover::UnrolledModeProof;
 use prover::prover_stages::{Proof, QuerySet};
+use prover::utils::*;
 
 fn flatten_merkle_caps_into<A: Allocator>(trees: &[MerkleTreeCapVarLength], dst: &mut Vec<u32, A>) {
     for subtree in trees.iter() {
@@ -59,15 +60,12 @@ pub fn flatten_proof_for_skeleton(proof: &Proof, lazy_inits_and_teardowns_len: u
     flatten_merkle_caps_into(&proof.stage_2_tree_caps, &mut result);
     // grand product and delegation accumulators
     result.extend(
-        proof
-            .memory_grand_product_accumulator
-            .into_coeffs_in_base()
+        mersenne_quartic_into_base_coeffs(proof.memory_grand_product_accumulator)
             .map(|el: Mersenne31Field| el.to_reduced_u32()),
     );
     if let Some(delegation_argument_accumulator) = proof.delegation_argument_accumulator {
         result.extend(
-            delegation_argument_accumulator
-                .into_coeffs_in_base()
+            mersenne_quartic_into_base_coeffs(delegation_argument_accumulator)
                 .map(|el: Mersenne31Field| el.to_reduced_u32()),
         );
     }
@@ -78,7 +76,7 @@ pub fn flatten_proof_for_skeleton(proof: &Proof, lazy_inits_and_teardowns_len: u
             .evaluations_at_random_points
             .iter()
             .map(|el| {
-                el.into_coeffs_in_base()
+                mersenne_quartic_into_base_coeffs(*el)
                     .map(|el: Mersenne31Field| el.to_reduced_u32())
             })
             .flatten(),
@@ -92,7 +90,7 @@ pub fn flatten_proof_for_skeleton(proof: &Proof, lazy_inits_and_teardowns_len: u
             result.extend(
                 el.iter()
                     .map(|el| {
-                        el.into_coeffs_in_base()
+                        mersenne_quartic_into_base_coeffs(*el)
                             .map(|el: Mersenne31Field| el.to_reduced_u32())
                     })
                     .flatten(),
@@ -104,7 +102,7 @@ pub fn flatten_proof_for_skeleton(proof: &Proof, lazy_inits_and_teardowns_len: u
             .final_monomial_form
             .iter()
             .map(|el| {
-                el.into_coeffs_in_base()
+                mersenne_quartic_into_base_coeffs(*el)
                     .map(|el: Mersenne31Field| el.to_reduced_u32())
             })
             .flatten(),
@@ -186,15 +184,12 @@ pub fn flatten_unrolled_circuits_proof_for_skeleton(
     flatten_merkle_caps_into(&proof.stage_2_tree_caps, &mut result);
     // grand product and delegation accumulators
     result.extend(
-        proof
-            .permutation_grand_product_accumulator
-            .into_coeffs_in_base()
+        mersenne_quartic_into_base_coeffs(proof.permutation_grand_product_accumulator)
             .map(|el: Mersenne31Field| el.to_reduced_u32()),
     );
     if let Some(delegation_argument_accumulator) = proof.delegation_argument_accumulator {
         result.extend(
-            delegation_argument_accumulator
-                .into_coeffs_in_base()
+            mersenne_quartic_into_base_coeffs(delegation_argument_accumulator)
                 .map(|el: Mersenne31Field| el.to_reduced_u32()),
         );
     }
@@ -205,7 +200,7 @@ pub fn flatten_unrolled_circuits_proof_for_skeleton(
             .evaluations_at_random_points
             .iter()
             .map(|el| {
-                el.into_coeffs_in_base()
+                mersenne_quartic_into_base_coeffs(*el)
                     .map(|el: Mersenne31Field| el.to_reduced_u32())
             })
             .flatten(),
@@ -219,7 +214,7 @@ pub fn flatten_unrolled_circuits_proof_for_skeleton(
             result.extend(
                 el.iter()
                     .map(|el| {
-                        el.into_coeffs_in_base()
+                        mersenne_quartic_into_base_coeffs(*el)
                             .map(|el: Mersenne31Field| el.to_reduced_u32())
                     })
                     .flatten(),
@@ -231,7 +226,7 @@ pub fn flatten_unrolled_circuits_proof_for_skeleton(
             .final_monomial_form
             .iter()
             .map(|el| {
-                el.into_coeffs_in_base()
+                mersenne_quartic_into_base_coeffs(*el)
                     .map(|el: Mersenne31Field| el.to_reduced_u32())
             })
             .flatten(),

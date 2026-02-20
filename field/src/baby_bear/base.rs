@@ -442,10 +442,6 @@ impl PrimeField for BabyBearField {
         Self(if flag { Self::MONT_R } else { 0 })
     }
 
-    fn to_le_bytes(self) -> [u8; Self::NUM_BYTES_IN_REPR] {
-        self.0.to_le_bytes()
-    }
-
     fn increment_unchecked(&'_ mut self) {
         self.0 += 1;
     }

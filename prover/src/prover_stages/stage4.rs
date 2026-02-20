@@ -167,8 +167,8 @@ pub fn prover_stage_4<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
         );
 
     let mut it = transcript_challenges.as_chunks::<4>().0.iter();
-    let z = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let z = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );
@@ -483,7 +483,7 @@ pub fn prover_stage_4<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
         values_at_z_and_z_omega
             .iter()
             .map(|el| {
-                el.into_coeffs_in_base()
+                mersenne_quartic_into_base_coeffs(*el)
                     .map(|el: Mersenne31Field| el.to_reduced_u32())
             })
             .flatten(),
@@ -502,8 +502,8 @@ pub fn prover_stage_4<const N: usize, A: GoodAllocator, T: MerkleTreeConstructor
         );
 
     let mut it = transcript_challenges.as_chunks::<4>().0.iter();
-    let deep_poly_alpha = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let deep_poly_alpha = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );

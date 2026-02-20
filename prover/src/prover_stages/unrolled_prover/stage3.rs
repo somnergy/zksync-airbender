@@ -52,13 +52,13 @@ pub fn prover_stage_3_for_unrolled_circuit<
     );
 
     let mut it = transcript_challenges.as_chunks::<4>().0.into_iter();
-    let quotient_alpha = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let quotient_alpha = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );
-    let quotient_beta = Mersenne31Quartic::from_coeffs_in_base(
-        &it.next()
+    let quotient_beta = mersenne_quartic_from_base_coeffs(
+        it.next()
             .unwrap()
             .map(|el| Mersenne31Field::from_nonreduced_u32(el)),
     );

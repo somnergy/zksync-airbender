@@ -4,7 +4,6 @@
 #![feature(allocator_api)]
 #![feature(iter_array_chunks)]
 #![feature(raw_slice_split)]
-#![feature(ptr_as_ref_unchecked)]
 #![feature(slice_from_ptr_range)]
 #![feature(vec_push_within_capacity)]
 #![feature(maybe_uninit_fill)]
@@ -17,9 +16,7 @@ pub const DEBUG_QUOTIENT: bool = true;
 pub const DEBUG_QUOTIENT: bool = false;
 
 #[cfg(feature = "prover")]
-use fft::VECTORIZED_MULTIPLE;
-#[cfg(feature = "prover")]
-pub const DEFAULT_TRACE_PADDING_MULTIPLE: usize = VECTORIZED_MULTIPLE;
+pub const DEFAULT_TRACE_PADDING_MULTIPLE: usize = 16;
 
 pub mod definitions;
 pub use common_constants;
@@ -38,6 +35,8 @@ pub use worker;
 #[cfg(feature = "prover")]
 pub mod cap_holder;
 #[cfg(feature = "prover")]
+pub mod gkr;
+#[cfg(feature = "prover")]
 pub mod mem_utils;
 #[cfg(feature = "prover")]
 pub mod merkle_trees;
@@ -51,11 +50,9 @@ pub mod quotient_evaluator;
 pub mod tracer;
 #[cfg(feature = "prover")]
 pub mod tracers;
+pub mod utils;
 #[cfg(feature = "prover")]
 pub mod witness_evaluator;
-
-#[cfg(feature = "prover")]
-pub mod gkr;
 
 #[cfg(feature = "prover")]
 pub use self::quotient_evaluator::*;
