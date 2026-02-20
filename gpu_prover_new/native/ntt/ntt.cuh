@@ -44,7 +44,7 @@ struct TenStages {
   static constexpr int FINE_MASK = MASK_10;
 };
 
-struct NineStages {
+struct EightStages {
   static constexpr int COARSE_LOG_COUNT = 12;
   static constexpr int COARSE_MASK = MASK_12;
   static constexpr int FINE_LOG_COUNT = 11;

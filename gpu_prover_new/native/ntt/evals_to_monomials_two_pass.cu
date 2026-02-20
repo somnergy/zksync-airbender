@@ -257,8 +257,6 @@ EXTERN __launch_bounds__(512, 1) __global__
 #pragma unroll
   for (int i{0}; i < 32; i += 4, gmem_monomials_out_ptr++)
     *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
-
-  gmem_out.inc_col();
 }
 
 } // namespace airbender::ntt

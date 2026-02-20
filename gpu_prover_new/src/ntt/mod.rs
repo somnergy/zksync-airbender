@@ -54,6 +54,9 @@ cuda_kernel!(
 // pretty good for 2-pass
 main_to_coset_middle_stages!(ab_main_to_monomials_last_14_stages_kernel);
 
+// 3-pass
+main_to_coset_middle_stages!(ab_main_to_monomials_final_8_stages_kernel);
+
 // experiment graveyard
 main_to_coset_middle_stages!(ab_main_to_coset_middle_28_stages_megakernel);
 
@@ -110,6 +113,16 @@ pub fn main_to_monomials_3_pass(
         start_stage as i32,
     );
     MainToMonomialsFirstStagesFunction(ab_main_to_monomials_nonfinal_8_stages_kernel)
+        .launch(&config, &args)?;
+    start_stage += 8;
+    let blocks = n.get_chunks_count(bf_vals_per_block);
+    let mut config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
+    let args = MainToCosetMiddleStagesArguments::new(
+        outputs_matrix_const,
+        outputs_matrix_mut,
+        log_n as i32,
+    );
+    MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
         .launch(&config, &args)
 }
 
