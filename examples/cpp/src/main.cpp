@@ -21,6 +21,10 @@ extern uint32_t _edata;
 extern uint32_t _sirodata;
 extern uint32_t _srodata;
 extern uint32_t _erodata;
+
+#if defined(AIRBENDER_USE_NEWLIB)
+void __libc_init_array();
+#endif
 }
 
 extern "C" void eh_personality() {}
@@ -78,6 +82,9 @@ static void init_memory() {
 
 extern "C" [[noreturn]] void _start_rust() {
     init_memory();
+#if defined(AIRBENDER_USE_NEWLIB)
+    __libc_init_array();
+#endif
     workload();
 }
 

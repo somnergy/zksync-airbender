@@ -1,30 +1,25 @@
-# C++ Airbender Example (riscv32im + clang)
+# C++ Airbender Example (riscv32im + GCC/newlib)
 
 Basic example of compiling C/C++ code for Airbender.
 
 ## Requirements
 
-`clang` v15 or higher. `lld` also must be v15 or higher.
+- CMake 3.20 or newer.
+- RISC-V GCC toolchain with newlib (`riscv32-unknown-elf-*` binaries).
+  - Tested with the RISC Zero toolchain package that contains
+    `riscv32-unknown-elf-gcc` / `riscv32-unknown-elf-g++` /
+    `riscv32-unknown-elf-objcopy`.
 
 ## Build
 
 ```sh
-cmake -S . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/riscv32im-clang.cmake
+cmake -S . -B build \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/riscv32im-gcc.cmake \
+  -DRISCV_GCC_TOOLCHAIN_ROOT=<path-to-riscv32im-linux-x86_64>
 cmake --build build
 ```
 
-By default, it'll use `clang` / `clang++` / `lld` to compile code. `llvm-objcopy` is used to get the required binaries.
-They can be overridden via `CMAKE_C_COMPILER` / `CMAKE_CXX_COMPILER` / `CMAKE_ASM_COMPILER` / `CMAKE_LINKER` / `CMAKE_OBJCOPY`, e.g.:
-
-```sh
-cmake -S . -B build \
-  -DCMAKE_TOOLCHAIN_FILE=cmake/riscv32im-clang.cmake \
-  -DCMAKE_C_COMPILER=clang-18 \
-  -DCMAKE_CXX_COMPILER=clang++-18 \
-  -DCMAKE_ASM_COMPILER=clang-18 \
-  -DCMAKE_LINKER=lld-18 \
-  -DCMAKE_OBJCOPY=/usr/bin/llvm-objcopy-18
-```
+If the toolchain binaries are already on `PATH`, `RISCV_GCC_TOOLCHAIN_ROOT` can be omitted.
 
 For release builds, add `-DCMAKE_BUILD_TYPE=Release`.
 
@@ -36,52 +31,35 @@ Artifacts are written to the `examples/cpp` directory:
 
 ## Running
 
-You can use [airbender CLI](../../tools/cli/) to run the project.
-
-Example:
+You can run the generated program with `cargo airbender`:
 
 ```sh
 # From the root of the repo
-cd tools/cli
-
-RUST_MIN_STACK=16777216 cargo run run --bin ../../examples/cpp/app.bin --input-file ../../examples/cpp/input.txt
+cargo airbender run examples/cpp/app.bin --input examples/cpp/input.txt
 ```
 
-The same tool can be used for generating proofs.
-See the tool readme to get familiar with its capabilities.
-
-## Project overview
+## Project Overview
 
 This project contains boilerplate to compile your C/C++ code as an Airbender program.
 The entrypoint for your logic is the `workload` function in [main.cpp](src/main.cpp).
 
-Other files that are provided:
-- [start.S](src/start.S) - expected initialization sequence for the application (e.g. `_start` function).
-- [airbender_csr.hpp](include/airbender_csr.hpp) - convenience wrappers for custom delegations provided by Airbender.
-- [quasi_uart.hpp](include/quasi_uart.hpp) - writer device, can be used for implementing debug logs.
-- [simple_allocator.cpp](src/simple_allocator.cpp) - basic bump allocator that utilizes the heap section defined by linker.
-- [memset.c](src/memset.c) - naive `memset` implementation, alternatively consider [assembly impl](../../riscv_common/src/asm/memset.s).
+Other provided files:
 
+- [start.S](src/start.S): startup and trap entry wiring.
+- [airbender_csr.hpp](include/airbender_csr.hpp): wrappers for Airbender CSR operations.
+- [quasi_uart.hpp](include/quasi_uart.hpp): quasi-UART writer used for logs.
+- [newlib_syscalls.cpp](src/newlib_syscalls.cpp): newlib syscall bridge (`_write`, `_exit`, `_sbrk`, etc.).
 
 Linker scripts used:
-- [link.x](../scripts/lds/link.x).
-- [memory.x](../scripts/lds/memory.x).
+
+- [link.x](../../riscv_common/src/lds/link.x)
+- [memory.x](../../riscv_common/src/lds/memory.x)
 
 ## Notes
 
-This project is intentionally C/C++-native, it does not rely on any Rust dependencies.
-As a result, it is possible that it will get outdated compared to other Rust examples in this repository.
-If you are experiencing any problems with e.g. ability to invoke certain CSRs, please check that C++
-definitions match the definitions in Rust; if they don't, please submit a PR.
+This project is intentionally C/C++-native and does not rely on Rust guest runtime crates.
+As a result, it may lag behind Rust examples when platform internals change.
 
 ## License
 
 [MIT](../../LICENSE-MIT) or [Apache 2.0](../../LICENSE-APACHE) at your option.
-
-## Notes
-
-- No Rust toolchain is required.
-- The startup/trap assembly and linker scripts are shared with other examples:
-  [`examples/scripts/asm/asm_reduced.S`](../scripts/asm/asm_reduced.S) and [`examples/scripts/lds/{memory.x,link.x}`](../scripts/lds/).
-- CSR helpers live in `include/airbender_csr.hpp`.
-

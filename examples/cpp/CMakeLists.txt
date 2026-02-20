@@ -13,16 +13,18 @@ set(MEMORY_SCRIPT "${LINKER_SCRIPT_DIR}/memory.x")
 
 add_executable(app
     src/main.cpp
-    src/simple_allocator.cpp
+    src/newlib_syscalls.cpp
     src/start.S
 )
 
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
+target_compile_definitions(app PRIVATE AIRBENDER_USE_NEWLIB=1)
 
 target_compile_options(app PRIVATE
     -ffreestanding
     -fno-exceptions
     -fno-rtti
+    -fno-use-cxa-atexit
     -fno-unwind-tables
     -fno-asynchronous-unwind-tables
     -fno-stack-protector
@@ -32,8 +34,9 @@ target_compile_options(app PRIVATE
 )
 
 target_link_options(app PRIVATE
-    -nostdlib
-    -nodefaultlibs
+    -nostartfiles
+    --specs=nano.specs
+    --specs=nosys.specs
     -Wl,-T,${MEMORY_SCRIPT}
     -Wl,-T,${LINKER_SCRIPT}
     -Wl,-e,_start
@@ -47,7 +50,7 @@ set_target_properties(app PROPERTIES
 )
 
 if(NOT CMAKE_OBJCOPY)
-    find_program(CMAKE_OBJCOPY NAMES llvm-objcopy objcopy)
+    find_program(CMAKE_OBJCOPY NAMES riscv32-unknown-elf-objcopy llvm-objcopy objcopy)
 endif()
 
 if(CMAKE_OBJCOPY)
