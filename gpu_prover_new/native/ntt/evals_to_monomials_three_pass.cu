@@ -102,9 +102,10 @@ EXTERN __launch_bounds__(512, 1) __global__
   const int pipeline_memcpy_stride = 4 * blockDim.x;
   const int gmem_block_offset = blockIdx.x * VALS_PER_BLOCK;
   gmem_in.add_row(gmem_block_offset);
-  gmem_out.add_row(gmem_block_offset + warp_id * VALS_PER_WARP);
+  // gmem_out.add_row(gmem_block_offset + warp_id * VALS_PER_WARP);
+  gmem_out.add_row(gmem_block_offset);
 
-  extern __shared__ bf smem_block[12288]; // 8192 vals, 4096 coarse twiddles
+  __shared__ bf smem_block[12288]; // 8192 vals, 4096 coarse twiddles
   bf *smem_warp = smem_block + warp_id * VALS_PER_WARP;
   bf *smem_twiddles = smem_block + VALS_PER_BLOCK;
   constexpr bf *cmem_twiddles = ab_inv_cmem_twiddles_finest_11;
@@ -126,33 +127,37 @@ EXTERN __launch_bounds__(512, 1) __global__
   __pipeline_wait_prior(0);
   __syncthreads();
 
-  int warp_exchg_region_offset = blockIdx.x * WARPS_PER_BLOCK + warp_id;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 8, 16, 1, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 4, 8, 2, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 2, 4, 4, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 1, 2, 8, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
-
-  // TODO: consider shfl pattern here instead
-  __syncwarp();
 #pragma unroll
-  for (int y = 0; y < VALS_PER_THREAD; y++)
-    smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
-  __syncwarp();
-#pragma unroll
-  for (int x = 0; x < VALS_PER_THREAD; x++)
-    vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
+  for (int i{0}, row{thread_start}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
+    gmem_out.set_at_row(row, vals[i]);
 
-  int thread_exchg_region_offset = warp_exchg_region_offset + lane_id;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 8, 16, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 4, 8, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 2, 4, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<EightStages, 1, 2, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  // int warp_exchg_region_offset = blockIdx.x * WARPS_PER_BLOCK + warp_id;
+  // reg_exchg_cmem_smem_twiddles_inv<EightStages, 8, 16, 1, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
+  // reg_exchg_cmem_smem_twiddles_inv<EightStages, 4, 8, 2, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
+  // reg_exchg_cmem_smem_twiddles_inv<EightStages, 2, 4, 4, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
+  // reg_exchg_cmem_smem_twiddles_inv<EightStages, 1, 2, 8, cmem_twiddles>(vals, warp_exchg_region_offset, smem_twiddles); warp_exchg_region_offset <<= 1;
 
-  // uncoalesced, but vectorized and should fire off quickly
-  uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + VALS_PER_THREAD * lane_id);
-#pragma unroll
-  for (int i{0}; i < VALS_PER_THREAD; i += 4, gmem_monomials_out_ptr++)
-    *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
+//   // TODO: consider shfl pattern here instead
+//   __syncwarp();
+// #pragma unroll
+//   for (int y = 0; y < VALS_PER_THREAD; y++)
+//     smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
+//   __syncwarp();
+// #pragma unroll
+//   for (int x = 0; x < VALS_PER_THREAD; x++)
+//     vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
+// 
+//   // int thread_exchg_region_offset = warp_exchg_region_offset + lane_id;
+//   // reg_exchg_cmem_smem_twiddles_inv<EightStages, 8, 16, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+//   // reg_exchg_cmem_smem_twiddles_inv<EightStages, 4, 8, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+//   // reg_exchg_cmem_smem_twiddles_inv<EightStages, 2, 4, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+//   // reg_exchg_cmem_smem_twiddles_inv<EightStages, 1, 2, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+// 
+//   // uncoalesced, but vectorized and should fire off quickly
+//   uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + VALS_PER_THREAD * lane_id);
+// #pragma unroll
+//   for (int i{0}; i < VALS_PER_THREAD; i += 4, gmem_monomials_out_ptr++)
+//     *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
 }
 
 } // namespace airbender::ntt

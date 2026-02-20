@@ -80,7 +80,7 @@ pub fn partial_ifft_natural_to_natural<F: Field>(input: &mut [F], coset: F, twid
 
     let log_n = input.len().trailing_zeros();
     serial_ct_ntt_natural_to_bitreversed(input, log_n, twiddles);
-    bitreverse_enumeration_inplace(input);
+    // bitreverse_enumeration_inplace(input);
 
     if coset != F::ONE {
         let coset = coset.inverse().expect("inverse of coset must exist");

@@ -220,8 +220,8 @@ fn run_main_to_coset(
         for col in 0..num_bf_cols {
             let start = (col * stride + OFFSET) as usize;
             let range = start..start + n;
-            bitreverse_enumeration_inplace(&mut outputs_host[range.clone()]);
-            bitreverse_enumeration_inplace(&mut inplace_host[range.clone()]);
+            // bitreverse_enumeration_inplace(&mut outputs_host[range.clone()]);
+            // bitreverse_enumeration_inplace(&mut inplace_host[range.clone()]);
         }
 
         // Check forward variants against CPU forward results
