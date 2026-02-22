@@ -28,6 +28,11 @@
 - Test: `cargo test -p gpu_prover`
 - Benches: `cargo bench -p gpu_prover`
 - Some tests are compute-intensive and should not be run in debug mode; use release mode for those tests: `cargo test -p gpu_prover --release`.
+- `test_no_inline` enables `field/no_inline` for this crate's build graph.
+- Prefer `cargo test -p gpu_prover --release --features test_no_inline` when CPU-side performance is not relevant; it can notably reduce release test compile time.
+- In debug-mode test builds, `test_no_inline` compile-time impact is usually small.
+- When CPU-side performance is not of interest, tests can also be run in debug mode.
+- Debug builds may fail with stack overflow during compilation; if needed, compile with `RUST_MIN_STACK=16777216`.
 - When cargo warnings are not relevant to the task, run cargo commands with `RUSTFLAGS="-Awarnings"` to keep output focused.
 - For profiling (`ncu`, `nsys`), first build the target binary/test, then run the profiler on the produced executable directly (do not profile `cargo ...` invocation).
 
