@@ -63,6 +63,14 @@ declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_out_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_in_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage3_in_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage3_out_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_out_start11_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_in_start11_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_in_start12_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage3_out_start17_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage3_out_start18_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage3_in_start17_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage3_in_start18_kernel);
 
 fn validate_len(rows: usize) -> u32 {
     assert!(rows.is_power_of_two());
@@ -72,6 +80,60 @@ fn validate_len(rows: usize) -> u32 {
         "only log23/log24 (2^23/2^24 rows) are supported",
     );
     log_rows
+}
+
+#[derive(Clone, Copy)]
+struct LaunchPlan {
+    initial_kernel: HypercubeBitrevInitialSignature,
+    noninitial_stage2_kernel: HypercubeBitrevNonInitialSignature,
+    noninitial_stage3_kernel: HypercubeBitrevNonInitialSignature,
+    initial_rounds: u32,
+    noninitial_stage2_start: u32,
+    noninitial_stage3_start: u32,
+}
+
+fn select_out_of_place_plan(log_rows: u32) -> LaunchPlan {
+    match log_rows {
+        24 => LaunchPlan {
+            initial_kernel: ab_h2m_bitrev_bf_initial12_out_kernel,
+            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel,
+            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_out_start18_kernel,
+            initial_rounds: LOG24_INITIAL_ROUNDS,
+            noninitial_stage2_start: LOG24_NONINITIAL_STAGE2_START,
+            noninitial_stage3_start: LOG24_NONINITIAL_STAGE3_START,
+        },
+        23 => LaunchPlan {
+            initial_kernel: ab_h2m_bitrev_bf_initial11_out_kernel,
+            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_out_start11_kernel,
+            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_out_start17_kernel,
+            initial_rounds: LOG23_INITIAL_ROUNDS,
+            noninitial_stage2_start: LOG23_NONINITIAL_STAGE2_START,
+            noninitial_stage3_start: LOG23_NONINITIAL_STAGE3_START,
+        },
+        _ => unreachable!("validate_len enforces supported log rows"),
+    }
+}
+
+fn select_in_place_plan(log_rows: u32) -> LaunchPlan {
+    match log_rows {
+        24 => LaunchPlan {
+            initial_kernel: ab_h2m_bitrev_bf_initial12_in_kernel,
+            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_in_start12_kernel,
+            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_in_start18_kernel,
+            initial_rounds: LOG24_INITIAL_ROUNDS,
+            noninitial_stage2_start: LOG24_NONINITIAL_STAGE2_START,
+            noninitial_stage3_start: LOG24_NONINITIAL_STAGE3_START,
+        },
+        23 => LaunchPlan {
+            initial_kernel: ab_h2m_bitrev_bf_initial11_in_kernel,
+            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_in_start11_kernel,
+            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_in_start17_kernel,
+            initial_rounds: LOG23_INITIAL_ROUNDS,
+            noninitial_stage2_start: LOG23_NONINITIAL_STAGE2_START,
+            noninitial_stage3_start: LOG23_NONINITIAL_STAGE3_START,
+        },
+        _ => unreachable!("validate_len enforces supported log rows"),
+    }
 }
 
 fn launch_chain(
@@ -89,6 +151,7 @@ fn launch_chain(
     // Locked cache policy by stage role:
     // - log24 schedule: [12, 6, 6]
     // - log23 schedule: [11, 6, 6]
+    // Noninitial stages use fixed-start kernel entrypoints selected on host.
     // out-of-place:  #1 ld.cs/st.wt, #2 ld.cs/st.wt, #3 ld.cs/st.cs
     // in-place:      #1 ld.cg/st.wt, #2 ld.ca/st.wt, #3 ld.ca/st.cs
     let grid_initial = (rows >> initial_rounds) as u32;
@@ -136,34 +199,15 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf(
     let rows = src.len();
     assert_eq!(dst.len(), rows);
     let log_rows = validate_len(rows);
-    let (launch0_kernel, initial_rounds, stage2_start, stage3_start): (
-        HypercubeBitrevInitialSignature,
-        u32,
-        u32,
-        u32,
-    ) = match log_rows {
-        24 => (
-            ab_h2m_bitrev_bf_initial12_out_kernel,
-            LOG24_INITIAL_ROUNDS,
-            LOG24_NONINITIAL_STAGE2_START,
-            LOG24_NONINITIAL_STAGE3_START,
-        ),
-        23 => (
-            ab_h2m_bitrev_bf_initial11_out_kernel,
-            LOG23_INITIAL_ROUNDS,
-            LOG23_NONINITIAL_STAGE2_START,
-            LOG23_NONINITIAL_STAGE3_START,
-        ),
-        _ => unreachable!("validate_len enforces supported log rows"),
-    };
+    let plan = select_out_of_place_plan(log_rows);
 
     launch_chain(
-        launch0_kernel,
-        ab_h2m_bitrev_bf_noninitial6_stage2_out_kernel,
-        ab_h2m_bitrev_bf_noninitial6_stage3_out_kernel,
-        initial_rounds,
-        stage2_start,
-        stage3_start,
+        plan.initial_kernel,
+        plan.noninitial_stage2_kernel,
+        plan.noninitial_stage3_kernel,
+        plan.initial_rounds,
+        plan.noninitial_stage2_start,
+        plan.noninitial_stage3_start,
         src.as_ptr(),
         dst.as_mut_ptr(),
         rows,
@@ -176,35 +220,16 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf_in_place(
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let log_rows = validate_len(values.len());
-    let (launch0_kernel, initial_rounds, stage2_start, stage3_start): (
-        HypercubeBitrevInitialSignature,
-        u32,
-        u32,
-        u32,
-    ) = match log_rows {
-        24 => (
-            ab_h2m_bitrev_bf_initial12_in_kernel,
-            LOG24_INITIAL_ROUNDS,
-            LOG24_NONINITIAL_STAGE2_START,
-            LOG24_NONINITIAL_STAGE3_START,
-        ),
-        23 => (
-            ab_h2m_bitrev_bf_initial11_in_kernel,
-            LOG23_INITIAL_ROUNDS,
-            LOG23_NONINITIAL_STAGE2_START,
-            LOG23_NONINITIAL_STAGE3_START,
-        ),
-        _ => unreachable!("validate_len enforces supported log rows"),
-    };
+    let plan = select_in_place_plan(log_rows);
     let dst = values.as_mut_ptr();
 
     launch_chain(
-        launch0_kernel,
-        ab_h2m_bitrev_bf_noninitial6_stage2_in_kernel,
-        ab_h2m_bitrev_bf_noninitial6_stage3_in_kernel,
-        initial_rounds,
-        stage2_start,
-        stage3_start,
+        plan.initial_kernel,
+        plan.noninitial_stage2_kernel,
+        plan.noninitial_stage3_kernel,
+        plan.initial_rounds,
+        plan.noninitial_stage2_start,
+        plan.noninitial_stage3_start,
         dst as *const BF,
         dst,
         values.len(),
@@ -407,31 +432,6 @@ mod tests {
         );
     }
 
-    fn dispatch_out_of_place_for_log_rows(
-        log_rows: u32,
-    ) -> (
-        HypercubeBitrevInitialSignature,
-        u32,
-        u32,
-        u32,
-    ) {
-        match log_rows {
-            24 => (
-                ab_h2m_bitrev_bf_initial12_out_kernel,
-                LOG24_INITIAL_ROUNDS,
-                LOG24_NONINITIAL_STAGE2_START,
-                LOG24_NONINITIAL_STAGE3_START,
-            ),
-            23 => (
-                ab_h2m_bitrev_bf_initial11_out_kernel,
-                LOG23_INITIAL_ROUNDS,
-                LOG23_NONINITIAL_STAGE2_START,
-                LOG23_NONINITIAL_STAGE3_START,
-            ),
-            _ => unreachable!("validate_len enforces supported log rows"),
-        }
-    }
-
     fn run_profile_out_of_place_multi_invocation(
         rows: usize,
         warmup_iters: usize,
@@ -461,8 +461,7 @@ mod tests {
         measure_iters: usize,
     ) {
         let log_rows = validate_len(rows);
-        let (initial_kernel, initial_rounds, stage2_start, stage3_start) =
-            dispatch_out_of_place_for_log_rows(log_rows);
+        let plan = super::select_out_of_place_plan(log_rows);
 
         let mut rng = StdRng::seed_from_u64(0x9C7F_D142_1B35_EAAAu64 ^ rows as u64);
         let h_input = (0..rows)
@@ -477,7 +476,7 @@ mod tests {
         memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
         stream.synchronize().unwrap();
 
-        let initial_grid = (rows >> initial_rounds) as u32;
+        let initial_grid = (rows >> plan.initial_rounds) as u32;
         let noninitial_grid = (rows >> NONINITIAL_GRID_LOG_ROWS) as u32;
         let config_initial = CudaLaunchConfig::basic(
             Dim3 {
@@ -498,16 +497,22 @@ mod tests {
             &stream,
         );
 
-        let initial_fn = HypercubeBitrevInitialFunction(initial_kernel);
-        let stage2_fn = HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial6_stage2_out_kernel);
-        let stage3_fn = HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial6_stage3_out_kernel);
+        let initial_fn = HypercubeBitrevInitialFunction(plan.initial_kernel);
+        let stage2_fn = HypercubeBitrevNonInitialFunction(plan.noninitial_stage2_kernel);
+        let stage3_fn = HypercubeBitrevNonInitialFunction(plan.noninitial_stage3_kernel);
 
         let stage_ptr = d_stage.as_mut_ptr();
         let initial_args = HypercubeBitrevInitialArguments::new(d_src.as_ptr(), stage_ptr);
-        let stage2_args =
-            HypercubeBitrevNonInitialArguments::new(stage_ptr as *const BF, stage_ptr, stage2_start);
-        let stage3_args =
-            HypercubeBitrevNonInitialArguments::new(stage_ptr as *const BF, stage_ptr, stage3_start);
+        let stage2_args = HypercubeBitrevNonInitialArguments::new(
+            stage_ptr as *const BF,
+            stage_ptr,
+            plan.noninitial_stage2_start,
+        );
+        let stage3_args = HypercubeBitrevNonInitialArguments::new(
+            stage_ptr as *const BF,
+            stage_ptr,
+            plan.noninitial_stage3_start,
+        );
 
         let chain_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
             hypercube_evals_into_coeffs_bitrev_bf(&d_src, &mut d_dst, &stream)

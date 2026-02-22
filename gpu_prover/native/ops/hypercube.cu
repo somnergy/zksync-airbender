@@ -840,4 +840,76 @@ EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_st
   hypercube_evals_into_coeffs_bitrev_noninitial6<ld_modifier::ca, st_modifier::cs>(src, dst, start_stage);
 }
 
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage2_out_start11_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage2 (out-of-place) for log23 schedule: ld.cs + st.wt.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::cs, st_modifier::wt>(src, dst, 11u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage2 (out-of-place) for log24 schedule: ld.cs + st.wt.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::cs, st_modifier::wt>(src, dst, 12u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage2_in_start11_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage2 (in-place) for log23 schedule: ld.ca + st.wt.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::ca, st_modifier::wt>(src, dst, 11u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage2_in_start12_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage2 (in-place) for log24 schedule: ld.ca + st.wt.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::ca, st_modifier::wt>(src, dst, 12u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage3_out_start17_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage3 (out-of-place) for log23 schedule: ld.cs + st.cs.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::cs, st_modifier::cs>(src, dst, 17u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage3_out_start18_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage3 (out-of-place) for log24 schedule: ld.cs + st.cs.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::cs, st_modifier::cs>(src, dst, 18u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage3_in_start17_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage3 (in-place) for log23 schedule: ld.ca + st.cs.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::ca, st_modifier::cs>(src, dst, 17u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage3_in_start18_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Fixed-start stage3 (in-place) for log24 schedule: ld.ca + st.cs.
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial6_impl<ld_modifier::ca, st_modifier::cs>(src, dst, 18u);
+}
+
 } // namespace airbender::ops::hypercube
