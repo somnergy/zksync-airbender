@@ -353,11 +353,11 @@ fn test_main_to_coset_pc_in_place() {
 #[test]
 #[serial]
 fn test_main_to_monomials_3_pass_out_of_place() {
-    run_main_to_coset(24..25, 1, 6, InOrOutOfPlace::Out);
+    run_main_to_coset(23..24, 1, 6, InOrOutOfPlace::Out);
 }
 
 #[test]
 #[serial]
 fn test_main_to_monomials_3_pass_in_place() {
-    run_main_to_coset(24..25, 1, 6, InOrOutOfPlace::In);
+    run_main_to_coset(23..24, 1, 6, InOrOutOfPlace::In);
 }

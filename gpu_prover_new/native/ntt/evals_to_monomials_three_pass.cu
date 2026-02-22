@@ -84,16 +84,16 @@ EXTERN __launch_bounds__(512, 2) __global__
       gmem_out.set_at_row(row, vals[i]); // write consecutive gmem tiles
 }
 
-EXTERN __launch_bounds__(256, 3) __global__
-    void ab_main_to_monomials_final_8_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const int log_n) {
+template <int STAGES>
+DEVICE_FORCEINLINE void main_to_monomials_final_up_to_8_stages(bf_matrix_getter<ld_modifier::cg> gmem_in,
+                                                               bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                               const int log_n) {
   constexpr int WARP_SIZE = 32;
   constexpr int VALS_PER_THREAD = 32;
   constexpr int VALS_PER_WARP = WARP_SIZE * VALS_PER_THREAD;
   constexpr int WARPS_PER_BLOCK = 8;
   constexpr int VALS_PER_BLOCK = WARPS_PER_BLOCK * WARP_SIZE * VALS_PER_THREAD; // 8192
-  constexpr int INITIAL_EXCHG_REGIONS_PER_WARP = 4;
+  constexpr int INITIAL_EXCHG_REGIONS_PER_WARP = 1 << (10 - STAGES);
 
   const int lane_id = threadIdx.x & 31;
   const int warp_id = threadIdx.x >> 5;
@@ -123,14 +123,23 @@ EXTERN __launch_bounds__(256, 3) __global__
     vals[i] = gmem_in.get_at_row(row);
 
   // Use pure cmem for warp-uniform twiddles
-  int warp_exchg_region_offset = INITIAL_EXCHG_REGIONS_PER_WARP * (blockIdx.x * WARPS_PER_BLOCK + warp_id);
+  if (STAGES >= 5) {
+    int warp_exchg_region_offset = INITIAL_EXCHG_REGIONS_PER_WARP * (blockIdx.x * WARPS_PER_BLOCK + warp_id);
 #pragma unroll
-  for (int i{0}; i < INITIAL_EXCHG_REGIONS_PER_WARP; i++) {
-    bf *vals_this_region = vals + 8 * i;
-    int exchg_region_offset = warp_exchg_region_offset + i;
-    reg_exchg_cmem_twiddles_inv<4, 8, 1>(vals_this_region, exchg_region_offset); exchg_region_offset <<= 1;
-    reg_exchg_cmem_twiddles_inv<2, 4, 2>(vals_this_region, exchg_region_offset); exchg_region_offset <<= 1;
-    reg_exchg_cmem_twiddles_inv<1, 2, 4>(vals_this_region, exchg_region_offset);
+    for (int i{0}; i < INITIAL_EXCHG_REGIONS_PER_WARP; i++) {
+      int exchg_region_offset = warp_exchg_region_offset + i;
+      if (STAGES == 8) {
+        bf *vals_this_region = vals + 8 * i;
+        reg_exchg_cmem_twiddles_inv<4, 8, 1>(vals_this_region, exchg_region_offset); exchg_region_offset <<= 1;
+        reg_exchg_cmem_twiddles_inv<2, 4, 2>(vals_this_region, exchg_region_offset); exchg_region_offset <<= 1;
+        reg_exchg_cmem_twiddles_inv<1, 2, 4>(vals_this_region, exchg_region_offset);
+      }
+      if (STAGES == 7) {
+        bf *vals_this_region = vals + 4 * i;
+        reg_exchg_cmem_twiddles_inv<2, 4, 2>(vals_this_region, exchg_region_offset); exchg_region_offset <<= 1;
+        reg_exchg_cmem_twiddles_inv<1, 2, 4>(vals_this_region, exchg_region_offset);
+      }
+    }
   }
 
 // Register transpose from https://forums.developer.nvidia.com/t/transpose-2d-matrix-with-warp-shuffle-and-in-place-array/164045.
@@ -194,6 +203,34 @@ EXTERN __launch_bounds__(256, 3) __global__
 #pragma unroll
   for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
     gmem_out.set_at_row(row, vals[i]);
+}
+
+EXTERN __launch_bounds__(256, 3) __global__
+    void ab_main_to_monomials_final_8_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
+                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<8>(gmem_in, gmem_out, log_n);
+}
+
+EXTERN __launch_bounds__(256, 3) __global__
+    void ab_main_to_monomials_final_7_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
+                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<7>(gmem_in, gmem_out, log_n);
+}
+
+EXTERN __launch_bounds__(256, 3) __global__
+    void ab_main_to_monomials_final_6_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
+                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<6>(gmem_in, gmem_out, log_n);
+}
+
+EXTERN __launch_bounds__(256, 3) __global__
+    void ab_main_to_monomials_final_5_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
+                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<5>(gmem_in, gmem_out, log_n);
 }
 
 } // namespace airbender::ntt

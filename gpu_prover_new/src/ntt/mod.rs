@@ -55,6 +55,9 @@ cuda_kernel!(
 main_to_coset_middle_stages!(ab_main_to_monomials_last_14_stages_kernel);
 
 // 3-pass
+main_to_coset_middle_stages!(ab_main_to_monomials_final_5_stages_kernel);
+main_to_coset_middle_stages!(ab_main_to_monomials_final_6_stages_kernel);
+main_to_coset_middle_stages!(ab_main_to_monomials_final_7_stages_kernel);
 main_to_coset_middle_stages!(ab_main_to_monomials_final_8_stages_kernel);
 
 // experiment graveyard
@@ -124,8 +127,18 @@ pub fn main_to_monomials_3_pass(
         outputs_matrix_mut,
         log_n as i32,
     );
-    MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
-        .launch(&config, &args)
+    match log_n {
+        21 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
+            .launch(&config, &args)?,
+        22 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
+            .launch(&config, &args)?,
+        23 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
+            .launch(&config, &args)?,
+        24 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
+            .launch(&config, &args)?,
+        _ => unimplemented!(),
+    }
+    Ok(())
 }
 
 pub fn main_to_coset_pc(
