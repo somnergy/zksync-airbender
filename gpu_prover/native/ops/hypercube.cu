@@ -32,6 +32,21 @@ DEVICE_FORCEINLINE unsigned initial12_smem_u4_idx(const unsigned row6, const uns
   return (row6 << 4) | (col4 ^ (row6 >> 2));
 }
 
+DEVICE_FORCEINLINE unsigned initial11_smem_idx(const unsigned k, const unsigned p) {
+  // Initial11 shared layout helper for a 64 x 32 scalar tile.
+  //
+  // Physical index:
+  // - row-major base: k * 32 + p
+  // - swizzled partition: p ^ (k >> 2)
+  //
+  // Why this swizzle:
+  // - The initial/final remap touches k as lane16*4 + e (so k>>2 tracks lane16).
+  // - The second-half warp pass touches fixed k and p=lane32.
+  // - Using k>>2 in the xor keeps both patterns bank-friendly while preserving
+  //   a bijection in each row.
+  return (k << 5) | (p ^ (k >> 2));
+}
+
 DEVICE_FORCEINLINE unsigned noninitial6_smem_idx(const unsigned k, const unsigned p) {
   // Noninitial6 shared layout helper.
   //
@@ -147,6 +162,43 @@ DEVICE_FORCEINLINE void apply_6_rounds_pair_major_4groups(bf (&vals)[4][4], cons
     if (high_lane) {
       apply_pair_major_high_update_from_peers(vals[2], peer01_g2, peer23_g2);
       apply_pair_major_high_update_from_peers(vals[3], peer01_g3, peer23_g3);
+    }
+  }
+}
+
+DEVICE_FORCEINLINE void apply_6_rounds_pair_major_2groups(bf (&vals)[2][4], const unsigned lane16) {
+  // Same round structure as apply_6_rounds_pair_major_4groups, specialized to
+  // two register groups to avoid redundant packing/shuffle traffic.
+#pragma unroll
+  for (unsigned g = 0; g < 2; g++) {
+    vals[g][1] = bf::sub(vals[g][1], vals[g][0]);
+    vals[g][3] = bf::sub(vals[g][3], vals[g][2]);
+    vals[g][2] = bf::sub(vals[g][2], vals[g][0]);
+    vals[g][3] = bf::sub(vals[g][3], vals[g][1]);
+  }
+
+#pragma unroll
+  for (unsigned bit = 0; bit < 4; bit++) {
+    const unsigned lane_bit = 1u << bit;
+    const bool high_lane = (lane16 & lane_bit) != 0u;
+
+    const unsigned long long pair01_g0 =
+        (static_cast<unsigned long long>(vals[0][1].limb) << 32) | static_cast<unsigned long long>(vals[0][0].limb);
+    const unsigned long long pair23_g0 =
+        (static_cast<unsigned long long>(vals[0][3].limb) << 32) | static_cast<unsigned long long>(vals[0][2].limb);
+    const unsigned long long peer01_g0 = __shfl_xor_sync(0xFFFFFFFFu, pair01_g0, lane_bit, 16);
+    const unsigned long long peer23_g0 = __shfl_xor_sync(0xFFFFFFFFu, pair23_g0, lane_bit, 16);
+
+    const unsigned long long pair01_g1 =
+        (static_cast<unsigned long long>(vals[1][1].limb) << 32) | static_cast<unsigned long long>(vals[1][0].limb);
+    const unsigned long long pair23_g1 =
+        (static_cast<unsigned long long>(vals[1][3].limb) << 32) | static_cast<unsigned long long>(vals[1][2].limb);
+    const unsigned long long peer01_g1 = __shfl_xor_sync(0xFFFFFFFFu, pair01_g1, lane_bit, 16);
+    const unsigned long long peer23_g1 = __shfl_xor_sync(0xFFFFFFFFu, pair23_g1, lane_bit, 16);
+
+    if (high_lane) {
+      apply_pair_major_high_update_from_peers(vals[0], peer01_g0, peer23_g0);
+      apply_pair_major_high_update_from_peers(vals[1], peer01_g1, peer23_g1);
     }
   }
 }
@@ -363,6 +415,115 @@ DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_initial12(const bf *_
   }
 }
 
+template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER, bool IN_PLACE>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_initial11(const bf *__restrict__ src, bf *__restrict__ dst) {
+  // Initial11 kernel dataflow (handles one 2^11 chunk per CTA):
+  //
+  // Phase A: Global load (vectorized)
+  // - 256 threads = 16 subgroups of 16 lanes.
+  // - Each subgroup owns 2 rows of shape [k=64], each loaded as uint4 vectors.
+  //
+  // Phase B: First six rounds over k
+  // - Run 6 rounds in 16-lane subgroup-local form.
+  //
+  // Phase C: Shared remap
+  // - Spill to shared as (k, p) with row-dependent swizzle.
+  //
+  // Phase D: Last five rounds over p
+  // - One warp processes 8 k-rows.
+  // - For each fixed k row, apply 5 warp-local rounds across p=lane32.
+  //
+  // Phase E: Shared -> global store
+  // - Reload canonical (p, k) ordering and store 2x uint4 per thread.
+  //
+  // IN_PLACE controls whether stage 0 reads from src (out-of-place) or dst
+  // (in-place path where caller passes src==dst).
+  constexpr unsigned SUB_SIZE = 1u << 11;
+  constexpr unsigned K = 64;
+  constexpr unsigned GROUPS = 2;
+  constexpr unsigned ELEMS = 4;
+
+  __shared__ bf smem[SUB_SIZE];
+
+  const unsigned tid = threadIdx.x;
+  const unsigned subgroup = tid >> 4;
+  const unsigned lane16 = tid & 15u;
+  const unsigned warp = tid >> 5;
+  const unsigned lane32 = tid & 31u;
+  const unsigned block_base = blockIdx.x << 11;
+  const bf *__restrict__ load_ptr = IN_PLACE ? reinterpret_cast<const bf *>(dst) : src;
+
+  // Map each 16-lane subgroup to two p rows. The odd subgroup in a warp is
+  // shifted by +16 so both subgroup halves hit disjoint banks on spill/gather.
+  const unsigned subgroup_warp = subgroup >> 1;
+  const unsigned subgroup_parity = subgroup & 1u;
+  const unsigned p_row0 = subgroup_warp + (subgroup_parity << 4);
+  const unsigned k_local_base = lane16 * ELEMS;
+
+  bf regs[GROUPS][ELEMS];
+
+#pragma unroll
+  for (unsigned g = 0; g < GROUPS; g++) {
+    const unsigned p = p_row0 + (g << 3);
+    const unsigned row_base = block_base + (p * K) + k_local_base;
+    const uint4 packed = load_u4_mod<LOAD_MODIFIER>(load_ptr, row_base);
+    regs[g][0] = bf(packed.x);
+    regs[g][1] = bf(packed.y);
+    regs[g][2] = bf(packed.z);
+    regs[g][3] = bf(packed.w);
+  }
+
+  apply_6_rounds_pair_major_2groups(regs, lane16);
+
+#pragma unroll
+  for (unsigned g = 0; g < GROUPS; g++) {
+    const unsigned p = p_row0 + (g << 3);
+    smem[initial11_smem_idx(k_local_base + 0u, p)] = regs[g][0];
+    smem[initial11_smem_idx(k_local_base + 1u, p)] = regs[g][1];
+    smem[initial11_smem_idx(k_local_base + 2u, p)] = regs[g][2];
+    smem[initial11_smem_idx(k_local_base + 3u, p)] = regs[g][3];
+  }
+
+  __syncthreads();
+
+  // Each warp processes 8 k-rows; for each row, lane32 spans all 32 p values.
+  const unsigned k_base = warp << 3;
+  bf v00 = smem[initial11_smem_idx(k_base + 0u, lane32)];
+  bf v01 = smem[initial11_smem_idx(k_base + 1u, lane32)];
+  bf v10 = smem[initial11_smem_idx(k_base + 2u, lane32)];
+  bf v11 = smem[initial11_smem_idx(k_base + 3u, lane32)];
+  bf v20 = smem[initial11_smem_idx(k_base + 4u, lane32)];
+  bf v21 = smem[initial11_smem_idx(k_base + 5u, lane32)];
+  bf v30 = smem[initial11_smem_idx(k_base + 6u, lane32)];
+  bf v31 = smem[initial11_smem_idx(k_base + 7u, lane32)];
+
+  apply_5_rounds_warp64_pair_branchless_quad(v00, v01, v10, v11, v20, v21, v30, v31, lane32);
+
+  smem[initial11_smem_idx(k_base + 0u, lane32)] = v00;
+  smem[initial11_smem_idx(k_base + 1u, lane32)] = v01;
+  smem[initial11_smem_idx(k_base + 2u, lane32)] = v10;
+  smem[initial11_smem_idx(k_base + 3u, lane32)] = v11;
+  smem[initial11_smem_idx(k_base + 4u, lane32)] = v20;
+  smem[initial11_smem_idx(k_base + 5u, lane32)] = v21;
+  smem[initial11_smem_idx(k_base + 6u, lane32)] = v30;
+  smem[initial11_smem_idx(k_base + 7u, lane32)] = v31;
+
+  __syncthreads();
+
+#pragma unroll
+  for (unsigned g = 0; g < GROUPS; g++) {
+    const unsigned p = p_row0 + (g << 3);
+    const uint4 packed = uint4{
+        smem[initial11_smem_idx(k_local_base + 0u, p)].limb,
+        smem[initial11_smem_idx(k_local_base + 1u, p)].limb,
+        smem[initial11_smem_idx(k_local_base + 2u, p)].limb,
+        smem[initial11_smem_idx(k_local_base + 3u, p)].limb,
+    };
+    const unsigned row_base = block_base + (p * K) + k_local_base;
+    store_u4_mod<STORE_MODIFIER>(dst, row_base, packed);
+  }
+}
+
 template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER>
 DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial6(
     const bf *__restrict__ src,
@@ -513,6 +674,21 @@ EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_initial12_in_k
   // In-place initial12 policy: ld.cg + st.wt.
   (void)src;
   hypercube_evals_into_coeffs_bitrev_initial12<ld_modifier::cg, st_modifier::wt, true>(src, dst);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_initial11_out_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst) {
+  // Out-of-place initial11 policy: ld.cs + st.wt.
+  hypercube_evals_into_coeffs_bitrev_initial11<ld_modifier::cs, st_modifier::wt, false>(src, dst);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_initial11_in_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst) {
+  // In-place initial11 policy: ld.cg + st.wt.
+  (void)src;
+  hypercube_evals_into_coeffs_bitrev_initial11<ld_modifier::cg, st_modifier::wt, true>(src, dst);
 }
 
 EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial6_stage2_out_kernel(
