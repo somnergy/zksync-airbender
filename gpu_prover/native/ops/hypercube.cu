@@ -1529,6 +1529,161 @@ DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial7(
   }
 }
 
+template <ld_modifier LOAD_MODIFIER>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial8_half_p8_compute(
+    const bf *__restrict__ src,
+    const unsigned start_stage,
+    const unsigned block_base,
+    const unsigned low_base,
+    const unsigned k_half_base,
+    const unsigned p_group_base,
+    bf *__restrict__ smem) {
+  // One 7-round transform on a 128 x 8 half-tile.
+  // - vectorized load/store uses one uint4 per thread
+  // - compute uses one warp per p_local and 4-way k packing.
+
+  const unsigned tid = threadIdx.x;
+  const unsigned warp = tid >> 5;
+  const unsigned lane = tid & 31u;
+  const unsigned k_local = tid >> 1;       // [0,127]
+  const unsigned p4 = tid & 1u;            // [0,1]
+  const unsigned p_local0 = p4 << 2;       // {0,4}
+  const unsigned p_global0 = p_group_base + p_local0;
+  const unsigned k = k_local + k_half_base;
+  const unsigned row_base = block_base + (k << start_stage) + low_base + p_global0;
+  const uint4 packed = load_u4_mod<LOAD_MODIFIER>(src, row_base);
+
+  smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 0u)] = bf(packed.x);
+  smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 1u)] = bf(packed.y);
+  smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 2u)] = bf(packed.z);
+  smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 3u)] = bf(packed.w);
+
+  __syncthreads();
+
+  const unsigned p_local = warp; // [0,7]
+  const unsigned idx0 = noninitial10_half_p8_smem_idx(lane + 0u, p_local);
+  const unsigned idx1 = noninitial10_half_p8_smem_idx(lane + 32u, p_local);
+  const unsigned idx2 = noninitial10_half_p8_smem_idx(lane + 64u, p_local);
+  const unsigned idx3 = noninitial10_half_p8_smem_idx(lane + 96u, p_local);
+
+  bf vals[4] = {
+      smem[idx0],
+      smem[idx1],
+      smem[idx2],
+      smem[idx3],
+  };
+  apply_7_rounds_pair_major_warp32_quad(vals, lane);
+
+  smem[idx0] = vals[0];
+  smem[idx1] = vals[1];
+  smem[idx2] = vals[2];
+  smem[idx3] = vals[3];
+
+  __syncthreads();
+}
+
+template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial8_impl(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Noninitial8 split-half x2 path for start_stage=13 (2-launch log21 [13,8]):
+  // - split logical [256 x 32] tile into two CTAs over p-dimension halves
+  // - within each CTA, process two p-groups of 8
+  // - low half (k=0..127): run 7 rounds, cache outputs in registers
+  // - high half (k=128..255): run 7 rounds in shared
+  // - final merge round: high -= low
+  //
+  // Shared footprint: one 128 x 8 half-tile (4KB).
+  constexpr unsigned HALF_K = 128;
+  constexpr unsigned P_GROUP = 8;
+  constexpr unsigned P_GROUPS_PER_BLOCK = 2;
+  constexpr unsigned LOW_TILE_LOG = 5u;
+  __shared__ bf smem[HALF_K * P_GROUP]; // 128 * 8 = 1024 BF values (4KB)
+
+  if (blockDim.x != 256u) {
+    return;
+  }
+
+  const unsigned tid = threadIdx.x;
+  const unsigned stride = 1u << start_stage;
+  const unsigned low_tiles = stride >> LOW_TILE_LOG;
+  const unsigned tile_x2 = blockIdx.x;
+  const unsigned tile = tile_x2 >> 1;
+  const unsigned p_half = tile_x2 & 1u;
+  const unsigned high = tile / low_tiles;
+  const unsigned low_tile_id = tile - high * low_tiles;
+  const unsigned low_base = low_tile_id << LOW_TILE_LOG;
+  const unsigned block_base = high << (start_stage + 8u);
+  const unsigned half_stride = HALF_K << start_stage;
+  const unsigned p_group_start = p_half * P_GROUPS_PER_BLOCK;
+
+  const unsigned k_local = tid >> 1;  // [0,127]
+  const unsigned p4 = tid & 1u;       // [0,1]
+  const unsigned p_local0 = p4 << 2;  // {0,4}
+  uint4 low_cache;
+
+#pragma unroll
+  for (unsigned group_local = 0; group_local < P_GROUPS_PER_BLOCK; group_local++) {
+    const unsigned group = p_group_start + group_local;
+    const unsigned p_group_base = group * P_GROUP;
+
+    hypercube_evals_into_coeffs_bitrev_noninitial8_half_p8_compute<LOAD_MODIFIER>(
+        src, start_stage, block_base, low_base, 0u, p_group_base, smem);
+
+    low_cache = uint4{
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 0u)].limb,
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 1u)].limb,
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 2u)].limb,
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 3u)].limb,
+    };
+
+    __syncthreads();
+
+    hypercube_evals_into_coeffs_bitrev_noninitial8_half_p8_compute<LOAD_MODIFIER>(
+        src, start_stage, block_base, low_base, HALF_K, p_group_base, smem);
+
+    const unsigned p_global0 = p_group_base + p_local0;
+    const unsigned low_row_base = block_base + (k_local << start_stage) + low_base + p_global0;
+    const unsigned high_row_base = low_row_base + half_stride;
+    const uint4 high_packed = uint4{
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 0u)].limb,
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 1u)].limb,
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 2u)].limb,
+        smem[noninitial10_half_p8_smem_idx(k_local, p_local0 + 3u)].limb,
+    };
+    const uint4 merged = uint4{
+        bf::sub(bf(high_packed.x), bf(low_cache.x)).limb,
+        bf::sub(bf(high_packed.y), bf(low_cache.y)).limb,
+        bf::sub(bf(high_packed.z), bf(low_cache.z)).limb,
+        bf::sub(bf(high_packed.w), bf(low_cache.w)).limb,
+    };
+    store_u4_mod<STORE_MODIFIER>(dst, low_row_base, low_cache);
+    store_u4_mod<STORE_MODIFIER>(dst, high_row_base, merged);
+
+    if (group_local + 1u < P_GROUPS_PER_BLOCK) {
+      __syncthreads();
+    }
+  }
+}
+
+template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial8(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  switch (start_stage) {
+    case 13u:
+      hypercube_evals_into_coeffs_bitrev_noninitial8_impl<LOAD_MODIFIER, STORE_MODIFIER>(
+          src, dst, 13u);
+      return;
+    default:
+      hypercube_evals_into_coeffs_bitrev_noninitial8_impl<LOAD_MODIFIER, STORE_MODIFIER>(
+          src, dst, start_stage);
+      return;
+  }
+}
+
 template <ld_modifier SRC_LOAD_MODIFIER>
 DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial10_half_p8_compute(
     const bf *__restrict__ src,
@@ -2705,6 +2860,24 @@ EXTERN __launch_bounds__(512, 2) __global__ void ab_h2m_bitrev_bf_noninitial7_st
   // Final-stage noninitial7 (in-place) for 2-launch schedule: ld.ca + st.cs.
   (void)start_stage;
   hypercube_evals_into_coeffs_bitrev_noninitial7<ld_modifier::ca, st_modifier::cs>(src, dst, 14u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial8_stage3_out_start13_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Final-stage noninitial8 (out-of-place) for 2-launch log21 [13,8].
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial8<ld_modifier::cs, st_modifier::cs>(src, dst, 13u);
+}
+
+EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_noninitial8_stage3_in_start13_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Final-stage noninitial8 (in-place) for 2-launch log21 [13,8].
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial8<ld_modifier::ca, st_modifier::cs>(src, dst, 13u);
 }
 
 EXTERN __launch_bounds__(1024, 1) __global__ void ab_h2m_bitrev_bf_noninitial11_stage3_out_start13_x4_kernel(
