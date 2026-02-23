@@ -535,12 +535,12 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf_in_place(
 mod tests {
     use super::*;
     use era_cudart::device::{device_get_attribute, get_device};
+    use era_cudart::event::{elapsed_time as cuda_elapsed_time, CudaEvent};
     use era_cudart::memory::{memory_copy_async, DeviceAllocation};
     use era_cudart_sys::CudaDeviceAttr;
     use field::Field;
     use prover::gkr::whir::hypercube_to_monomial::multivariate_hypercube_evals_into_coeffs;
     use rand::{rng, rngs::StdRng, Rng, SeedableRng};
-    use std::time::Instant;
 
     const PROFILE_MULTI_WARMUP_ITERS: usize = 20;
     const PROFILE_MULTI_MEASURE_ITERS: usize = 100;
@@ -674,12 +674,16 @@ mod tests {
         }
         stream.synchronize().unwrap();
 
+        let start_event = CudaEvent::create().unwrap();
+        let end_event = CudaEvent::create().unwrap();
         let mut samples_us = Vec::with_capacity(measure_iters);
         for _ in 0..measure_iters {
-            let start = Instant::now();
+            start_event.record(stream).unwrap();
             launch().unwrap();
-            stream.synchronize().unwrap();
-            samples_us.push(start.elapsed().as_secs_f64() * 1_000_000.0);
+            end_event.record(stream).unwrap();
+            end_event.synchronize().unwrap();
+            let elapsed_ms = cuda_elapsed_time(&start_event, &end_event).unwrap() as f64;
+            samples_us.push(elapsed_ms * 1_000.0);
         }
         samples_us
     }
@@ -703,18 +707,26 @@ mod tests {
         }
         stream.synchronize().unwrap();
 
+        let start_event_a = CudaEvent::create().unwrap();
+        let end_event_a = CudaEvent::create().unwrap();
+        let start_event_b = CudaEvent::create().unwrap();
+        let end_event_b = CudaEvent::create().unwrap();
         let mut samples_a_us = Vec::with_capacity(measure_iters);
         let mut samples_b_us = Vec::with_capacity(measure_iters);
         for _ in 0..measure_iters {
-            let start_a = Instant::now();
+            start_event_a.record(stream).unwrap();
             launch_a().unwrap();
-            stream.synchronize().unwrap();
-            samples_a_us.push(start_a.elapsed().as_secs_f64() * 1_000_000.0);
+            end_event_a.record(stream).unwrap();
+            end_event_a.synchronize().unwrap();
+            let elapsed_a_ms = cuda_elapsed_time(&start_event_a, &end_event_a).unwrap() as f64;
+            samples_a_us.push(elapsed_a_ms * 1_000.0);
 
-            let start_b = Instant::now();
+            start_event_b.record(stream).unwrap();
             launch_b().unwrap();
-            stream.synchronize().unwrap();
-            samples_b_us.push(start_b.elapsed().as_secs_f64() * 1_000_000.0);
+            end_event_b.record(stream).unwrap();
+            end_event_b.synchronize().unwrap();
+            let elapsed_b_ms = cuda_elapsed_time(&start_event_b, &end_event_b).unwrap() as f64;
+            samples_b_us.push(elapsed_b_ms * 1_000.0);
         }
         (samples_a_us, samples_b_us)
     }
