@@ -42,6 +42,13 @@ const LOG24_INITIAL_ROUNDS: u32 = 13;
 const LOG24_NONINITIAL_STAGE2_ROUNDS: u32 = 11;
 const LOG24_NONINITIAL_STAGE2_START: u32 = LOG24_INITIAL_ROUNDS;
 
+const LOG24_3PASS_INITIAL_ROUNDS: u32 = 12;
+const LOG24_3PASS_NONINITIAL_STAGE2_ROUNDS: u32 = 6;
+const LOG24_3PASS_NONINITIAL_STAGE3_ROUNDS: u32 = 6;
+const LOG24_3PASS_NONINITIAL_STAGE2_START: u32 = LOG24_3PASS_INITIAL_ROUNDS;
+const LOG24_3PASS_NONINITIAL_STAGE3_START: u32 =
+    LOG24_3PASS_NONINITIAL_STAGE2_START + LOG24_3PASS_NONINITIAL_STAGE2_ROUNDS;
+
 cuda_kernel_signature_arguments_and_function!(
     HypercubeBitrevInitial,
     src: *const BF,
@@ -155,6 +162,18 @@ struct LaunchPlan {
 
 fn select_out_of_place_plan(log_rows: u32) -> LaunchPlan {
     match log_rows {
+        24 => LaunchPlan {
+            initial_kernel: ab_h2m_bitrev_bf_initial12_out_kernel,
+            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel,
+            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_out_start18_kernel,
+            initial_rounds: LOG24_3PASS_INITIAL_ROUNDS,
+            noninitial_stage2_rounds: LOG24_3PASS_NONINITIAL_STAGE2_ROUNDS,
+            noninitial_stage3_rounds: LOG24_3PASS_NONINITIAL_STAGE3_ROUNDS,
+            noninitial_stage2_tiles_per_cta: 1,
+            noninitial_stage3_tiles_per_cta: 1,
+            noninitial_stage2_start: LOG24_3PASS_NONINITIAL_STAGE2_START,
+            noninitial_stage3_start: LOG24_3PASS_NONINITIAL_STAGE3_START,
+        },
         23 => LaunchPlan {
             initial_kernel: ab_h2m_bitrev_bf_initial11_out_kernel,
             noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_out_start11_kernel,
@@ -185,6 +204,18 @@ fn select_out_of_place_plan(log_rows: u32) -> LaunchPlan {
 
 fn select_in_place_plan(log_rows: u32) -> LaunchPlan {
     match log_rows {
+        24 => LaunchPlan {
+            initial_kernel: ab_h2m_bitrev_bf_initial12_in_kernel,
+            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_in_start12_kernel,
+            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_in_start18_kernel,
+            initial_rounds: LOG24_3PASS_INITIAL_ROUNDS,
+            noninitial_stage2_rounds: LOG24_3PASS_NONINITIAL_STAGE2_ROUNDS,
+            noninitial_stage3_rounds: LOG24_3PASS_NONINITIAL_STAGE3_ROUNDS,
+            noninitial_stage2_tiles_per_cta: 1,
+            noninitial_stage3_tiles_per_cta: 1,
+            noninitial_stage2_start: LOG24_3PASS_NONINITIAL_STAGE2_START,
+            noninitial_stage3_start: LOG24_3PASS_NONINITIAL_STAGE3_START,
+        },
         23 => LaunchPlan {
             initial_kernel: ab_h2m_bitrev_bf_initial11_in_kernel,
             noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_in_start11_kernel,
@@ -272,7 +303,8 @@ fn launch_chain(
     // Locked cache policy by stage role for the 3-launch path:
     // - log23 schedule: [11, 6, 6]
     // - log22 schedule: [11, 5, 6]
-    // - log21/log24 are handled by dedicated 2-launch paths.
+    // - log24 schedule: [12, 6, 6]
+    // - log21 is handled by a dedicated 2-launch path.
     // Noninitial stages use fixed-start kernel entrypoints selected on host.
     // out-of-place:  #1 ld.cs/st.wt, #2 ld.cs/st.wt, #3 ld.cs/st.cs
     // in-place:      #1 ld.cg/st.wt, #2 ld.ca/st.wt, #3 ld.ca/st.cs
@@ -423,16 +455,6 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf(
     let rows = src.len();
     assert_eq!(dst.len(), rows);
     let log_rows = validate_len(rows);
-    if log_rows == 24 {
-        return launch_log24_chain_2launch(
-            ab_h2m_bitrev_bf_initial13_out_kernel,
-            ab_h2m_bitrev_bf_noninitial11_stage3_out_start13_x4_kernel,
-            src.as_ptr(),
-            dst.as_mut_ptr(),
-            rows,
-            stream,
-        );
-    }
     if log_rows == 21 {
         return launch_log21_chain_2launch(
             ab_h2m_bitrev_bf_initial14_out_kernel,
@@ -468,17 +490,6 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf_in_place(
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let log_rows = validate_len(values.len());
-    if log_rows == 24 {
-        let dst = values.as_mut_ptr();
-        return launch_log24_chain_2launch(
-            ab_h2m_bitrev_bf_initial13_in_kernel,
-            ab_h2m_bitrev_bf_noninitial11_stage3_in_start13_x4_kernel,
-            dst as *const BF,
-            dst,
-            values.len(),
-            stream,
-        );
-    }
     if log_rows == 21 {
         let dst = values.as_mut_ptr();
         return launch_log21_chain_2launch(
