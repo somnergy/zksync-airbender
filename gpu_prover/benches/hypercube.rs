@@ -5,9 +5,11 @@ use std::time::Duration;
 
 use criterion::{criterion_group, criterion_main, Bencher, BenchmarkId, Criterion, Throughput};
 use era_criterion_cuda::CudaMeasurement;
+use era_cudart::device::{device_get_attribute, get_device};
 use era_cudart::memory::{memory_copy_async, DeviceAllocation};
 use era_cudart::result::CudaResult;
 use era_cudart::stream::CudaStream;
+use era_cudart_sys::CudaDeviceAttr;
 use field::Field;
 use gpu_prover::field::BF;
 use gpu_prover::{
@@ -15,6 +17,17 @@ use gpu_prover::{
 };
 
 const SUPPORTED_LOG_ROWS: [u32; 4] = [21, 22, 23, 24];
+const L2_RING_TARGET_BYTES_MULTIPLIER: usize = 2;
+const L2_RING_TARGET_MIN_BYTES: usize = 8 * 1024 * 1024;
+
+fn stage1_ring_len(rows: usize) -> CudaResult<usize> {
+    let row_bytes = rows * std::mem::size_of::<BF>();
+    let device_id = get_device()?;
+    let l2_bytes = device_get_attribute(CudaDeviceAttr::L2CacheSize, device_id)? as usize;
+    let target_bytes = (l2_bytes * L2_RING_TARGET_BYTES_MULTIPLIER).max(L2_RING_TARGET_MIN_BYTES);
+    let ring_len = ((target_bytes + row_bytes - 1) / row_bytes).max(2);
+    Ok(ring_len)
+}
 
 struct HypercubeBitrevBenchCase {
     log_rows: u32,
@@ -65,15 +78,24 @@ fn benchmark_out_of_place(c: &mut Criterion<CudaMeasurement>) {
     group.measurement_time(Duration::from_secs(4));
 
     for &log_rows in &SUPPORTED_LOG_ROWS {
-        let mut bench_case = HypercubeBitrevBenchCase::new(log_rows, &stream).unwrap();
-        group.throughput(Throughput::Bytes(bench_case.bytes_per_transform()));
+        let rows = 1usize << log_rows;
+        let ring_len = stage1_ring_len(rows).unwrap();
+        let mut ring_cases = (0..ring_len)
+            .map(|_| HypercubeBitrevBenchCase::new(log_rows, &stream).unwrap())
+            .collect::<Vec<_>>();
+        let mut ring_idx = 0usize;
+        group.throughput(Throughput::Bytes(ring_cases[0].bytes_per_transform()));
         group.bench_with_input(
-            BenchmarkId::new("transform", format!("log_rows={}", bench_case.log_rows)),
+            BenchmarkId::new("transform", format!("log_rows={}", log_rows)),
             &log_rows,
             |b: &mut Bencher<CudaMeasurement>, _| {
                 b.iter(|| {
-                    bench_case.run_out_of_place(&stream).unwrap();
+                    ring_cases[ring_idx].run_out_of_place(&stream).unwrap();
                     stream.synchronize().unwrap();
+                    ring_idx += 1;
+                    if ring_idx == ring_cases.len() {
+                        ring_idx = 0;
+                    }
                 })
             },
         );
@@ -90,15 +112,24 @@ fn benchmark_in_place(c: &mut Criterion<CudaMeasurement>) {
     group.measurement_time(Duration::from_secs(4));
 
     for &log_rows in &SUPPORTED_LOG_ROWS {
-        let mut bench_case = HypercubeBitrevBenchCase::new(log_rows, &stream).unwrap();
-        group.throughput(Throughput::Bytes(bench_case.bytes_per_transform()));
+        let rows = 1usize << log_rows;
+        let ring_len = stage1_ring_len(rows).unwrap();
+        let mut ring_cases = (0..ring_len)
+            .map(|_| HypercubeBitrevBenchCase::new(log_rows, &stream).unwrap())
+            .collect::<Vec<_>>();
+        let mut ring_idx = 0usize;
+        group.throughput(Throughput::Bytes(ring_cases[0].bytes_per_transform()));
         group.bench_with_input(
-            BenchmarkId::new("transform", format!("log_rows={}", bench_case.log_rows)),
+            BenchmarkId::new("transform", format!("log_rows={}", log_rows)),
             &log_rows,
             |b: &mut Bencher<CudaMeasurement>, _| {
                 b.iter(|| {
-                    bench_case.run_in_place(&stream).unwrap();
+                    ring_cases[ring_idx].run_in_place(&stream).unwrap();
                     stream.synchronize().unwrap();
+                    ring_idx += 1;
+                    if ring_idx == ring_cases.len() {
+                        ring_idx = 0;
+                    }
                 })
             },
         );

@@ -431,7 +431,9 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf_in_place(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use era_cudart::device::{device_get_attribute, get_device};
     use era_cudart::memory::{memory_copy_async, DeviceAllocation};
+    use era_cudart_sys::CudaDeviceAttr;
     use field::Field;
     use prover::gkr::whir::hypercube_to_monomial::multivariate_hypercube_evals_into_coeffs;
     use rand::{rng, rngs::StdRng, Rng, SeedableRng};
@@ -441,6 +443,8 @@ mod tests {
     const PROFILE_MULTI_MEASURE_ITERS: usize = 100;
     const PROFILE_STAGE_WARMUP_ITERS: usize = 20;
     const PROFILE_STAGE_MEASURE_ITERS: usize = 100;
+    const L2_RING_TARGET_BYTES_MULTIPLIER: usize = 2;
+    const L2_RING_TARGET_MIN_BYTES: usize = 8 * 1024 * 1024;
     const LOG21_ROWS: usize = 1usize << 21;
     const LOG22_ROWS: usize = 1usize << 22;
     const LOG23_ROWS: usize = 1usize << 23;
@@ -456,6 +460,37 @@ mod tests {
         max: f64,
         stddev: f64,
         cv_pct: f64,
+    }
+
+    fn stage1_ring_len(rows: usize) -> usize {
+        let row_bytes = rows * std::mem::size_of::<BF>();
+        let device_id = get_device().unwrap();
+        let l2_bytes = device_get_attribute(CudaDeviceAttr::L2CacheSize, device_id).unwrap() as usize;
+        let target_bytes =
+            (l2_bytes * L2_RING_TARGET_BYTES_MULTIPLIER).max(L2_RING_TARGET_MIN_BYTES);
+        ((target_bytes + row_bytes - 1) / row_bytes).max(2)
+    }
+
+    fn alloc_filled_ring(
+        rows: usize,
+        ring_len: usize,
+        h_input: &[BF],
+        stream: &CudaStream,
+    ) -> Vec<DeviceAllocation<BF>> {
+        let mut ring = Vec::with_capacity(ring_len);
+        for _ in 0..ring_len {
+            let mut d_values = DeviceAllocation::alloc(rows).unwrap();
+            memory_copy_async(&mut d_values, h_input, stream).unwrap();
+            ring.push(d_values);
+        }
+        stream.synchronize().unwrap();
+        ring
+    }
+
+    fn alloc_empty_ring(rows: usize, ring_len: usize) -> Vec<DeviceAllocation<BF>> {
+        (0..ring_len)
+            .map(|_| DeviceAllocation::alloc(rows).unwrap())
+            .collect()
     }
 
     fn bitreverse_permute(values: &[BF]) -> Vec<BF> {
@@ -638,13 +673,45 @@ mod tests {
             .collect::<Vec<_>>();
 
         let stream = CudaStream::default();
-        let mut d_src = DeviceAllocation::alloc(rows).unwrap();
-        let mut d_dst = DeviceAllocation::alloc(rows).unwrap();
-        memory_copy_async(&mut d_src, &h_input, &stream).unwrap();
-        stream.synchronize().unwrap();
+        let ring_len = stage1_ring_len(rows);
+        let d_src_ring = alloc_filled_ring(rows, ring_len, &h_input, &stream);
+        let mut d_dst_ring = alloc_empty_ring(rows, ring_len);
+        let mut ring_idx = 0usize;
 
         let samples_us = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
-            hypercube_evals_into_coeffs_bitrev_bf(&d_src, &mut d_dst, &stream)
+            let idx = ring_idx;
+            ring_idx += 1;
+            if ring_idx == ring_len {
+                ring_idx = 0;
+            }
+            hypercube_evals_into_coeffs_bitrev_bf(&d_src_ring[idx], &mut d_dst_ring[idx], &stream)
+        });
+        let stats = compute_profile_stats(&samples_us);
+        print_chain_profile(rows, warmup_iters, measure_iters, stats);
+    }
+
+    fn run_profile_in_place_multi_invocation(
+        rows: usize,
+        warmup_iters: usize,
+        measure_iters: usize,
+    ) {
+        let mut rng = StdRng::seed_from_u64(0x6EAF_2D8C_A5B1_1173u64 ^ rows as u64);
+        let h_input = (0..rows)
+            .map(|_| BF::from_nonreduced_u32(rng.random()))
+            .collect::<Vec<_>>();
+
+        let stream = CudaStream::default();
+        let ring_len = stage1_ring_len(rows);
+        let mut d_values_ring = alloc_filled_ring(rows, ring_len, &h_input, &stream);
+        let mut ring_idx = 0usize;
+
+        let samples_us = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+            let idx = ring_idx;
+            ring_idx += 1;
+            if ring_idx == ring_len {
+                ring_idx = 0;
+            }
+            hypercube_evals_into_coeffs_bitrev_bf_in_place(&mut d_values_ring[idx], &stream)
         });
         let stats = compute_profile_stats(&samples_us);
         print_chain_profile(rows, warmup_iters, measure_iters, stats);
@@ -663,10 +730,11 @@ mod tests {
                 .collect::<Vec<_>>();
 
             let stream = CudaStream::default();
-            let mut d_src = DeviceAllocation::alloc(rows).unwrap();
-            let mut d_dst = DeviceAllocation::alloc(rows).unwrap();
+            let ring_len = stage1_ring_len(rows);
+            let d_src_ring = alloc_filled_ring(rows, ring_len, &h_input, &stream);
+            let mut d_dst_ring = alloc_empty_ring(rows, ring_len);
+            let mut d_stage_ring = alloc_empty_ring(rows, ring_len);
             let mut d_stage = DeviceAllocation::alloc(rows).unwrap();
-            memory_copy_async(&mut d_src, &h_input, &stream).unwrap();
             memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
             stream.synchronize().unwrap();
 
@@ -700,31 +768,49 @@ mod tests {
                 HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial7_stage3_out_start14_kernel);
 
             let stage_ptr = d_stage.as_mut_ptr();
-            let initial_args = HypercubeBitrevInitialArguments::new(d_src.as_ptr(), stage_ptr);
+            let initial_args_for_noninitial =
+                HypercubeBitrevInitialArguments::new(d_src_ring[0].as_ptr(), stage_ptr);
             let noninitial_args = HypercubeBitrevNonInitialArguments::new(
                 stage_ptr as *const BF,
                 stage_ptr,
                 LOG21_NONINITIAL_STAGE2_START,
             );
 
-            let chain_samples =
-                run_profile_invocations(warmup_iters, measure_iters, &stream, || {
-                    hypercube_evals_into_coeffs_bitrev_bf(&d_src, &mut d_dst, &stream)
-                });
+            let mut chain_ring_idx = 0usize;
+            let chain_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+                let idx = chain_ring_idx;
+                chain_ring_idx += 1;
+                if chain_ring_idx == ring_len {
+                    chain_ring_idx = 0;
+                }
+                hypercube_evals_into_coeffs_bitrev_bf(
+                    &d_src_ring[idx],
+                    &mut d_dst_ring[idx],
+                    &stream,
+                )
+            });
             let chain_stats = compute_profile_stats(&chain_samples);
             print_chain_profile(rows, warmup_iters, measure_iters, chain_stats);
 
-            memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
-            stream.synchronize().unwrap();
-            let initial_samples =
-                run_profile_invocations(warmup_iters, measure_iters, &stream, || {
-                    initial_fn.launch(&config_initial, &initial_args)
-                });
+            let mut initial_ring_idx = 0usize;
+            let initial_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+                let idx = initial_ring_idx;
+                initial_ring_idx += 1;
+                if initial_ring_idx == ring_len {
+                    initial_ring_idx = 0;
+                }
+                let stage_ptr = d_stage_ring[idx].as_mut_ptr();
+                let initial_args =
+                    HypercubeBitrevInitialArguments::new(d_src_ring[idx].as_ptr(), stage_ptr);
+                initial_fn.launch(&config_initial, &initial_args)
+            });
             let initial_stats = compute_profile_stats(&initial_samples);
             print_stage_profile(rows, "initial", warmup_iters, measure_iters, initial_stats);
 
             memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
-            initial_fn.launch(&config_initial, &initial_args).unwrap();
+            initial_fn
+                .launch(&config_initial, &initial_args_for_noninitial)
+                .unwrap();
             stream.synchronize().unwrap();
             let noninitial_samples =
                 run_profile_invocations(warmup_iters, measure_iters, &stream, || {
@@ -769,10 +855,11 @@ mod tests {
             .collect::<Vec<_>>();
 
         let stream = CudaStream::default();
-        let mut d_src = DeviceAllocation::alloc(rows).unwrap();
-        let mut d_dst = DeviceAllocation::alloc(rows).unwrap();
+        let ring_len = stage1_ring_len(rows);
+        let d_src_ring = alloc_filled_ring(rows, ring_len, &h_input, &stream);
+        let mut d_dst_ring = alloc_empty_ring(rows, ring_len);
+        let mut d_stage_ring = alloc_empty_ring(rows, ring_len);
         let mut d_stage = DeviceAllocation::alloc(rows).unwrap();
-        memory_copy_async(&mut d_src, &h_input, &stream).unwrap();
         memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
         stream.synchronize().unwrap();
 
@@ -820,7 +907,8 @@ mod tests {
         let stage3_fn = HypercubeBitrevNonInitialFunction(plan.noninitial_stage3_kernel);
 
         let stage_ptr = d_stage.as_mut_ptr();
-        let initial_args = HypercubeBitrevInitialArguments::new(d_src.as_ptr(), stage_ptr);
+        let initial_args_for_noninitial =
+            HypercubeBitrevInitialArguments::new(d_src_ring[0].as_ptr(), stage_ptr);
         let stage2_args = HypercubeBitrevNonInitialArguments::new(
             stage_ptr as *const BF,
             stage_ptr,
@@ -832,22 +920,36 @@ mod tests {
             plan.noninitial_stage3_start,
         );
 
+        let mut chain_ring_idx = 0usize;
         let chain_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
-            hypercube_evals_into_coeffs_bitrev_bf(&d_src, &mut d_dst, &stream)
+            let idx = chain_ring_idx;
+            chain_ring_idx += 1;
+            if chain_ring_idx == ring_len {
+                chain_ring_idx = 0;
+            }
+            hypercube_evals_into_coeffs_bitrev_bf(&d_src_ring[idx], &mut d_dst_ring[idx], &stream)
         });
         let chain_stats = compute_profile_stats(&chain_samples);
         print_chain_profile(rows, warmup_iters, measure_iters, chain_stats);
 
-        memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
-        stream.synchronize().unwrap();
+        let mut initial_ring_idx = 0usize;
         let initial_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+            let idx = initial_ring_idx;
+            initial_ring_idx += 1;
+            if initial_ring_idx == ring_len {
+                initial_ring_idx = 0;
+            }
+            let stage_ptr = d_stage_ring[idx].as_mut_ptr();
+            let initial_args = HypercubeBitrevInitialArguments::new(d_src_ring[idx].as_ptr(), stage_ptr);
             initial_fn.launch(&config_initial, &initial_args)
         });
         let initial_stats = compute_profile_stats(&initial_samples);
         print_stage_profile(rows, "initial", warmup_iters, measure_iters, initial_stats);
 
         memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
-        initial_fn.launch(&config_initial, &initial_args).unwrap();
+        initial_fn
+            .launch(&config_initial, &initial_args_for_noninitial)
+            .unwrap();
         stream.synchronize().unwrap();
         let stage2_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
             stage2_fn.launch(&config_stage2, &stage2_args)
@@ -856,7 +958,9 @@ mod tests {
         print_stage_profile(rows, "stage2", warmup_iters, measure_iters, stage2_stats);
 
         memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
-        initial_fn.launch(&config_initial, &initial_args).unwrap();
+        initial_fn
+            .launch(&config_initial, &initial_args_for_noninitial)
+            .unwrap();
         stage2_fn.launch(&config_stage2, &stage2_args).unwrap();
         stream.synchronize().unwrap();
         let stage3_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
@@ -1039,6 +1143,46 @@ mod tests {
     #[ignore]
     fn profile_hypercube_bitrev_bf_multi_invocation_log21() {
         run_profile_out_of_place_multi_invocation(
+            LOG21_ROWS,
+            PROFILE_MULTI_WARMUP_ITERS,
+            PROFILE_MULTI_MEASURE_ITERS,
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn profile_hypercube_bitrev_bf_multi_invocation_in_place_log24() {
+        run_profile_in_place_multi_invocation(
+            LOG24_ROWS,
+            PROFILE_MULTI_WARMUP_ITERS,
+            PROFILE_MULTI_MEASURE_ITERS,
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn profile_hypercube_bitrev_bf_multi_invocation_in_place_log23() {
+        run_profile_in_place_multi_invocation(
+            LOG23_ROWS,
+            PROFILE_MULTI_WARMUP_ITERS,
+            PROFILE_MULTI_MEASURE_ITERS,
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn profile_hypercube_bitrev_bf_multi_invocation_in_place_log22() {
+        run_profile_in_place_multi_invocation(
+            LOG22_ROWS,
+            PROFILE_MULTI_WARMUP_ITERS,
+            PROFILE_MULTI_MEASURE_ITERS,
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn profile_hypercube_bitrev_bf_multi_invocation_in_place_log21() {
+        run_profile_in_place_multi_invocation(
             LOG21_ROWS,
             PROFILE_MULTI_WARMUP_ITERS,
             PROFILE_MULTI_MEASURE_ITERS,
