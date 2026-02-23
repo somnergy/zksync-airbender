@@ -11,6 +11,9 @@ const BLOCK_THREADS: u32 = 256;
 const LOG21_INITIAL_BLOCK_THREADS: u32 = 1024;
 const LOG21_NONINITIAL_BLOCK_THREADS: u32 = 256;
 const LOG21_INITIAL_DYNAMIC_SMEM_BYTES: usize = 1usize << (LOG21_INITIAL_ROUNDS + 2);
+const LOG24_INITIAL_BLOCK_THREADS: u32 = 1024;
+const LOG24_NONINITIAL_BLOCK_THREADS: u32 = 256;
+const LOG24_NONINITIAL_GRID_MULTIPLIER: u32 = 4;
 const MIN_SUPPORTED_LOG_ROWS: u32 = 21;
 const MAX_SUPPORTED_LOG_ROWS: u32 = 24;
 const NONINITIAL_PARTITION_LOG_ROWS: u32 = 5;
@@ -33,12 +36,9 @@ const LOG23_NONINITIAL_STAGE2_START: u32 = LOG23_INITIAL_ROUNDS;
 const LOG23_NONINITIAL_STAGE3_START: u32 =
     LOG23_NONINITIAL_STAGE2_START + LOG23_NONINITIAL_STAGE2_ROUNDS;
 
-const LOG24_INITIAL_ROUNDS: u32 = 12;
-const LOG24_NONINITIAL_STAGE2_ROUNDS: u32 = 6;
-const LOG24_NONINITIAL_STAGE3_ROUNDS: u32 = 6;
+const LOG24_INITIAL_ROUNDS: u32 = 15;
+const LOG24_NONINITIAL_STAGE2_ROUNDS: u32 = 9;
 const LOG24_NONINITIAL_STAGE2_START: u32 = LOG24_INITIAL_ROUNDS;
-const LOG24_NONINITIAL_STAGE3_START: u32 =
-    LOG24_NONINITIAL_STAGE2_START + LOG24_NONINITIAL_STAGE2_ROUNDS;
 
 cuda_kernel_signature_arguments_and_function!(
     HypercubeBitrevInitial,
@@ -80,6 +80,12 @@ declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial12_out_kernel);
 declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial12_in_kernel);
 declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial14_out_kernel);
 declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial14_in_kernel);
+declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial14_out_512_kernel);
+declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial14_in_512_kernel);
+declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial15_out_kernel);
+declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial15_in_kernel);
+declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial15_out_512_kernel);
+declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial15_in_512_kernel);
 declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial11_out_kernel);
 declare_h2m_initial_kernel!(ab_h2m_bitrev_bf_initial11_in_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial5_stage2_out_kernel);
@@ -98,6 +104,14 @@ declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial5_stage3_out_start16_k
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial5_stage3_in_start16_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial7_stage3_out_start14_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial7_stage3_in_start14_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial9_stage3_out_start15_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial9_stage3_in_start15_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial9_stage3_out_start15_x2_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial9_stage3_in_start15_x2_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial10_stage3_out_start14_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial10_stage3_in_start14_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial10_stage3_out_start14_x2_kernel);
+declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial10_stage3_in_start14_x2_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_out_start11_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel);
 declare_h2m_noninitial_kernel!(ab_h2m_bitrev_bf_noninitial6_stage2_in_start11_kernel);
@@ -135,18 +149,6 @@ struct LaunchPlan {
 
 fn select_out_of_place_plan(log_rows: u32) -> LaunchPlan {
     match log_rows {
-        24 => LaunchPlan {
-            initial_kernel: ab_h2m_bitrev_bf_initial12_out_kernel,
-            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel,
-            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_out_start18_kernel,
-            initial_rounds: LOG24_INITIAL_ROUNDS,
-            noninitial_stage2_rounds: LOG24_NONINITIAL_STAGE2_ROUNDS,
-            noninitial_stage3_rounds: LOG24_NONINITIAL_STAGE3_ROUNDS,
-            noninitial_stage2_tiles_per_cta: 1,
-            noninitial_stage3_tiles_per_cta: 1,
-            noninitial_stage2_start: LOG24_NONINITIAL_STAGE2_START,
-            noninitial_stage3_start: LOG24_NONINITIAL_STAGE3_START,
-        },
         23 => LaunchPlan {
             initial_kernel: ab_h2m_bitrev_bf_initial11_out_kernel,
             noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_out_start11_kernel,
@@ -177,18 +179,6 @@ fn select_out_of_place_plan(log_rows: u32) -> LaunchPlan {
 
 fn select_in_place_plan(log_rows: u32) -> LaunchPlan {
     match log_rows {
-        24 => LaunchPlan {
-            initial_kernel: ab_h2m_bitrev_bf_initial12_in_kernel,
-            noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_in_start12_kernel,
-            noninitial_stage3_kernel: ab_h2m_bitrev_bf_noninitial6_stage3_in_start18_kernel,
-            initial_rounds: LOG24_INITIAL_ROUNDS,
-            noninitial_stage2_rounds: LOG24_NONINITIAL_STAGE2_ROUNDS,
-            noninitial_stage3_rounds: LOG24_NONINITIAL_STAGE3_ROUNDS,
-            noninitial_stage2_tiles_per_cta: 1,
-            noninitial_stage3_tiles_per_cta: 1,
-            noninitial_stage2_start: LOG24_NONINITIAL_STAGE2_START,
-            noninitial_stage3_start: LOG24_NONINITIAL_STAGE3_START,
-        },
         23 => LaunchPlan {
             initial_kernel: ab_h2m_bitrev_bf_initial11_in_kernel,
             noninitial_stage2_kernel: ab_h2m_bitrev_bf_noninitial6_stage2_in_start11_kernel,
@@ -225,6 +215,10 @@ fn noninitial_grid(rows: usize, rounds: u32, tiles_per_cta: u32) -> u32 {
     (tiles / tiles_per_cta) as u32
 }
 
+fn log24_noninitial_grid(rows: usize) -> u32 {
+    noninitial_grid(rows, LOG24_NONINITIAL_STAGE2_ROUNDS, 1) * LOG24_NONINITIAL_GRID_MULTIPLIER
+}
+
 fn configure_log21_initial_dynamic_smem(
     initial_kernel: HypercubeBitrevInitialSignature,
 ) -> CudaResult<()> {
@@ -256,10 +250,9 @@ fn launch_chain(
     stream: &CudaStream,
 ) -> CudaResult<()> {
     // Locked cache policy by stage role for the 3-launch path:
-    // - log24 schedule: [12, 6, 6]
     // - log23 schedule: [11, 6, 6]
     // - log22 schedule: [11, 5, 6]
-    // - log21 is handled by a dedicated 2-launch path.
+    // - log21/log24 are handled by dedicated 2-launch paths.
     // Noninitial stages use fixed-start kernel entrypoints selected on host.
     // out-of-place:  #1 ld.cs/st.wt, #2 ld.cs/st.wt, #3 ld.cs/st.cs
     // in-place:      #1 ld.cg/st.wt, #2 ld.ca/st.wt, #3 ld.ca/st.cs
@@ -353,6 +346,49 @@ fn launch_log21_chain_2launch(
     Ok(())
 }
 
+fn launch_log24_chain_2launch(
+    initial_kernel: HypercubeBitrevInitialSignature,
+    noninitial_kernel: HypercubeBitrevNonInitialSignature,
+    launch0_src: *const BF,
+    launch_dst: *mut BF,
+    rows: usize,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    let grid_initial = (rows >> LOG24_INITIAL_ROUNDS) as u32;
+    let grid_noninitial = log24_noninitial_grid(rows);
+    configure_log21_initial_dynamic_smem(initial_kernel)?;
+
+    let config0 = CudaLaunchConfig::builder()
+        .grid_dim(Dim3 {
+            x: grid_initial,
+            y: 1,
+            z: 1,
+        })
+        .block_dim(LOG24_INITIAL_BLOCK_THREADS)
+        .dynamic_smem_bytes(LOG21_INITIAL_DYNAMIC_SMEM_BYTES)
+        .stream(stream)
+        .build();
+    let args0 = HypercubeBitrevInitialArguments::new(launch0_src, launch_dst);
+    HypercubeBitrevInitialFunction(initial_kernel).launch(&config0, &args0)?;
+
+    // The second launch is the final noninitial9 stage at fixed start=15.
+    let launch1_src = launch_dst as *const BF;
+    let config1 = CudaLaunchConfig::basic(
+        Dim3 {
+            x: grid_noninitial,
+            y: 1,
+            z: 1,
+        },
+        LOG24_NONINITIAL_BLOCK_THREADS,
+        stream,
+    );
+    let args1 =
+        HypercubeBitrevNonInitialArguments::new(launch1_src, launch_dst, LOG24_NONINITIAL_STAGE2_START);
+    HypercubeBitrevNonInitialFunction(noninitial_kernel).launch(&config1, &args1)?;
+
+    Ok(())
+}
+
 pub fn hypercube_evals_into_coeffs_bitrev_bf(
     src: &DeviceSlice<BF>,
     dst: &mut DeviceSlice<BF>,
@@ -361,6 +397,16 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf(
     let rows = src.len();
     assert_eq!(dst.len(), rows);
     let log_rows = validate_len(rows);
+    if log_rows == 24 {
+        return launch_log24_chain_2launch(
+            ab_h2m_bitrev_bf_initial15_out_kernel,
+            ab_h2m_bitrev_bf_noninitial9_stage3_out_start15_x2_kernel,
+            src.as_ptr(),
+            dst.as_mut_ptr(),
+            rows,
+            stream,
+        );
+    }
     if log_rows == 21 {
         return launch_log21_chain_2launch(
             ab_h2m_bitrev_bf_initial14_out_kernel,
@@ -396,6 +442,17 @@ pub fn hypercube_evals_into_coeffs_bitrev_bf_in_place(
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let log_rows = validate_len(values.len());
+    if log_rows == 24 {
+        let dst = values.as_mut_ptr();
+        return launch_log24_chain_2launch(
+            ab_h2m_bitrev_bf_initial15_in_kernel,
+            ab_h2m_bitrev_bf_noninitial9_stage3_in_start15_x2_kernel,
+            dst as *const BF,
+            dst,
+            values.len(),
+            stream,
+        );
+    }
     if log_rows == 21 {
         let dst = values.as_mut_ptr();
         return launch_log21_chain_2launch(
@@ -581,6 +638,41 @@ mod tests {
         samples_us
     }
 
+    fn run_profile_compare_invocations<F, G>(
+        warmup_iters: usize,
+        measure_iters: usize,
+        stream: &CudaStream,
+        mut launch_a: F,
+        mut launch_b: G,
+    ) -> (Vec<f64>, Vec<f64>)
+    where
+        F: FnMut() -> CudaResult<()>,
+        G: FnMut() -> CudaResult<()>,
+    {
+        assert!(measure_iters > 0);
+
+        for _ in 0..warmup_iters {
+            launch_a().unwrap();
+            launch_b().unwrap();
+        }
+        stream.synchronize().unwrap();
+
+        let mut samples_a_us = Vec::with_capacity(measure_iters);
+        let mut samples_b_us = Vec::with_capacity(measure_iters);
+        for _ in 0..measure_iters {
+            let start_a = Instant::now();
+            launch_a().unwrap();
+            stream.synchronize().unwrap();
+            samples_a_us.push(start_a.elapsed().as_secs_f64() * 1_000_000.0);
+
+            let start_b = Instant::now();
+            launch_b().unwrap();
+            stream.synchronize().unwrap();
+            samples_b_us.push(start_b.elapsed().as_secs_f64() * 1_000_000.0);
+        }
+        (samples_a_us, samples_b_us)
+    }
+
     fn compute_profile_stats(samples_us: &[f64]) -> ProfileStats {
         assert!(!samples_us.is_empty());
         let mut sorted = samples_us.to_vec();
@@ -723,6 +815,130 @@ mod tests {
         measure_iters: usize,
     ) {
         let log_rows = validate_len(rows);
+        if log_rows == 24 {
+            let mut rng = StdRng::seed_from_u64(0x52A9_64B7_14CF_73D8u64 ^ rows as u64);
+            let h_input = (0..rows)
+                .map(|_| BF::from_nonreduced_u32(rng.random()))
+                .collect::<Vec<_>>();
+
+            let stream = CudaStream::default();
+            let ring_len = stage1_ring_len(rows);
+            let d_src_ring = alloc_filled_ring(rows, ring_len, &h_input, &stream);
+            let mut d_dst_ring = alloc_empty_ring(rows, ring_len);
+            let mut d_stage_ring = alloc_empty_ring(rows, ring_len);
+            let mut d_stage = DeviceAllocation::alloc(rows).unwrap();
+            memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
+            stream.synchronize().unwrap();
+
+            let initial_grid = (rows >> LOG24_INITIAL_ROUNDS) as u32;
+            let noninitial_grid = super::log24_noninitial_grid(rows);
+            super::configure_log21_initial_dynamic_smem(ab_h2m_bitrev_bf_initial15_out_kernel)
+                .unwrap();
+
+            let config_initial = CudaLaunchConfig::builder()
+                .grid_dim(Dim3 {
+                    x: initial_grid,
+                    y: 1,
+                    z: 1,
+                })
+                .block_dim(LOG24_INITIAL_BLOCK_THREADS)
+                .dynamic_smem_bytes(LOG21_INITIAL_DYNAMIC_SMEM_BYTES)
+                .stream(&stream)
+                .build();
+            let config_noninitial = CudaLaunchConfig::basic(
+                Dim3 {
+                    x: noninitial_grid,
+                    y: 1,
+                    z: 1,
+                },
+                LOG24_NONINITIAL_BLOCK_THREADS,
+                &stream,
+            );
+
+            let initial_fn = HypercubeBitrevInitialFunction(ab_h2m_bitrev_bf_initial15_out_kernel);
+            let noninitial_fn =
+                HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial9_stage3_out_start15_x2_kernel);
+
+            let stage_ptr = d_stage.as_mut_ptr();
+            let initial_args_for_noninitial =
+                HypercubeBitrevInitialArguments::new(d_src_ring[0].as_ptr(), stage_ptr);
+            let noninitial_args = HypercubeBitrevNonInitialArguments::new(
+                stage_ptr as *const BF,
+                stage_ptr,
+                LOG24_NONINITIAL_STAGE2_START,
+            );
+
+            let mut chain_ring_idx = 0usize;
+            let chain_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+                let idx = chain_ring_idx;
+                chain_ring_idx += 1;
+                if chain_ring_idx == ring_len {
+                    chain_ring_idx = 0;
+                }
+                hypercube_evals_into_coeffs_bitrev_bf(
+                    &d_src_ring[idx],
+                    &mut d_dst_ring[idx],
+                    &stream,
+                )
+            });
+            let chain_stats = compute_profile_stats(&chain_samples);
+            print_chain_profile(rows, warmup_iters, measure_iters, chain_stats);
+
+            let mut initial_ring_idx = 0usize;
+            let initial_samples = run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+                let idx = initial_ring_idx;
+                initial_ring_idx += 1;
+                if initial_ring_idx == ring_len {
+                    initial_ring_idx = 0;
+                }
+                let stage_ptr = d_stage_ring[idx].as_mut_ptr();
+                let initial_args =
+                    HypercubeBitrevInitialArguments::new(d_src_ring[idx].as_ptr(), stage_ptr);
+                initial_fn.launch(&config_initial, &initial_args)
+            });
+            let initial_stats = compute_profile_stats(&initial_samples);
+            print_stage_profile(rows, "initial", warmup_iters, measure_iters, initial_stats);
+
+            memory_copy_async(&mut d_stage, &h_input, &stream).unwrap();
+            initial_fn
+                .launch(&config_initial, &initial_args_for_noninitial)
+                .unwrap();
+            stream.synchronize().unwrap();
+            let noninitial_samples =
+                run_profile_invocations(warmup_iters, measure_iters, &stream, || {
+                    noninitial_fn.launch(&config_noninitial, &noninitial_args)
+                });
+            let noninitial_stats = compute_profile_stats(&noninitial_samples);
+            print_stage_profile(
+                rows,
+                "stage2final",
+                warmup_iters,
+                measure_iters,
+                noninitial_stats,
+            );
+
+            let stage_sum_median = initial_stats.median + noninitial_stats.median;
+            let median_gap = chain_stats.median - stage_sum_median;
+            let chain_median = chain_stats.median;
+            let initial_share_pct = (initial_stats.median / chain_median) * 100.0;
+            let noninitial_share_pct = (noninitial_stats.median / chain_median) * 100.0;
+            println!(
+                "profile_h2m_stage_breakdown rows={} log_rows={} warmup={} iters={} chain_median_us={:.3} initial_median_us={:.3} stage2final_median_us={:.3} initial_pct={:.2} stage2final_pct={:.2} stage_sum_median_us={:.3} median_gap_us={:.3}",
+                rows,
+                log_rows,
+                warmup_iters,
+                measure_iters,
+                chain_median,
+                initial_stats.median,
+                noninitial_stats.median,
+                initial_share_pct,
+                noninitial_share_pct,
+                stage_sum_median,
+                median_gap,
+            );
+            return;
+        }
+
         if log_rows == 21 {
             let mut rng = StdRng::seed_from_u64(0x9C7F_D142_1B35_EAAAu64 ^ rows as u64);
             let h_input = (0..rows)
@@ -1226,6 +1442,202 @@ mod tests {
             LOG21_ROWS,
             PROFILE_STAGE_WARMUP_ITERS,
             PROFILE_STAGE_MEASURE_ITERS,
+        );
+    }
+
+    #[test]
+    #[ignore]
+    fn profile_hypercube_bitrev_bf_compare_2pass_vs_3pass_multi_invocation_log24() {
+        const LEGACY_LOG24_INITIAL_ROUNDS: u32 = 12;
+        const LEGACY_LOG24_STAGE2_ROUNDS: u32 = 6;
+        const LEGACY_LOG24_STAGE3_ROUNDS: u32 = 6;
+        const LEGACY_LOG24_STAGE2_START: u32 = LEGACY_LOG24_INITIAL_ROUNDS;
+        const LEGACY_LOG24_STAGE3_START: u32 =
+            LEGACY_LOG24_STAGE2_START + LEGACY_LOG24_STAGE2_ROUNDS;
+
+        let rows = LOG24_ROWS;
+        let warmup_iters = PROFILE_MULTI_WARMUP_ITERS;
+        let measure_iters = PROFILE_MULTI_MEASURE_ITERS;
+
+        let mut rng = StdRng::seed_from_u64(0x6A31_92C4_77B0_5E28u64 ^ rows as u64);
+        let h_input = (0..rows)
+            .map(|_| BF::from_nonreduced_u32(rng.random()))
+            .collect::<Vec<_>>();
+
+        let stream = CudaStream::default();
+        let ring_len = stage1_ring_len(rows);
+        let d_src_ring = alloc_filled_ring(rows, ring_len, &h_input, &stream);
+        let mut d_dst_2pass_ring = alloc_empty_ring(rows, ring_len);
+        let mut d_dst_3pass_ring = alloc_empty_ring(rows, ring_len);
+
+        super::configure_log21_initial_dynamic_smem(ab_h2m_bitrev_bf_initial15_out_kernel)
+            .unwrap();
+
+        let grid_2pass_initial = (rows >> LOG24_INITIAL_ROUNDS) as u32;
+        let grid_2pass_noninitial = super::log24_noninitial_grid(rows);
+        let config_2pass_initial = CudaLaunchConfig::builder()
+            .grid_dim(Dim3 {
+                x: grid_2pass_initial,
+                y: 1,
+                z: 1,
+            })
+            .block_dim(LOG24_INITIAL_BLOCK_THREADS)
+            .dynamic_smem_bytes(LOG21_INITIAL_DYNAMIC_SMEM_BYTES)
+            .stream(&stream)
+            .build();
+        let config_2pass_noninitial = CudaLaunchConfig::basic(
+            Dim3 {
+                x: grid_2pass_noninitial,
+                y: 1,
+                z: 1,
+            },
+            LOG24_NONINITIAL_BLOCK_THREADS,
+            &stream,
+        );
+        let initial_2pass_fn = HypercubeBitrevInitialFunction(ab_h2m_bitrev_bf_initial15_out_kernel);
+        let noninitial_2pass_fn =
+            HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial9_stage3_out_start15_x2_kernel);
+
+        let grid_3pass_initial = (rows >> LEGACY_LOG24_INITIAL_ROUNDS) as u32;
+        let grid_3pass_stage2 = super::noninitial_grid(rows, LEGACY_LOG24_STAGE2_ROUNDS, 1);
+        let grid_3pass_stage3 = super::noninitial_grid(rows, LEGACY_LOG24_STAGE3_ROUNDS, 1);
+        let config_3pass_initial = CudaLaunchConfig::basic(
+            Dim3 {
+                x: grid_3pass_initial,
+                y: 1,
+                z: 1,
+            },
+            BLOCK_THREADS,
+            &stream,
+        );
+        let config_3pass_stage2 = CudaLaunchConfig::basic(
+            Dim3 {
+                x: grid_3pass_stage2,
+                y: 1,
+                z: 1,
+            },
+            BLOCK_THREADS,
+            &stream,
+        );
+        let config_3pass_stage3 = CudaLaunchConfig::basic(
+            Dim3 {
+                x: grid_3pass_stage3,
+                y: 1,
+                z: 1,
+            },
+            BLOCK_THREADS,
+            &stream,
+        );
+        let initial_3pass_fn = HypercubeBitrevInitialFunction(ab_h2m_bitrev_bf_initial12_out_kernel);
+        let stage2_3pass_fn =
+            HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial6_stage2_out_start12_kernel);
+        let stage3_3pass_fn =
+            HypercubeBitrevNonInitialFunction(ab_h2m_bitrev_bf_noninitial6_stage3_out_start18_kernel);
+
+        let mut ring_idx_2pass = 0usize;
+        let mut ring_idx_3pass = 0usize;
+        let (samples_2pass_us, samples_3pass_us) = run_profile_compare_invocations(
+            warmup_iters,
+            measure_iters,
+            &stream,
+            || {
+                let idx = ring_idx_2pass;
+                ring_idx_2pass += 1;
+                if ring_idx_2pass == ring_len {
+                    ring_idx_2pass = 0;
+                }
+
+                let dst_ptr = d_dst_2pass_ring[idx].as_mut_ptr();
+                let args0 = HypercubeBitrevInitialArguments::new(d_src_ring[idx].as_ptr(), dst_ptr);
+                initial_2pass_fn.launch(&config_2pass_initial, &args0)?;
+
+                let args1 = HypercubeBitrevNonInitialArguments::new(
+                    dst_ptr as *const BF,
+                    dst_ptr,
+                    LOG24_NONINITIAL_STAGE2_START,
+                );
+                noninitial_2pass_fn.launch(&config_2pass_noninitial, &args1)
+            },
+            || {
+                let idx = ring_idx_3pass;
+                ring_idx_3pass += 1;
+                if ring_idx_3pass == ring_len {
+                    ring_idx_3pass = 0;
+                }
+
+                let dst_ptr = d_dst_3pass_ring[idx].as_mut_ptr();
+                let args0 = HypercubeBitrevInitialArguments::new(d_src_ring[idx].as_ptr(), dst_ptr);
+                initial_3pass_fn.launch(&config_3pass_initial, &args0)?;
+
+                let args1 = HypercubeBitrevNonInitialArguments::new(
+                    dst_ptr as *const BF,
+                    dst_ptr,
+                    LEGACY_LOG24_STAGE2_START,
+                );
+                stage2_3pass_fn.launch(&config_3pass_stage2, &args1)?;
+
+                let args2 = HypercubeBitrevNonInitialArguments::new(
+                    dst_ptr as *const BF,
+                    dst_ptr,
+                    LEGACY_LOG24_STAGE3_START,
+                );
+                stage3_3pass_fn.launch(&config_3pass_stage3, &args2)
+            },
+        );
+
+        let stats_2pass = compute_profile_stats(&samples_2pass_us);
+        let stats_3pass = compute_profile_stats(&samples_3pass_us);
+        let delta_us = stats_3pass.median - stats_2pass.median;
+        let delta_pct = if stats_3pass.median > 0.0 {
+            (delta_us / stats_3pass.median) * 100.0
+        } else {
+            0.0
+        };
+        let winner = if stats_2pass.median <= stats_3pass.median {
+            "2pass_15_9"
+        } else {
+            "3pass_12_6_6"
+        };
+
+        println!(
+            "profile_h2m_compare rows={} log_rows={} variant=2pass_15_9 warmup={} iters={} mean_us={:.3} median_us={:.3} p90_us={:.3} p95_us={:.3} min_us={:.3} max_us={:.3} stddev_us={:.3} cv_pct={:.2}",
+            rows,
+            rows.trailing_zeros(),
+            warmup_iters,
+            measure_iters,
+            stats_2pass.mean,
+            stats_2pass.median,
+            stats_2pass.p90,
+            stats_2pass.p95,
+            stats_2pass.min,
+            stats_2pass.max,
+            stats_2pass.stddev,
+            stats_2pass.cv_pct,
+        );
+        println!(
+            "profile_h2m_compare rows={} log_rows={} variant=3pass_12_6_6 warmup={} iters={} mean_us={:.3} median_us={:.3} p90_us={:.3} p95_us={:.3} min_us={:.3} max_us={:.3} stddev_us={:.3} cv_pct={:.2}",
+            rows,
+            rows.trailing_zeros(),
+            warmup_iters,
+            measure_iters,
+            stats_3pass.mean,
+            stats_3pass.median,
+            stats_3pass.p90,
+            stats_3pass.p95,
+            stats_3pass.min,
+            stats_3pass.max,
+            stats_3pass.stddev,
+            stats_3pass.cv_pct,
+        );
+        println!(
+            "profile_h2m_compare_summary rows={} log_rows={} baseline=3pass_12_6_6 candidate=2pass_15_9 baseline_median_us={:.3} candidate_median_us={:.3} delta_us={:.3} delta_pct={:.3} winner={}",
+            rows,
+            rows.trailing_zeros(),
+            stats_3pass.median,
+            stats_2pass.median,
+            delta_us,
+            delta_pct,
+            winner,
         );
     }
 
