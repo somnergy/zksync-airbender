@@ -554,6 +554,25 @@ DEVICE_FORCEINLINE unsigned noninitial10_half_p8_smem_idx(const unsigned k, cons
   return (kh << 8) | (p_local << 5) | (kl ^ kh);
 }
 
+DEVICE_FORCEINLINE unsigned noninitial11_full_p8_smem_idx(const unsigned k, const unsigned p_local) {
+  // Noninitial11 shared layout helper for one full 2048 x 8 tile.
+  //
+  // k decomposition:
+  // - k = (kh << 5) | kl
+  // - kh in [0,63], kl in [0,31]
+  //
+  // Layout decomposition:
+  // - idx = (kh << 8) | (p_local << 5) | (kl ^ (kh & 31))
+  //
+  // Why this layout:
+  // - First 5 rounds fix (kh, p_local) and lane32 spans kl.
+  // - Last 5 rounds fix (kl, p_local) and lane32 spans kh half.
+  // - The xor swizzle keeps both passes bank-friendly.
+  const unsigned kh = k >> 5;
+  const unsigned kl = k & 31u;
+  return (kh << 8) | (p_local << 5) | (kl ^ (kh & 31u));
+}
+
 template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER, bool IN_PLACE, unsigned BLOCK_THREADS>
 DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_initial14(const bf *__restrict__ src, bf *__restrict__ dst) {
   // Initial14 kernel dataflow (one 2^14 chunk per CTA):
@@ -803,6 +822,122 @@ DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_initial15(const bf *_
     const unsigned k = warp + (iter * WARP_COUNT);
     const unsigned p_base = lane32 << 2;
     const unsigned row_base = high_half_base + (k * P) + p_base;
+    const uint4 packed = uint4{
+        smem[initial14_smem_idx(k, p_base + 0u)].limb,
+        smem[initial14_smem_idx(k, p_base + 1u)].limb,
+        smem[initial14_smem_idx(k, p_base + 2u)].limb,
+        smem[initial14_smem_idx(k, p_base + 3u)].limb,
+    };
+    store_u4_mod<STORE_MODIFIER>(dst, row_base, packed);
+  }
+}
+
+template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER, bool IN_PLACE>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_initial13(const bf *__restrict__ src, bf *__restrict__ dst) {
+  // Initial13 kernel dataflow (one 2^13 chunk per CTA):
+  //
+  // - Logical tile is [k=64][p=128].
+  // - First 7 rounds are computed warp-local across p (lane32 domain).
+  // - Results are remapped in shared with initial14_smem_idx swizzle.
+  // - Last 6 rounds are computed subgroup-local across k (lane16 domain).
+  //
+  // Global IO remains fully vectorized/coalesced (uint4 loads/stores).
+  constexpr unsigned SUB_SIZE = 1u << 13;
+  constexpr unsigned K = 64;
+  constexpr unsigned P = 128;
+  constexpr unsigned BLOCK_THREADS = 1024;
+  constexpr unsigned WARP_COUNT = BLOCK_THREADS >> 5;
+  constexpr unsigned ITERS = K / WARP_COUNT;
+  constexpr unsigned SUBGROUP_COUNT = BLOCK_THREADS >> 4;
+  constexpr unsigned HALF_P = P >> 1;
+  constexpr unsigned P_ITERS = HALF_P / SUBGROUP_COUNT;
+  static_assert(K % WARP_COUNT == 0u, "K must be divisible by warp count");
+  static_assert(HALF_P % SUBGROUP_COUNT == 0u, "HALF_P must be divisible by subgroup count");
+
+  __shared__ bf smem[SUB_SIZE];
+
+  const unsigned tid = threadIdx.x;
+  const unsigned warp = tid >> 5;
+  const unsigned lane32 = tid & 31u;
+  const unsigned subgroup = tid >> 4;
+  const unsigned lane16 = tid & 15u;
+  const unsigned block_base = blockIdx.x << 13;
+  const bf *__restrict__ load_ptr = IN_PLACE ? reinterpret_cast<const bf *>(dst) : src;
+  if (blockDim.x != BLOCK_THREADS) {
+    return;
+  }
+
+  // First 7 rounds over p (size 128), row-major load/store.
+#pragma unroll
+  for (unsigned iter = 0; iter < ITERS; iter++) {
+    const unsigned k = warp + (iter * WARP_COUNT);
+    const unsigned p_base = lane32 << 2;
+    const unsigned row_base = block_base + (k * P) + p_base;
+    const uint4 packed = load_u4_mod<LOAD_MODIFIER>(load_ptr, row_base);
+    bf vals[4] = {
+        bf(packed.x),
+        bf(packed.y),
+        bf(packed.z),
+        bf(packed.w),
+    };
+    apply_7_rounds_pair_major_warp32_quad(vals, lane32);
+
+    smem[initial14_smem_idx(k, p_base + 0u)] = vals[0];
+    smem[initial14_smem_idx(k, p_base + 1u)] = vals[1];
+    smem[initial14_smem_idx(k, p_base + 2u)] = vals[2];
+    smem[initial14_smem_idx(k, p_base + 3u)] = vals[3];
+  }
+
+  __syncthreads();
+
+  // Last 6 rounds over k (size 64), two p-columns per subgroup via lane16 helper.
+  const unsigned subgroup_warp = subgroup >> 1;
+  const unsigned subgroup_parity = subgroup & 1u;
+  const unsigned subgroup_swizzled = subgroup_warp + (subgroup_parity * (SUBGROUP_COUNT >> 1));
+  const unsigned k_local_base = lane16 << 2;
+
+#pragma unroll
+  for (unsigned iter = 0; iter < P_ITERS; iter++) {
+    const unsigned p_base = iter * SUBGROUP_COUNT;
+    const unsigned p0 = p_base + subgroup_swizzled;
+    const unsigned p1 = p0 + HALF_P;
+
+    bf regs[2][4] = {
+        {
+            smem[initial14_smem_idx(k_local_base + 0u, p0)],
+            smem[initial14_smem_idx(k_local_base + 1u, p0)],
+            smem[initial14_smem_idx(k_local_base + 2u, p0)],
+            smem[initial14_smem_idx(k_local_base + 3u, p0)],
+        },
+        {
+            smem[initial14_smem_idx(k_local_base + 0u, p1)],
+            smem[initial14_smem_idx(k_local_base + 1u, p1)],
+            smem[initial14_smem_idx(k_local_base + 2u, p1)],
+            smem[initial14_smem_idx(k_local_base + 3u, p1)],
+        },
+    };
+
+    apply_6_rounds_pair_major_2groups(regs, lane16);
+
+    smem[initial14_smem_idx(k_local_base + 0u, p0)] = regs[0][0];
+    smem[initial14_smem_idx(k_local_base + 1u, p0)] = regs[0][1];
+    smem[initial14_smem_idx(k_local_base + 2u, p0)] = regs[0][2];
+    smem[initial14_smem_idx(k_local_base + 3u, p0)] = regs[0][3];
+
+    smem[initial14_smem_idx(k_local_base + 0u, p1)] = regs[1][0];
+    smem[initial14_smem_idx(k_local_base + 1u, p1)] = regs[1][1];
+    smem[initial14_smem_idx(k_local_base + 2u, p1)] = regs[1][2];
+    smem[initial14_smem_idx(k_local_base + 3u, p1)] = regs[1][3];
+  }
+
+  __syncthreads();
+
+  // Restore row-major and store.
+#pragma unroll
+  for (unsigned iter = 0; iter < ITERS; iter++) {
+    const unsigned k = warp + (iter * WARP_COUNT);
+    const unsigned p_base = lane32 << 2;
+    const unsigned row_base = block_base + (k * P) + p_base;
     const uint4 packed = uint4{
         smem[initial14_smem_idx(k, p_base + 0u)].limb,
         smem[initial14_smem_idx(k, p_base + 1u)].limb,
@@ -1697,6 +1832,154 @@ DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial10_split_p8
 }
 
 template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial11_x4_impl(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Noninitial11 final stage for 2-launch log24 [13,11], x4 p-group split:
+  // - logical tile is [k=2048][p=32]
+  // - each CTA handles one p-group of 8 columns (grid x4 multiplier)
+  // - one full 11-round transform per (p,k) tile is executed in shared memory
+  // - global IO remains one vectorized load and one vectorized store per element.
+  constexpr unsigned K = 2048;
+  constexpr unsigned P_GROUP = 8;
+  constexpr unsigned VEC_ITERS = 4; // (2048 * 8) / (1024 * 4)
+  constexpr unsigned LOW_TILE_LOG = 5u;
+  extern __shared__ bf smem[]; // 2048 * 8 = 16384 BF values (64KB)
+
+  if (blockDim.x != 1024u) {
+    return;
+  }
+
+  const unsigned tid = threadIdx.x;
+  const unsigned warp = tid >> 5;
+  const unsigned lane32 = tid & 31u;
+  const unsigned stride = 1u << start_stage;
+  const unsigned low_tiles = stride >> LOW_TILE_LOG;
+  const unsigned tile_x4 = blockIdx.x;
+  const unsigned tile = tile_x4 >> 2;
+  const unsigned p_group = tile_x4 & 3u;
+  const unsigned high = tile / low_tiles;
+  const unsigned low_tile_id = tile - high * low_tiles;
+  const unsigned low_base = low_tile_id << LOW_TILE_LOG;
+  const unsigned block_base = high << (start_stage + 11u);
+  const unsigned p_group_base = p_group * P_GROUP;
+
+  // Load canonical row-major vectors from global memory into the swizzled shared tile.
+#pragma unroll
+  for (unsigned iter = 0; iter < VEC_ITERS; iter++) {
+    const unsigned vec = tid + (iter << 10); // [0,4095]
+    const unsigned k = vec >> 1;             // [0,2047]
+    const unsigned p4 = vec & 1u;            // [0,1]
+    const unsigned p_local0 = p4 << 2;       // {0,4}
+    const unsigned p_global0 = p_group_base + p_local0;
+    const unsigned row_base = block_base + (k << start_stage) + low_base + p_global0;
+    const uint4 packed = load_u4_mod<LOAD_MODIFIER>(src, row_base);
+
+    smem[noninitial11_full_p8_smem_idx(k, p_local0 + 0u)] = bf(packed.x);
+    smem[noninitial11_full_p8_smem_idx(k, p_local0 + 1u)] = bf(packed.y);
+    smem[noninitial11_full_p8_smem_idx(k, p_local0 + 2u)] = bf(packed.z);
+    smem[noninitial11_full_p8_smem_idx(k, p_local0 + 3u)] = bf(packed.w);
+  }
+
+  __syncthreads();
+
+  // First 5 rounds over kl: one (kh, p_local) combo per warp and iteration.
+#pragma unroll
+  for (unsigned iter = 0; iter < 16; iter++) {
+    const unsigned combo = warp + (iter << 5); // [0,511]
+    const unsigned kh = combo >> 3;            // [0,63]
+    const unsigned p_local = combo & 7u;       // [0,7]
+    const unsigned k = (kh << 5) | lane32;
+    bf v = smem[noninitial11_full_p8_smem_idx(k, p_local)];
+    apply_5_rounds_warp32_branchless_scalar(v, lane32);
+    smem[noninitial11_full_p8_smem_idx(k, p_local)] = v;
+  }
+
+  // Synchronize between p-major and k-major traversal phases.
+  __syncthreads();
+
+  // Last 6 rounds over kh are implemented as:
+  // - 5 rounds on kh in [0,31]
+  // - 5 rounds on kh in [32,63]
+  // - final merge round high -= low.
+#pragma unroll
+  for (unsigned iter = 0; iter < 8; iter++) {
+    const unsigned combo = warp + (iter << 5); // [0,255]
+    const unsigned kl = combo >> 3;            // [0,31]
+    const unsigned p_local = combo & 7u;       // [0,7]
+    const unsigned k_low = (lane32 << 5) | kl;
+    bf v = smem[noninitial11_full_p8_smem_idx(k_low, p_local)];
+    apply_5_rounds_warp32_branchless_scalar(v, lane32);
+    smem[noninitial11_full_p8_smem_idx(k_low, p_local)] = v;
+  }
+
+  __syncthreads();
+
+#pragma unroll
+  for (unsigned iter = 0; iter < 8; iter++) {
+    const unsigned combo = warp + (iter << 5); // [0,255]
+    const unsigned kl = combo >> 3;            // [0,31]
+    const unsigned p_local = combo & 7u;       // [0,7]
+    const unsigned k_high = ((lane32 + 32u) << 5) | kl;
+    bf v = smem[noninitial11_full_p8_smem_idx(k_high, p_local)];
+    apply_5_rounds_warp32_branchless_scalar(v, lane32);
+    smem[noninitial11_full_p8_smem_idx(k_high, p_local)] = v;
+  }
+
+  __syncthreads();
+
+#pragma unroll
+  for (unsigned iter = 0; iter < 8; iter++) {
+    const unsigned combo = warp + (iter << 5); // [0,255]
+    const unsigned kl = combo >> 3;            // [0,31]
+    const unsigned p_local = combo & 7u;       // [0,7]
+    const unsigned k_low = (lane32 << 5) | kl;
+    const unsigned k_high = ((lane32 + 32u) << 5) | kl;
+    const bf low = smem[noninitial11_full_p8_smem_idx(k_low, p_local)];
+    const bf high = smem[noninitial11_full_p8_smem_idx(k_high, p_local)];
+    smem[noninitial11_full_p8_smem_idx(k_high, p_local)] = bf::sub(high, low);
+  }
+
+  __syncthreads();
+
+  // Write canonical row-major vectors back to global memory.
+#pragma unroll
+  for (unsigned iter = 0; iter < VEC_ITERS; iter++) {
+    const unsigned vec = tid + (iter << 10); // [0,4095]
+    const unsigned k = vec >> 1;             // [0,2047]
+    const unsigned p4 = vec & 1u;            // [0,1]
+    const unsigned p_local0 = p4 << 2;       // {0,4}
+    const unsigned p_global0 = p_group_base + p_local0;
+    const unsigned row_base = block_base + (k << start_stage) + low_base + p_global0;
+    const uint4 packed = uint4{
+        smem[noninitial11_full_p8_smem_idx(k, p_local0 + 0u)].limb,
+        smem[noninitial11_full_p8_smem_idx(k, p_local0 + 1u)].limb,
+        smem[noninitial11_full_p8_smem_idx(k, p_local0 + 2u)].limb,
+        smem[noninitial11_full_p8_smem_idx(k, p_local0 + 3u)].limb,
+    };
+    store_u4_mod<STORE_MODIFIER>(dst, row_base, packed);
+  }
+}
+
+template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER>
+DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial11_x4(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  switch (start_stage) {
+    case 13u:
+      hypercube_evals_into_coeffs_bitrev_noninitial11_x4_impl<LOAD_MODIFIER, STORE_MODIFIER>(
+          src, dst, 13u);
+      return;
+    default:
+      hypercube_evals_into_coeffs_bitrev_noninitial11_x4_impl<LOAD_MODIFIER, STORE_MODIFIER>(
+          src, dst, start_stage);
+      return;
+  }
+}
+
+template <ld_modifier LOAD_MODIFIER, st_modifier STORE_MODIFIER>
 DEVICE_FORCEINLINE void hypercube_evals_into_coeffs_bitrev_noninitial9_impl(
     const bf *__restrict__ src,
     bf *__restrict__ dst,
@@ -2186,6 +2469,21 @@ EXTERN __launch_bounds__(512, 1) __global__ void ab_h2m_bitrev_bf_initial15_in_5
       src, dst);
 }
 
+EXTERN __launch_bounds__(1024, 1) __global__ void ab_h2m_bitrev_bf_initial13_out_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst) {
+  // Out-of-place initial13 policy: ld.cs + st.wt.
+  hypercube_evals_into_coeffs_bitrev_initial13<ld_modifier::cs, st_modifier::wt, false>(src, dst);
+}
+
+EXTERN __launch_bounds__(1024, 1) __global__ void ab_h2m_bitrev_bf_initial13_in_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst) {
+  // In-place initial13 policy: ld.cg + st.wt.
+  (void)src;
+  hypercube_evals_into_coeffs_bitrev_initial13<ld_modifier::cg, st_modifier::wt, true>(src, dst);
+}
+
 EXTERN __launch_bounds__(256, 6) __global__ void ab_h2m_bitrev_bf_initial11_out_kernel(
     const bf *__restrict__ src,
     bf *__restrict__ dst) {
@@ -2407,6 +2705,26 @@ EXTERN __launch_bounds__(512, 2) __global__ void ab_h2m_bitrev_bf_noninitial7_st
   // Final-stage noninitial7 (in-place) for 2-launch schedule: ld.ca + st.cs.
   (void)start_stage;
   hypercube_evals_into_coeffs_bitrev_noninitial7<ld_modifier::ca, st_modifier::cs>(src, dst, 14u);
+}
+
+EXTERN __launch_bounds__(1024, 1) __global__ void ab_h2m_bitrev_bf_noninitial11_stage3_out_start13_x4_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Final-stage noninitial11 x4-grid (out-of-place) for log24 [13,11].
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial11_x4<ld_modifier::cg, st_modifier::cs>(
+      src, dst, 13u);
+}
+
+EXTERN __launch_bounds__(1024, 1) __global__ void ab_h2m_bitrev_bf_noninitial11_stage3_in_start13_x4_kernel(
+    const bf *__restrict__ src,
+    bf *__restrict__ dst,
+    const unsigned start_stage) {
+  // Final-stage noninitial11 x4-grid (in-place) for log24 [13,11].
+  (void)start_stage;
+  hypercube_evals_into_coeffs_bitrev_noninitial11_x4<ld_modifier::ca, st_modifier::cs>(
+      src, dst, 13u);
 }
 
 EXTERN __launch_bounds__(256, 4) __global__ void ab_h2m_bitrev_bf_noninitial9_stage3_out_start15_kernel(
