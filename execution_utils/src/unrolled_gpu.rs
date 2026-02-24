@@ -1,4 +1,4 @@
-use crate::get_padded_binary;
+use crate::{get_padded_binary, RECURSION_UNROLLED_BIN, RECURSION_UNROLLED_TXT, RECURSION_UNIFIED_BIN, RECURSION_UNIFIED_TXT};
 use crate::unrolled::{
     compute_setup_for_machine_configuration, flatten_proof_into_responses_for_unrolled_recursion,
     UnrolledProgramProof, UnrolledProgramSetup,
@@ -84,15 +84,6 @@ pub struct UnrolledProver {
     pub level_data: BTreeMap<UnrolledProverLevel, UnrolledProverLevelData>,
     pub prover: ExecutionProver,
 }
-
-pub const RECURSION_UNROLLED_BIN: &[u8] =
-    include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.bin");
-pub const RECURSION_UNROLLED_TXT: &[u8] =
-    include_bytes!("../../tools/verifier/recursion_in_unrolled_layer.text");
-pub const RECURSION_UNIFIED_BIN: &[u8] =
-    include_bytes!("../../tools/verifier/recursion_in_unified_layer.bin");
-pub const RECURSION_UNIFIED_TXT: &[u8] =
-    include_bytes!("../../tools/verifier/recursion_in_unified_layer.text");
 
 impl UnrolledProver {
     pub fn new(
