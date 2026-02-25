@@ -93,11 +93,30 @@ Airbender's explicit output model:
   error and prints a hint over quasi-UART.
 - `abort()` and failed assertions are treated as deterministic guest failures
   and terminate via `airbender::finish_error()`.
-- App code can use stdio (`printf`, `fputs`); libc writes are routed through
-  the syscall bridge.
-- Full `<iostream>` is unavailable in this freestanding build profile.
+- App code can use C++ streams (`std::cout`, `std::cerr`) or C stdio
+  (`printf`, `fputs`); writes are routed through the syscall bridge.
 - `_write` supports only `stdout`/`stderr` through quasi-UART.
-- `_read` for `stdin` is intentionally unimplemented for now.
+- `_read` for `stdin` is intentionally unimplemented for now, so
+  `std::cin`/stdin byte reads are not part of the supported profile yet.
+
+## STL Support
+
+This template validates a guest-friendly subset of top-level standard library
+headers in [`src/stl_probe.cpp`](src/stl_probe.cpp).
+
+Supported subset:
+
+- `<string>`, `<string_view>`
+- `<vector>`, `<map>`, `<unordered_map>`, `<array>`
+- `<tuple>`, `<optional>`, `<variant>`, `<span>`
+- `<algorithm>`, `<numeric>`, `<memory>`
+
+Not part of the guaranteed profile (even if some code compiles):
+
+- Threading/concurrency (`<thread>`, `<mutex>`, `<future>`, ...)
+- Filesystem/files (`<filesystem>`, file-backed `<fstream>` flows)
+- Host environment/time/random-device dependent APIs
+  (`<chrono>` clocks, `<random>` device paths, locale-heavy flows)
 
 ## Project Overview
 
@@ -111,7 +130,8 @@ Other provided files:
 - [app.cpp](src/app.cpp): app logic and output-commit flow.
 - [start.S](src/start.S): startup and trap entry wiring.
 - [airbender_csr.hpp](include/airbender_csr.hpp): wrappers for Airbender CSR operations.
-- [quasi_uart.hpp](include/quasi_uart.hpp): quasi-UART writer used for logs.
+- [quasi_uart.hpp](include/quasi_uart.hpp): low-level quasi-UART writer used by
+  runtime/syscall plumbing; application code can use stdio/iostream directly.
 - [newlib_syscalls.cpp](src/newlib_syscalls.cpp): newlib syscall bridge (`_write`, `_exit`, `_sbrk`, etc.).
 
 Linker scripts used:

@@ -15,14 +15,20 @@ add_executable(app
     src/app.cpp
     src/main.cpp
     src/newlib_syscalls.cpp
+    src/stl_probe.cpp
     src/start.S
+)
+
+set_source_files_properties(
+    src/stl_probe.cpp
+    PROPERTIES COMPILE_DEFINITIONS AIRBENDER_STL_ENFORCE_FLAGS=1
 )
 
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_LIST_DIR}/include)
 target_compile_definitions(app PRIVATE AIRBENDER_USE_NEWLIB=1)
 
 target_compile_options(app PRIVATE
-    -ffreestanding
+    $<$<COMPILE_LANGUAGE:C>:-ffreestanding>
     -fno-exceptions
     -fno-rtti
     -fno-use-cxa-atexit
@@ -58,7 +64,11 @@ endif()
 if(CMAKE_OBJCOPY)
     add_custom_command(
         OUTPUT ${CMAKE_CURRENT_LIST_DIR}/app.bin
-        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:app> ${CMAKE_CURRENT_LIST_DIR}/app.bin
+        # C++ iostream support pulls libstdc++ objects that contain many
+        # .gcc_except_table.* sections. We compile with -fno-exceptions, so
+        # these unwind tables are unused for this guest profile and only bloat
+        # app.bin due linker-script orphan placement.
+        COMMAND ${CMAKE_OBJCOPY} -O binary -R ".gcc_except_table" -R ".gcc_except_table.*" $<TARGET_FILE:app> ${CMAKE_CURRENT_LIST_DIR}/app.bin
         DEPENDS app
         COMMENT "Generating app.bin"
     )

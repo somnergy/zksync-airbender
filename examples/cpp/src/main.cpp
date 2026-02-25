@@ -16,6 +16,10 @@ extern uint32_t _sidata;
 extern uint32_t _sdata;
 extern uint32_t _edata;
 
+// Boundaries of the .bss section
+extern uint32_t _sbss;
+extern uint32_t _ebss;
+
 // Boundaries of the .rodata section
 extern uint32_t _sirodata;
 extern uint32_t _srodata;
@@ -51,6 +55,12 @@ static void copy_section(const uint8_t* src, uint8_t* dst, const uint8_t* end) {
     }
 }
 
+static void zero_section(uint8_t* start, const uint8_t* end) {
+    while (start < end) {
+        *start++ = 0;
+    }
+}
+
 static void init_memory() {
     // Copy .rodata section from ROM to RAM
     const uint8_t* sirodata = reinterpret_cast<const uint8_t*>(&_sirodata);
@@ -65,6 +75,13 @@ static void init_memory() {
     const uint8_t* edata = reinterpret_cast<const uint8_t*>(&_edata);
     if (sdata < edata) {
         copy_section(reinterpret_cast<const uint8_t*>(&_sidata), sdata, edata);
+    }
+
+    // Zero .bss so C/C++ static storage starts from a deterministic state.
+    uint8_t* sbss = reinterpret_cast<uint8_t*>(&_sbss);
+    const uint8_t* ebss = reinterpret_cast<const uint8_t*>(&_ebss);
+    if (sbss < ebss) {
+        zero_section(sbss, ebss);
     }
 }
 
