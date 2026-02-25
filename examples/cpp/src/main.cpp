@@ -1,7 +1,6 @@
 #include <stdint.h>
 
-#include "airbender_csr.hpp"
-#include "quasi_uart.hpp"
+#include "app.hpp"
 
 extern "C" {
 // Boundaries of the heap
@@ -36,8 +35,15 @@ struct MachineTrapFrame {
 extern "C" [[noreturn]] void _start_rust() __attribute__((section(".init.rust")));
 extern "C" uint32_t _machine_start_trap_rust(MachineTrapFrame*) __attribute__((section(".trap.rust")));
 
+namespace {
 
-static constexpr uint32_t kModulus = 7919;
+// =============================================================================
+// ROM -> RAM relocation helpers
+// =============================================================================
+//
+// The linker keeps initial bytes for .rodata/.data in ROM and maps their final
+// addresses into RAM. We copy these ranges first so global/static state is
+// valid before C++ runtime initialization.
 
 static void copy_section(const uint8_t* src, uint8_t* dst, const uint8_t* end) {
     while (dst < end) {
@@ -62,30 +68,18 @@ static void init_memory() {
     }
 }
 
-[[noreturn]] static void workload() {
-    uint32_t n = airbender::csr_read_word();
-
-    airbender::QuasiUART uart;
-    uart.write_cstr("Computing Fibonacci number...");
-
-    uint32_t a = 0;
-    uint32_t b = 1;
-    for (uint32_t i = 0; i < n; ++i) {
-        uint32_t c = (a + b) % kModulus;
-        a = b;
-        b = c;
-    }
-
-    uint32_t out[8] = {b, n, 0, 0, 0, 0, 0, 0};
-    airbender::finish_success(out);
-}
+} // namespace
 
 extern "C" [[noreturn]] void _start_rust() {
+    // Bring RAM-backed sections to their runtime state before any library code
+    // observes globals.
     init_memory();
 #if defined(AIRBENDER_USE_NEWLIB)
+    // Initialize constructors and libc internals before app code uses the
+    // standard library (stdio wrappers, exit handlers, etc.).
     __libc_init_array();
 #endif
-    workload();
+    app_entrypoint();
 }
 
 extern "C" uint32_t _machine_start_trap_rust(MachineTrapFrame*) {

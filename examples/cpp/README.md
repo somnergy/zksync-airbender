@@ -6,20 +6,55 @@ Basic example of compiling C/C++ code for Airbender.
 
 - CMake 3.20 or newer.
 - RISC-V GCC toolchain with newlib (`riscv32-unknown-elf-*` binaries).
-  - Tested with the RISC Zero toolchain package that contains
-    `riscv32-unknown-elf-gcc` / `riscv32-unknown-elf-g++` /
-    `riscv32-unknown-elf-objcopy`.
+
+## Building a Local Toolchain from Sources
+
+The upstream `riscv-gnu-toolchain` build always installs into `--prefix`.
+Use a workspace-local prefix to avoid any system-wide installation.
+
+Install the prerequisites from `riscv-gnu-toolchain/README.md` first (notably
+`gawk`, `bison`, `flex`, and `texinfo`).
+
+```sh
+# From the riscv-gnu-toolchain checkout
+./configure \
+  --prefix="$PWD/.local/rv32im-zicsr" \
+  --with-arch=rv32im_zicsr \
+  --with-abi=ilp32 \
+  --disable-linux \
+  --disable-gdb
+make -j"$(nproc)" newlib
+```
+
+The toolchain binaries will be in `.local/rv32im-zicsr/bin`.
 
 ## Build
+
+Recommended: point CMake to the local toolchain bin directory.
 
 ```sh
 cmake -S . -B build \
   -DCMAKE_TOOLCHAIN_FILE=cmake/riscv32im-gcc.cmake \
-  -DRISCV_GCC_TOOLCHAIN_ROOT=<path-to-riscv32im-linux-x86_64>
+  -DRISCV_GCC_BIN_DIR=<path-to-toolchain-prefix>/bin
 cmake --build build
 ```
 
-If the toolchain binaries are already on `PATH`, `RISCV_GCC_TOOLCHAIN_ROOT` can be omitted.
+If the toolchain binaries are already on `PATH`, `RISCV_GCC_BIN_DIR` can be omitted.
+
+You can also pass every required binary explicitly:
+
+```sh
+cmake -S . -B build \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/riscv32im-gcc.cmake \
+  -DRISCV_GCC_C=<path>/riscv32-unknown-elf-gcc \
+  -DRISCV_GCC_CXX=<path>/riscv32-unknown-elf-g++ \
+  -DRISCV_GCC_ASM=<path>/riscv32-unknown-elf-gcc \
+  -DRISCV_GCC_OBJCOPY=<path>/riscv32-unknown-elf-objcopy
+cmake --build build
+```
+
+When switching toolchains, use a fresh build directory because CMake caches
+compiler paths.
 
 For release builds, add `-DCMAKE_BUILD_TYPE=Release`.
 
@@ -38,13 +73,42 @@ You can run the generated program with `cargo airbender`:
 cargo airbender run examples/cpp/app.bin --input examples/cpp/input.txt
 ```
 
+To demonstrate strict libc-exit handling, run the sentinel input that triggers
+`std::exit(0)` inside the app logic:
+
+```sh
+cargo airbender run examples/cpp/app.bin --input examples/cpp/input-exit-demo.txt
+```
+
+This sentinel run is expected to fail and print an `_exit` guidance message.
+
+## Runtime Contract (newlib)
+
+The syscall bridge in [`src/newlib_syscalls.cpp`](src/newlib_syscalls.cpp) follows
+Airbender's explicit output model:
+
+- Successful completion must call `airbender::finish_success(output)` with 8
+  output words (`x10..x17`).
+- `_exit(...)` does **not** map status `0` to success. It always reports an
+  error and prints a hint over quasi-UART.
+- `abort()` and failed assertions are treated as deterministic guest failures
+  and terminate via `airbender::finish_error()`.
+- App code can use stdio (`printf`, `fputs`); libc writes are routed through
+  the syscall bridge.
+- Full `<iostream>` is unavailable in this freestanding build profile.
+- `_write` supports only `stdout`/`stderr` through quasi-UART.
+- `_read` for `stdin` is intentionally unimplemented for now.
+
 ## Project Overview
 
 This project contains boilerplate to compile your C/C++ code as an Airbender program.
-The entrypoint for your logic is the `workload` function in [main.cpp](src/main.cpp).
+The bootstrap entrypoint is [`_start_rust`](src/main.cpp), while application
+logic lives in [`app_entrypoint`](src/app.cpp).
 
 Other provided files:
 
+- [app.hpp](include/app.hpp): application entrypoint contract.
+- [app.cpp](src/app.cpp): app logic and output-commit flow.
 - [start.S](src/start.S): startup and trap entry wiring.
 - [airbender_csr.hpp](include/airbender_csr.hpp): wrappers for Airbender CSR operations.
 - [quasi_uart.hpp](include/quasi_uart.hpp): quasi-UART writer used for logs.

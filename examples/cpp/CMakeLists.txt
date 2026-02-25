@@ -12,6 +12,7 @@ set(LINKER_SCRIPT "${LINKER_SCRIPT_DIR}/link.x")
 set(MEMORY_SCRIPT "${LINKER_SCRIPT_DIR}/memory.x")
 
 add_executable(app
+    src/app.cpp
     src/main.cpp
     src/newlib_syscalls.cpp
     src/start.S
@@ -37,6 +38,7 @@ target_link_options(app PRIVATE
     -nostartfiles
     --specs=nano.specs
     --specs=nosys.specs
+    -Wl,--wrap=abort
     -Wl,-T,${MEMORY_SCRIPT}
     -Wl,-T,${LINKER_SCRIPT}
     -Wl,-e,_start
