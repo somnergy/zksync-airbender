@@ -38,6 +38,7 @@ fn run_main_to_coset(
     num_bf_cols: usize,
     kernel: usize,
     in_or_out_of_place: InOrOutOfPlace,
+    transposed_monomials: bool,
 ) {
     let ctx = DeviceContext::create(12).unwrap();
     let n_max = 1 << (log_n_range.end - 1);
@@ -94,6 +95,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -101,6 +103,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -108,6 +111,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -115,6 +119,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -122,6 +127,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -129,6 +135,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -136,6 +143,7 @@ fn run_main_to_coset(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -169,6 +177,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -176,6 +185,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -183,6 +193,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -190,6 +201,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -197,6 +209,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -204,6 +217,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -211,6 +225,7 @@ fn run_main_to_coset(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
+                        transposed_monomials,
                         &stream,
                     )
                     .unwrap(),
@@ -281,83 +296,89 @@ fn run_main_to_coset(
 #[test]
 #[serial]
 fn test_main_to_coset_tile_16_out_of_place() {
-    run_main_to_coset(24..25, 8, 0, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 8, 0, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_tile_16_in_place() {
-    run_main_to_coset(24..25, 8, 0, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 8, 0, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_tile_8_out_of_place() {
-    run_main_to_coset(24..25, 1, 1, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 1, 1, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_tile_8_in_place() {
-    run_main_to_coset(24..25, 1, 1, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 1, 1, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_coalesced_out_of_place() {
-    run_main_to_coset(24..25, 1, 2, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 1, 2, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_coalesced_in_place() {
-    run_main_to_coset(24..25, 1, 2, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 1, 2, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_register_pipeline_out_of_place() {
-    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_register_pipeline_in_place() {
-    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::In, false);
+}
+
+#[test]
+#[serial]
+fn test_main_to_coset_register_pipeline_transposed_monomials_in_place() {
+    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::In, true);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_pipeline_tile_8_out_of_place() {
-    run_main_to_coset(24..25, 8, 4, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 8, 4, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_pipeline_tile_8_in_place() {
-    run_main_to_coset(24..25, 8, 4, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 8, 4, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_pc_out_of_place() {
-    run_main_to_coset(24..25, 8, 5, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 8, 5, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_coset_pc_in_place() {
-    run_main_to_coset(24..25, 8, 5, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 8, 5, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_monomials_3_pass_out_of_place() {
-    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::Out);
+    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_monomials_3_pass_in_place() {
-    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::In);
+    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::In, false);
 }

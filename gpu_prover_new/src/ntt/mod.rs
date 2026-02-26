@@ -29,42 +29,44 @@ use crate::ntt::experiment_graveyard::{
 type BF = BaseField;
 
 cuda_kernel!(
-    MainToMonomialsFirstStages,
-    main_to_monomials_first_stages,
+    StridedTilesStages,
+    strided_tiles_stages,
     inputs_matrix: PtrAndStride<BF>,
     outputs_matrix: MutPtrAndStride<BF>,
     log_n: i32,
-    num_ntts_or_start_stage: i32,
+    start_stage: i32,
 );
 
 // pretty good for 2-pass
-main_to_monomials_first_stages!(ab_main_to_monomials_first_9_stages_register_pipeline_kernel);
-main_to_monomials_first_stages!(ab_main_to_monomials_first_10_stages_register_pipeline_kernel);
+strided_tiles_stages!(ab_main_to_monomials_first_9_stages_register_pipeline_kernel);
+strided_tiles_stages!(ab_main_to_monomials_first_10_stages_register_pipeline_kernel);
 
 // 3-pass
-main_to_monomials_first_stages!(ab_main_to_monomials_nonfinal_8_stages_kernel);
+strided_tiles_stages!(ab_main_to_monomials_nonfinal_8_stages_kernel);
 
 cuda_kernel!(
-    MainToCosetMiddleStages,
-    main_to_coset_middle_stages,
+    ContiguousChunksStages,
+    contiguous_chunks_stages,
     inputs_matrix: PtrAndStride<BF>,
     outputs_matrix: MutPtrAndStride<BF>,
-    num_ntts: i32,
+    transposed_monomials: bool,
 );
 
 // pretty good for 2-pass
-main_to_coset_middle_stages!(ab_main_to_monomials_last_14_stages_kernel);
+contiguous_chunks_stages!(ab_main_to_monomials_last_14_stages_kernel);
+contiguous_chunks_stages!(ab_monomials_to_coset_first_14_stages_kernel);
 
 // 3-pass
-main_to_coset_middle_stages!(ab_main_to_monomials_final_5_stages_kernel);
-main_to_coset_middle_stages!(ab_main_to_monomials_final_6_stages_kernel);
-main_to_coset_middle_stages!(ab_main_to_monomials_final_7_stages_kernel);
-main_to_coset_middle_stages!(ab_main_to_monomials_final_8_stages_kernel);
+contiguous_chunks_stages!(ab_main_to_monomials_final_5_stages_kernel);
+contiguous_chunks_stages!(ab_main_to_monomials_final_6_stages_kernel);
+contiguous_chunks_stages!(ab_main_to_monomials_final_7_stages_kernel);
+contiguous_chunks_stages!(ab_main_to_monomials_final_8_stages_kernel);
 
 pub fn main_to_monomials_3_pass(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
@@ -110,13 +112,13 @@ pub fn main_to_monomials_3_pass(
         let mut grid_dim: Dim3 = (blocks_per_exchg_region as u32).into();
         grid_dim.y = num_exchg_regions as u32;
         let mut config = CudaLaunchConfig::basic(grid_dim, threads as u32, stream);
-        let args = MainToMonomialsFirstStagesArguments::new(
+        let args = StridedTilesStagesArguments::new(
             input_matrix,
             output_matrix_mut,
             log_n as i32,
             start_stage as i32,
         );
-        MainToMonomialsFirstStagesFunction(ab_main_to_monomials_nonfinal_8_stages_kernel)
+        StridedTilesStagesFunction(ab_main_to_monomials_nonfinal_8_stages_kernel)
             .launch(&config, &args)?;
         start_stage += 8;
         let num_exchg_regions = 1 << start_stage;
@@ -126,32 +128,32 @@ pub fn main_to_monomials_3_pass(
         let mut grid_dim: Dim3 = (blocks_per_exchg_region as u32).into();
         grid_dim.y = num_exchg_regions as u32;
         let mut config = CudaLaunchConfig::basic(grid_dim, threads as u32, stream);
-        let args = MainToMonomialsFirstStagesArguments::new(
+        let args = StridedTilesStagesArguments::new(
             output_matrix_const,
             output_matrix_mut,
             log_n as i32,
             start_stage as i32,
         );
-        MainToMonomialsFirstStagesFunction(ab_main_to_monomials_nonfinal_8_stages_kernel)
+        StridedTilesStagesFunction(ab_main_to_monomials_nonfinal_8_stages_kernel)
             .launch(&config, &args)?;
         start_stage += 8;
         let threads = 256;
         let bf_vals_per_block = 1 << 13; // 8192
         let blocks = n.get_chunks_count(bf_vals_per_block);
         let mut config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
-        let args = MainToCosetMiddleStagesArguments::new(
+        let args = ContiguousChunksStagesArguments::new(
             output_matrix_const,
             output_matrix_mut,
-            log_n as i32,
+            transposed_monomials,
         );
         match log_n {
-            21 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_5_stages_kernel)
+            21 => ContiguousChunksStagesFunction(ab_main_to_monomials_final_5_stages_kernel)
                 .launch(&config, &args)?,
-            22 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_6_stages_kernel)
+            22 => ContiguousChunksStagesFunction(ab_main_to_monomials_final_6_stages_kernel)
                 .launch(&config, &args)?,
-            23 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_7_stages_kernel)
+            23 => ContiguousChunksStagesFunction(ab_main_to_monomials_final_7_stages_kernel)
                 .launch(&config, &args)?,
-            24 => MainToCosetMiddleStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
+            24 => ContiguousChunksStagesFunction(ab_main_to_monomials_final_8_stages_kernel)
                 .launch(&config, &args)?,
             _ => unimplemented!(),
         }
@@ -163,6 +165,7 @@ pub fn main_to_coset_register_pipeline(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
@@ -207,17 +210,17 @@ pub fn main_to_coset_register_pipeline(
         grid_dim.y = 1;
         let mut config = CudaLaunchConfig::basic(grid_dim, threads as u32, stream);
         config.dynamic_smem_bytes = smem_bytes;
-        let args = MainToMonomialsFirstStagesArguments::new(
+        let args = StridedTilesStagesArguments::new(
             input_matrix,
             output_matrix_mut,
             log_n as i32,
-            num_ntts as i32,
+            0,
         );
         let function = match log_n {
-            23 => MainToMonomialsFirstStagesFunction(
+            23 => StridedTilesStagesFunction(
                 ab_main_to_monomials_first_9_stages_register_pipeline_kernel,
             ),
-            24 => MainToMonomialsFirstStagesFunction(
+            24 => StridedTilesStagesFunction(
                 ab_main_to_monomials_first_10_stages_register_pipeline_kernel,
             ),
             _ => unimplemented!(),
@@ -238,12 +241,12 @@ pub fn main_to_coset_register_pipeline(
         let blocks = n.get_chunks_count(bf_vals_per_block);
         let mut config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
         config.dynamic_smem_bytes = smem_bytes;
-        let args = MainToCosetMiddleStagesArguments::new(
+        let args = ContiguousChunksStagesArguments::new(
             output_matrix_const,
             output_matrix_mut,
-            num_ntts as i32,
+            transposed_monomials,
         );
-        let function = MainToCosetMiddleStagesFunction(ab_main_to_monomials_last_14_stages_kernel);
+        let function = ContiguousChunksStagesFunction(ab_main_to_monomials_last_14_stages_kernel);
         let func_ptr = function.as_ptr();
         unsafe {
             cudaFuncSetAttribute(

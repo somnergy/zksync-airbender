@@ -6,7 +6,7 @@ EXTERN __launch_bounds__(512, 1) __global__
     void ab_main_to_monomials_first_10_stages_register_pipeline_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                                        bf_matrix_setter<st_modifier::cg> gmem_out,
                                                                        const int log_n,
-                                                                       const int num_ntts) {
+                                                                       const int start_stage /*unused, for symmetry with three-pass API*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 4;
   constexpr int TILE_SIZE = 1 << LOG_DATA_TILE_SIZE;
@@ -25,9 +25,6 @@ EXTERN __launch_bounds__(512, 1) __global__
   const int gmem_block_offset = blockIdx.x << LOG_DATA_TILE_SIZE;
   gmem_in.add_row(gmem_block_offset);
   gmem_out.add_row(gmem_block_offset);
-
-  gmem_in.add_col(blockIdx.y);
-  gmem_out.add_col(blockIdx.y);
 
   extern __shared__ bf smem_block[]; // 16384 * 4 bytes
 
@@ -88,7 +85,7 @@ EXTERN __launch_bounds__(512, 1) __global__
     void ab_main_to_monomials_first_9_stages_register_pipeline_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                                        bf_matrix_setter<st_modifier::cg> gmem_out,
                                                                        const int log_n,
-                                                                       const int num_ntts) {
+                                                                       const int start_stage /*unused, for symmetry with three-pass API*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 5;
   constexpr int TILE_SIZE = 1 << LOG_DATA_TILE_SIZE;
@@ -169,7 +166,7 @@ EXTERN __launch_bounds__(512, 1) __global__
 EXTERN __launch_bounds__(512, 1) __global__
     void ab_main_to_monomials_last_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const int num_ntts) {
+                                                    const bool transposed_monomials) {
   constexpr int WARP_SIZE = 32;
   constexpr int VALS_PER_THREAD = 32;
   constexpr int WARPS_PER_BLOCK = 16;
@@ -249,23 +246,30 @@ EXTERN __launch_bounds__(512, 1) __global__
   reg_exchg_cmem_smem_twiddles_inv<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
   reg_exchg_cmem_smem_twiddles_inv<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
 
-  // uncoalesced, but vectorized and should fire off quickly
-//   uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + 32 * lane_id);
+  if (transposed_monomials) {
+#pragma unroll
+    for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
+      gmem_out.set_at_row(row, vals[i]);
+  } else {
+    // uncoalesced, but vectorized and should fire off quickly
+//     uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + 32 * lane_id);
 // #pragma unroll
-//   for (int i{0}; i < 32; i += 4, gmem_monomials_out_ptr++)
-//     *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
-  // un-swizzling + coalesced stores performs better on 5090
-  __syncwarp();
+//     for (int i{0}; i < 32; i += 4, gmem_monomials_out_ptr++)
+//       *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
+
+    // un-swizzling + coalesced stores performs better on 5090
+    __syncwarp();
 #pragma unroll
-  for (int y = 0; y < 32; y++)
-    smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
-  __syncwarp();
+    for (int y = 0; y < 32; y++)
+      smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
+    __syncwarp();
 #pragma unroll
-  for (int x = 0; x < 32; x++)
-    vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
+    for (int x = 0; x < 32; x++)
+      vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
 #pragma unroll
-  for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
-    gmem_out.set_at_row(row, vals[i]);
+    for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
+      gmem_out.set_at_row(row, vals[i]);
+  }
 }
 
 } // namespace airbender::ntt

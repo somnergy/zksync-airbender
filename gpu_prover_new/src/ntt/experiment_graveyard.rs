@@ -47,6 +47,7 @@ pub fn main_to_coset_pc(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    _transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
@@ -114,6 +115,7 @@ pub fn main_to_coset_pipeline_tile_8(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    _transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
@@ -182,6 +184,7 @@ pub fn main_to_coset(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    _transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
@@ -247,6 +250,7 @@ pub fn main_to_coset_tile_8(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    _transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
@@ -315,6 +319,7 @@ pub fn main_to_coset_coalesced(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
+    _transposed_monomials: bool,
     stream: &CudaStream,
 ) -> CudaResult<()> {
     let n = 1 << log_n;
