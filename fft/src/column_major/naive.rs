@@ -53,24 +53,24 @@ pub fn ifft_natural_to_natural<
 
     let log_n = input.len().trailing_zeros();
     serial_ct_ntt_natural_to_bitreversed(input, log_n, twiddles);
-    // bitreverse_enumeration_inplace(input);
+    bitreverse_enumeration_inplace(input);
 
-    // if coset != F::ONE {
-    //     let coset = coset.inverse().expect("inverse of coset must exist");
-    //     distribute_powers_serial(input, F::ONE, coset);
-    // }
+    if coset != F::ONE {
+        let coset = coset.inverse().expect("inverse of coset must exist");
+        distribute_powers_serial(input, F::ONE, coset);
+    }
 
-    // if input.len() > 1 {
-    //     let n_inv = P::from_u32_with_reduction(input.len() as u32)
-    //         .inverse()
-    //         .unwrap();
-    //     let mut i = 0;
-    //     let work_size = input.len();
-    //     while i < work_size {
-    //         input[i].mul_assign_by_base(&n_inv);
-    //         i += 1;
-    //     }
-    // }
+    if input.len() > 1 {
+        let n_inv = P::from_u32_with_reduction(input.len() as u32)
+            .inverse()
+            .unwrap();
+        let mut i = 0;
+        let work_size = input.len();
+        while i < work_size {
+            input[i].mul_assign_by_base(&n_inv);
+            i += 1;
+        }
+    }
 }
 
 // usually used to get monomial from natural bitreversed evaluation

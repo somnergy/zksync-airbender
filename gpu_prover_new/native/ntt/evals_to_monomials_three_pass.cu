@@ -57,27 +57,27 @@ EXTERN __launch_bounds__(512, 2) __global__
   }
 
 #pragma unroll
-    for (int i{0}, addr{thread_il_smem_start}; i < VALS_PER_THREAD; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
-      smem_block[addr] = vals[i]; // write interleaved smem tiles
+  for (int i{0}, addr{thread_il_smem_start}; i < VALS_PER_THREAD; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
+    smem_block[addr] = vals[i]; // write interleaved smem tiles
 
-    __syncthreads();
+  __syncthreads();
 
 #pragma unroll
-    for (int i{0}, addr{thread_ct_smem_start}; i < VALS_PER_THREAD; i++, addr += TILE_SIZE)
-      vals[i] = smem_block[addr]; // read consecutive smem tiles
+  for (int i{0}, addr{thread_ct_smem_start}; i < VALS_PER_THREAD; i++, addr += TILE_SIZE)
+    vals[i] = smem_block[addr]; // read consecutive smem tiles
 
-    int tile_exchg_region_offset = block_exchg_region_offset + tile_id;
-    if (start_stage == 0) {
-      reg_exchg_inv<8, 16, 1>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-      reg_exchg_inv<4, 8, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-      reg_exchg_inv<2, 4, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-      reg_exchg_inv<1, 2, 8>(vals, tile_exchg_region_offset);
-    } else {
-      reg_exchg_cmem_twiddles_inv<8, 16, 1>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-      reg_exchg_cmem_twiddles_inv<4, 8, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-      reg_exchg_cmem_twiddles_inv<2, 4, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-      reg_exchg_cmem_twiddles_inv<1, 2, 8>(vals, tile_exchg_region_offset);
-    }
+  int tile_exchg_region_offset = block_exchg_region_offset + tile_id;
+  if (start_stage == 0) {
+    reg_exchg_inv<8, 16, 1>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+    reg_exchg_inv<4, 8, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+    reg_exchg_inv<2, 4, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+    reg_exchg_inv<1, 2, 8>(vals, tile_exchg_region_offset);
+  } else {
+    reg_exchg_cmem_twiddles_inv<8, 16, 1>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+    reg_exchg_cmem_twiddles_inv<4, 8, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+    reg_exchg_cmem_twiddles_inv<2, 4, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+    reg_exchg_cmem_twiddles_inv<1, 2, 8>(vals, tile_exchg_region_offset);
+  }
 
 #pragma unroll
     for (int i{0}, row{thread_ct_gmem_start}; i < VALS_PER_THREAD; i++, row += tile_gmem_stride)
@@ -87,7 +87,8 @@ EXTERN __launch_bounds__(512, 2) __global__
 template <int STAGES>
 DEVICE_FORCEINLINE void main_to_monomials_final_up_to_8_stages(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                                bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                               const bool transposed_monomials) {
+                                                               const bool transposed_monomials,
+                                                               const int log_n) {
   constexpr int WARP_SIZE = 32;
   constexpr int VALS_PER_THREAD = 32;
   constexpr int VALS_PER_WARP = WARP_SIZE * VALS_PER_THREAD;
@@ -186,6 +187,11 @@ DEVICE_FORCEINLINE void main_to_monomials_final_up_to_8_stages(bf_matrix_getter<
   reg_exchg_cmem_smem_twiddles_inv<EightStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
   reg_exchg_cmem_smem_twiddles_inv<EightStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
 
+  const bf size_inv = ab_inv_sizes[log_n];
+#pragma unroll
+  for (int i = 0; i < 32; i++)
+    vals[i] = bf::mul(vals[i], size_inv); 
+
   if (transposed_monomials) {
 #pragma unroll
     for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
@@ -218,29 +224,33 @@ DEVICE_FORCEINLINE void main_to_monomials_final_up_to_8_stages(bf_matrix_getter<
 EXTERN __launch_bounds__(256, 3) __global__
     void ab_main_to_monomials_final_8_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const bool transposed_monomials) {
-  main_to_monomials_final_up_to_8_stages<8>(gmem_in, gmem_out, transposed_monomials);
+                                                    const bool transposed_monomials,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<8>(gmem_in, gmem_out, transposed_monomials, log_n);
 }
 
 EXTERN __launch_bounds__(256, 3) __global__
     void ab_main_to_monomials_final_7_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const bool transposed_monomials) {
-  main_to_monomials_final_up_to_8_stages<7>(gmem_in, gmem_out, transposed_monomials);
+                                                    const bool transposed_monomials,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<7>(gmem_in, gmem_out, transposed_monomials, log_n);
 }
 
 EXTERN __launch_bounds__(256, 3) __global__
     void ab_main_to_monomials_final_6_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const bool transposed_monomials) {
-  main_to_monomials_final_up_to_8_stages<6>(gmem_in, gmem_out, transposed_monomials);
+                                                    const bool transposed_monomials,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<6>(gmem_in, gmem_out, transposed_monomials, log_n);
 }
 
 EXTERN __launch_bounds__(256, 3) __global__
     void ab_main_to_monomials_final_5_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const bool transposed_monomials) {
-  main_to_monomials_final_up_to_8_stages<5>(gmem_in, gmem_out, transposed_monomials);
+                                                    const bool transposed_monomials,
+                                                    const int log_n) {
+  main_to_monomials_final_up_to_8_stages<5>(gmem_in, gmem_out, transposed_monomials, log_n);
 }
 
 } // namespace airbender::ntt

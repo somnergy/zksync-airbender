@@ -166,7 +166,8 @@ EXTERN __launch_bounds__(512, 1) __global__
 EXTERN __launch_bounds__(512, 1) __global__
     void ab_main_to_monomials_last_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const bool transposed_monomials) {
+                                                    const bool transposed_monomials,
+                                                    const int log_n) {
   constexpr int WARP_SIZE = 32;
   constexpr int VALS_PER_THREAD = 32;
   constexpr int WARPS_PER_BLOCK = 16;
@@ -245,6 +246,11 @@ EXTERN __launch_bounds__(512, 1) __global__
   reg_exchg_cmem_smem_twiddles_inv<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
   reg_exchg_cmem_smem_twiddles_inv<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
   reg_exchg_cmem_smem_twiddles_inv<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+
+  const bf size_inv = ab_inv_sizes[log_n];
+#pragma unroll
+  for (int i = 0; i < 32; i++)
+    vals[i] = bf::mul(vals[i], size_inv); 
 
   if (transposed_monomials) {
 #pragma unroll
