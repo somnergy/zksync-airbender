@@ -13,7 +13,6 @@ add_library(gpu_prover_new_native STATIC
         memory.cuh
         ntt/evals_to_monomials_three_pass.cu
         ntt/evals_to_monomials_two_pass.cu
-        ntt/experiment_graveyard.cu
         ntt/monomials_to_evals_three_pass.cu
         # ntt/monomials_to_evals_two_pass.cu
         ntt/ntt.cuh

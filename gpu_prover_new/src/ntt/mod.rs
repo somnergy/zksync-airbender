@@ -3,8 +3,6 @@
 #[cfg(test)]
 pub mod tests;
 
-pub(crate) mod experiment_graveyard;
-
 use era_cudart::cuda_kernel;
 use era_cudart::execution::{CudaLaunchConfig, Dim3, KernelFunction};
 use era_cudart::result::{CudaResult, CudaResultWrap};
@@ -21,11 +19,6 @@ use crate::utils::GetChunksCount;
 
 use std::mem::size_of;
 
-use crate::ntt::experiment_graveyard::{
-    main_to_coset, main_to_coset_tile_8, main_to_coset_coalesced, main_to_coset_pipeline_tile_8,
-    main_to_coset_pc,
-};
-
 type BF = BaseField;
 
 cuda_kernel!(
@@ -38,8 +31,8 @@ cuda_kernel!(
 );
 
 // 2-pass evals to monomials
-strided_tiles_stages!(ab_main_to_monomials_first_9_stages_register_pipeline_kernel);
-strided_tiles_stages!(ab_main_to_monomials_first_10_stages_register_pipeline_kernel);
+strided_tiles_stages!(ab_main_to_monomials_first_9_stages_2_pass_kernel);
+strided_tiles_stages!(ab_main_to_monomials_first_10_stages_2_pass_kernel);
 
 // 3-pass evals to monomials
 strided_tiles_stages!(ab_main_to_monomials_nonfinal_8_stages_kernel);
@@ -58,7 +51,7 @@ cuda_kernel!(
 
 // 2-pass evals to monomials
 contiguous_chunks_stages!(ab_main_to_monomials_last_14_stages_kernel);
-contiguous_chunks_stages!(ab_monomials_to_coset_first_14_stages_kernel);
+contiguous_chunks_stages!(ab_monomials_to_monomials_first_14_stages_kernel);
 
 // 3-pass evals to monomials
 contiguous_chunks_stages!(ab_main_to_monomials_final_5_stages_kernel);
@@ -158,7 +151,7 @@ pub fn main_to_monomials_3_pass(
     Ok(())
 }
 
-pub fn main_to_coset_register_pipeline(
+pub fn main_to_monomials_2_pass(
     inputs_matrix: &(impl DeviceMatrixChunkImpl<BF> + ?Sized),
     outputs_matrix: &mut (impl DeviceMatrixChunkMutImpl<BF> + ?Sized),
     log_n: usize,
@@ -215,10 +208,10 @@ pub fn main_to_coset_register_pipeline(
         );
         let function = match log_n {
             23 => StridedTilesStagesFunction(
-                ab_main_to_monomials_first_9_stages_register_pipeline_kernel,
+                ab_main_to_monomials_first_9_stages_2_pass_kernel,
             ),
             24 => StridedTilesStagesFunction(
-                ab_main_to_monomials_first_10_stages_register_pipeline_kernel,
+                ab_main_to_monomials_first_10_stages_2_pass_kernel,
             ),
             _ => unimplemented!(),
         };
@@ -303,7 +296,7 @@ pub fn monomials_to_evals_3_pass(
         let blocks = n.get_chunks_count(bf_vals_per_block);
         let mut config = CudaLaunchConfig::basic(blocks as u32, threads as u32, stream);
         let args = ContiguousChunksStagesArguments::new(
-            output_matrix_const,
+            input_matrix,
             output_matrix_mut,
             transposed_monomials,
             log_n as i32,
@@ -323,15 +316,15 @@ pub fn monomials_to_evals_3_pass(
         let bf_vals_per_block = 1 << 13; // 8192
         let mut start_stage = 8;
         for _ in 0..2 {
-            let num_exchg_regions = log_n >> (start_stage + 1);
-            let exchg_region_size = 1 << (start_stage + 1);
-            let blocks_per_exchg_region = exchg_region_size / bf_vals_per_block;
-            assert_eq!(blocks_per_exchg_region * num_exchg_regions, n / bf_vals_per_block);
+            let num_block_exchg_regions = n >> (start_stage + 8);
+            let block_exchg_region_size = 1 << (start_stage + 8);
+            let blocks_per_exchg_region = block_exchg_region_size / bf_vals_per_block;
+            assert_eq!(blocks_per_exchg_region * num_block_exchg_regions, n / bf_vals_per_block);
             let mut grid_dim: Dim3 = (blocks_per_exchg_region as u32).into();
-            grid_dim.y = num_exchg_regions as u32;
+            grid_dim.y = num_block_exchg_regions as u32;
             let mut config = CudaLaunchConfig::basic(grid_dim, threads as u32, stream);
             let args = StridedTilesStagesArguments::new(
-                input_matrix,
+                output_matrix_const,
                 output_matrix_mut,
                 log_n as i32,
                 start_stage as i32,

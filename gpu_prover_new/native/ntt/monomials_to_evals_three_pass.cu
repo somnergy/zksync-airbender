@@ -124,7 +124,7 @@ DEVICE_FORCEINLINE void monomials_to_evals_initial_up_to_8_stages(bf_matrix_gett
     for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
       vals[i] = gmem_in.get_at_row(row);
   } else {
-    // load coalesced and swizzle
+    // load coalesced and transpose into registers
 #pragma unroll
     for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
       vals[i] = gmem_in.get_at_row(row);

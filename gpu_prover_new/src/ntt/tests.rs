@@ -8,7 +8,9 @@ use era_cudart::slice::DeviceSlice;
 use era_cudart::stream::CudaStream;
 use fft::field_utils::domain_generator_for_size;
 use fft::utils::bitreverse_enumeration_inplace;
-use fft::{fft_natural_to_bitreversed, ifft_natural_to_natural, precompute_twiddles_for_fft};
+use fft::{
+    ifft_natural_to_natural, precompute_twiddles_for_fft, serial_ct_ntt_bitreversed_to_natural,
+};
 use field::Field;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -21,13 +23,19 @@ use crate::device_structures::{
 };
 use crate::field::BaseField;
 use crate::ntt::{
-    main_to_coset, main_to_coset_tile_8, main_to_coset_coalesced, main_to_coset_register_pipeline,
-    main_to_coset_pipeline_tile_8, main_to_coset_pc, main_to_monomials_3_pass,
+    main_to_monomials_2_pass,
+    main_to_monomials_3_pass,
     monomials_to_evals_3_pass,
 };
-use crate::ops_complex::bit_reverse_in_place;
+use crate::ops::complex::bit_reverse_in_place;
 
 type BF = BaseField;
+
+#[derive(PartialEq)]
+enum Passes {
+  Two,
+  Three,
+}
 
 #[derive(PartialEq)]
 enum InOrOutOfPlace {
@@ -35,14 +43,23 @@ enum InOrOutOfPlace {
   Out,
 }
 
-fn transpose_monomials(&mut vals) {
-    for 
+fn transpose_monomials(vals: &mut [BF]) {
+    for chunk in vals.chunks_mut(1024) {
+        for row in 0..32 {
+            for col in 0..row {
+                let a = chunk[row * 32 + col];
+                let b = chunk[col * 32 + row];
+                chunk[row * 32 + col] = b;
+                chunk[col * 32 + row] = a;
+            }
+        }
+    }
 }
 
-fn run_main_to_coset(
+fn run_main_to_monomials(
     log_n_range: Range<usize>,
     num_bf_cols: usize,
-    kernel: usize,
+    passes_variant: Passes,
     in_or_out_of_place: InOrOutOfPlace,
     transposed_monomials: bool,
 ) {
@@ -93,8 +110,8 @@ fn run_main_to_coset(
                     DeviceMatrixChunk::new(&inputs_device[0..memory_size], stride, OFFSET, n);
                 let mut outputs_device_matrix =
                     DeviceMatrixChunkMut::new(&mut outputs_device[0..memory_size], stride, OFFSET, n);
-                match kernel {
-                    0 => main_to_coset(
+                match passes_variant {
+                    Passes::Two => main_to_monomials_2_pass(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
@@ -102,7 +119,7 @@ fn run_main_to_coset(
                         &stream,
                     )
                     .unwrap(),
-                    1 => main_to_coset_tile_8(
+                    Passes::Three => main_to_monomials_3_pass(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
@@ -110,47 +127,6 @@ fn run_main_to_coset(
                         &stream,
                     )
                     .unwrap(),
-                    2 => main_to_coset_coalesced(
-                        &inputs_device_matrix,
-                        &mut outputs_device_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    3 => main_to_coset_register_pipeline(
-                        &inputs_device_matrix,
-                        &mut outputs_device_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    4 => main_to_coset_pipeline_tile_8(
-                        &inputs_device_matrix,
-                        &mut outputs_device_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    5 => main_to_coset_pc(
-                        &inputs_device_matrix,
-                        &mut outputs_device_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    6 => main_to_monomials_3_pass(
-                        &inputs_device_matrix,
-                        &mut outputs_device_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    _ => {},
                 };
                 memory_copy_async(
                     &mut outputs_host[0..memory_size],
@@ -175,8 +151,8 @@ fn run_main_to_coset(
                     DeviceMatrixChunk::new(&inplace_input_view[0..memory_size], stride, OFFSET, n);
                 let mut inplace_output_view_matrix =
                     DeviceMatrixChunkMut::new(&mut inplace_output_view[0..memory_size], stride, OFFSET, n);
-                match kernel {
-                    0 => main_to_coset(
+                match passes_variant {
+                    Passes::Two => main_to_monomials_2_pass(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
@@ -184,7 +160,7 @@ fn run_main_to_coset(
                         &stream,
                     )
                     .unwrap(),
-                    1 => main_to_coset_tile_8(
+                    Passes::Three => main_to_monomials_3_pass(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
@@ -192,47 +168,6 @@ fn run_main_to_coset(
                         &stream,
                     )
                     .unwrap(),
-                    2 => main_to_coset_coalesced(
-                        &inplace_input_view_matrix,
-                        &mut inplace_output_view_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    3 => main_to_coset_register_pipeline(
-                        &inplace_input_view_matrix,
-                        &mut inplace_output_view_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    4 => main_to_coset_pipeline_tile_8(
-                        &inplace_input_view_matrix,
-                        &mut inplace_output_view_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    5 => main_to_coset_pc(
-                        &inplace_input_view_matrix,
-                        &mut inplace_output_view_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    6 => main_to_monomials_3_pass(
-                        &inplace_input_view_matrix,
-                        &mut inplace_output_view_matrix,
-                        log_n,
-                        transposed_monomials,
-                        &stream,
-                    )
-                    .unwrap(),
-                    _ => {},
                 };
                 memory_copy_async(
                     &mut outputs_host[0..memory_size],
@@ -248,10 +183,12 @@ fn run_main_to_coset(
         for col in 0..num_bf_cols {
             let start = (col * stride + OFFSET) as usize;
             let range = start..start + n;
+            if transposed_monomials {
+                transpose_monomials(&mut outputs_host[range.clone()]);
+            }
             bitreverse_enumeration_inplace(&mut outputs_host[range]);
         }
 
-        // Check forward variants against CPU forward results
         for ntt in 0..num_bf_cols {
             let start = ntt * stride + OFFSET as usize;
             let xs_range = start..start + n;
@@ -270,7 +207,7 @@ fn run_main_to_coset(
 fn run_monomials_to_evals(
     log_n_range: Range<usize>,
     num_bf_cols: usize,
-    kernel: usize,
+    passes_variant: Passes,
     in_or_out_of_place: InOrOutOfPlace,
     transposed_monomials: bool,
 ) {
@@ -308,14 +245,19 @@ fn run_monomials_to_evals(
 
         (&mut inputs_host[0..memory_size]).copy_from_slice(&inputs_orig_host[0..memory_size]);
 
-        // evals to monomials
+        for col in 0..num_bf_cols {
+            let start = (col * stride + OFFSET) as usize;
+            let range = start..start + n;
+            if transposed_monomials {
+                transpose_monomials(&mut inputs_host[range]);
+            }
+        }
         memory_copy_async(
             &mut inputs_device[0..memory_size],
             &inputs_host[0..memory_size],
             &stream,
         )
         .unwrap();
-        bit_reverse_in_place(&mut inputs_device, &stream);
         flush_l2();
 
         match in_or_out_of_place {
@@ -324,8 +266,8 @@ fn run_monomials_to_evals(
                     DeviceMatrixChunk::new(&inputs_device[0..memory_size], stride, OFFSET, n);
                 let mut outputs_device_matrix =
                     DeviceMatrixChunkMut::new(&mut outputs_device[0..memory_size], stride, OFFSET, n);
-                match kernel {
-                    0 => monomials_to_evals_3_pass(
+                match passes_variant {
+                    Passes::Three => monomials_to_evals_3_pass(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
@@ -351,8 +293,8 @@ fn run_monomials_to_evals(
                     DeviceMatrixChunk::new(&inplace_input_view[0..memory_size], stride, OFFSET, n);
                 let mut inplace_output_view_matrix =
                     DeviceMatrixChunkMut::new(&mut inplace_output_view[0..memory_size], stride, OFFSET, n);
-                match kernel {
-                    0 => monomials_to_evals_3_pass(
+                match passes_variant {
+                    Passes::Three => monomials_to_evals_3_pass(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
@@ -373,22 +315,16 @@ fn run_monomials_to_evals(
 
         stream.synchronize().unwrap();
 
-        // for col in 0..num_bf_cols {
-        //     let start = (col * stride + OFFSET) as usize;
-        //     let range = start..start + n;
-        //     bitreverse_enumeration_inplace(&mut outputs_host[range]);
-        // }
-
-        // Check that iNTT -> NTT matches original inputs
         for ntt in 0..num_bf_cols {
             let start = ntt * stride + OFFSET as usize;
             let xs_range = start..start + n;
             let twiddles = &twiddles[..(n >> 1)];
             let gpu_results = &outputs_host[xs_range.clone()];
-            let mut cpu_refs: Vec<BF> = (&inputs_host[xs_range.clone()]).to_vec();
-            fft_natural_to_natural(&mut inputs_host, BF::ONE, BF::ONE, twiddles);
+            let mut cpu_refs: Vec<BF> = (&inputs_orig_host[xs_range.clone()]).to_vec();
+            serial_ct_ntt_bitreversed_to_natural(&mut cpu_refs, log_n as u32, twiddles);
+            // bitreverse_enumeration_inplace(&mut cpu_refs);
             for k in 0..n {
-                assert_eq!(gpu_results[k], refs[k], "2^{} ntt {} k {}", log_n, ntt, k);
+                assert_eq!(gpu_results[k], cpu_refs[k], "2^{} ntt {} k {}", log_n, ntt, k);
             }
         }
     }
@@ -397,102 +333,72 @@ fn run_monomials_to_evals(
 
 #[test]
 #[serial]
-fn test_main_to_coset_tile_16_out_of_place() {
-    run_main_to_coset(24..25, 8, 0, InOrOutOfPlace::Out, false);
+fn test_main_to_monomials_2_pass_out_of_place() {
+    run_main_to_monomials(24..25, 8, Passes::Two, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
-fn test_main_to_coset_tile_16_in_place() {
-    run_main_to_coset(24..25, 8, 0, InOrOutOfPlace::In, false);
+fn test_main_to_monomials_2_pass_in_place() {
+    run_main_to_monomials(24..25, 8, Passes::Two, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
-fn test_main_to_coset_tile_8_out_of_place() {
-    run_main_to_coset(24..25, 1, 1, InOrOutOfPlace::Out, false);
+fn test_main_to_monomials_2_pass_transposed_monomials_out_of_place() {
+    run_main_to_monomials(24..25, 8, Passes::Two, InOrOutOfPlace::Out, true);
 }
 
 #[test]
 #[serial]
-fn test_main_to_coset_tile_8_in_place() {
-    run_main_to_coset(24..25, 1, 1, InOrOutOfPlace::In, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_coalesced_out_of_place() {
-    run_main_to_coset(24..25, 1, 2, InOrOutOfPlace::Out, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_coalesced_in_place() {
-    run_main_to_coset(24..25, 1, 2, InOrOutOfPlace::In, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_register_pipeline_out_of_place() {
-    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::Out, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_register_pipeline_in_place() {
-    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::In, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_register_pipeline_transposed_monomials_in_place() {
-    run_main_to_coset(24..25, 8, 3, InOrOutOfPlace::In, true);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_pipeline_tile_8_out_of_place() {
-    run_main_to_coset(24..25, 8, 4, InOrOutOfPlace::Out, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_pipeline_tile_8_in_place() {
-    run_main_to_coset(24..25, 8, 4, InOrOutOfPlace::In, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_pc_out_of_place() {
-    run_main_to_coset(24..25, 8, 5, InOrOutOfPlace::Out, false);
-}
-
-#[test]
-#[serial]
-fn test_main_to_coset_pc_in_place() {
-    run_main_to_coset(24..25, 8, 5, InOrOutOfPlace::In, false);
+fn test_main_to_monomials_2_pass_transposed_monomials_in_place() {
+    run_main_to_monomials(24..25, 8, Passes::Two, InOrOutOfPlace::In, true);
 }
 
 #[test]
 #[serial]
 fn test_main_to_monomials_3_pass_out_of_place() {
-    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::Out, false);
+    run_main_to_monomials(24..25, 8, Passes::Three, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_main_to_monomials_3_pass_in_place() {
-    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::In, false);
+    run_main_to_monomials(24..25, 8, Passes::Three, InOrOutOfPlace::In, false);
+}
+
+#[test]
+#[serial]
+fn test_main_to_monomials_3_pass_transposed_monomials_out_of_place() {
+    run_main_to_monomials(24..25, 8, Passes::Three, InOrOutOfPlace::Out, true);
+}
+
+#[test]
+#[serial]
+fn test_main_to_monomials_3_pass_transposed_monomials_in_place() {
+    run_main_to_monomials(24..25, 8, Passes::Three, InOrOutOfPlace::In, true);
 }
 
 #[test]
 #[serial]
 fn test_monomials_to_evals_3_pass_out_of_place() {
-    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::Out, false);
+    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_monomials_to_evals_3_pass_in_place() {
-    run_main_to_coset(24..25, 8, 6, InOrOutOfPlace::In, false);
+    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::In, false);
+}
+
+#[test]
+#[serial]
+fn test_monomials_to_evals_3_pass_transposed_monomials_out_of_place() {
+    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::Out, true);
+}
+
+#[test]
+#[serial]
+fn test_monomials_to_evals_3_pass_transposed_monomials_in_place() {
+    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::In, true);
 }

@@ -187,6 +187,8 @@ pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<
     let mut num_groups = n / 2;
     let mut distance = 1;
 
+    let mut stage = 0;
+
     while num_groups > 1 {
         // println!("num_groups: {:?}", num_groups);
         debug_assert!(num_groups > 1);
@@ -208,6 +210,10 @@ pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<
                 a[j + distance] = tmp;
                 a[j].add_assign(&v);
 
+                if k == 0 && j == 0 {
+                    println!("from cpu: {} {} {}", u, v, s);
+                } 
+
                 j += 1;
             }
 
@@ -217,29 +223,34 @@ pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<
         pairs_per_group *= 2;
         num_groups /= 2;
         distance *= 2;
-    }
 
-    {
-        // special case for omega = 1
-        debug_assert!(num_groups == 1);
-        let idx_1 = 0;
-        let idx_2 = pairs_per_group;
-
-        let mut j = idx_1;
-
-        while j < idx_2 {
-            let u = a[j];
-            let v = a[j + distance];
-
-            let mut tmp = u;
-            tmp.sub_assign(&v);
-
-            a[j + distance] = tmp;
-            a[j].add_assign(&v);
-
-            j += 1;
+        stage += 1;
+        if stage == 8 {
+            break;
         }
     }
+
+    // {
+    //     // special case for omega = 1
+    //     debug_assert!(num_groups == 1);
+    //     let idx_1 = 0;
+    //     let idx_2 = pairs_per_group;
+
+    //     let mut j = idx_1;
+
+    //     while j < idx_2 {
+    //         let u = a[j];
+    //         let v = a[j + distance];
+
+    //         let mut tmp = u;
+    //         tmp.sub_assign(&v);
+
+    //         a[j + distance] = tmp;
+    //         a[j].add_assign(&v);
+
+    //         j += 1;
+    //     }
+    // }
 }
 
 pub fn cache_friendly_ntt_natural_to_bitreversed<F: Field, E: Field + FieldExtension<F>>(
@@ -290,69 +301,72 @@ pub fn cache_friendly_ntt_natural_to_bitreversed<F: Field, E: Field + FieldExten
         round += 1;
     }
 
-    while round < cache_friendly_round {
-        debug_assert!(num_groups > 1);
-        let mut k = 0;
-        while k < num_groups {
-            let idx_1 = k * pairs_per_group * 2;
-            let idx_2 = idx_1 + pairs_per_group;
-            let s = omegas_bit_reversed[k];
+    // while round < cache_friendly_round {
+    //     debug_assert!(num_groups > 1);
+    //     let mut k = 0;
+    //     while k < num_groups {
+    //         let idx_1 = k * pairs_per_group * 2;
+    //         let idx_2 = idx_1 + pairs_per_group;
+    //         let s = omegas_bit_reversed[k];
 
-            let mut j = idx_1;
-            while j < idx_2 {
-                let mut u = a[j];
-                let mut v = a[j + distance];
-                v.mul_assign_by_base(&s);
-                u.sub_assign(&v);
-                a[j + distance] = u;
-                a[j].add_assign(&v);
-                j += 1;
-            }
-            k += 1;
-        }
+    //         let mut j = idx_1;
+    //         while j < idx_2 {
+    //             let mut u = a[j];
+    //             let mut v = a[j + distance];
+    //             v.mul_assign_by_base(&s);
+    //             u.sub_assign(&v);
+    //             a[j + distance] = u;
+    //             a[j].add_assign(&v);
+    //             j += 1;
+    //         }
+    //         k += 1;
+    //     }
 
-        pairs_per_group /= 2;
-        num_groups *= 2;
-        distance /= 2;
-        round += 1;
-    }
-    let mut cache_bunch = 0;
-    while cache_bunch < num_groups {
-        // num_groups=128 // round loop
-        let mut pairs_per_group_in_cache = pairs_per_group;
-        let mut distance_in_cache = distance;
-        let mut num_groups_in_cache = 1;
-        let num_rounds_in_cache = log_n - round; // 17
+    //     pairs_per_group /= 2;
+    //     num_groups *= 2;
+    //     distance /= 2;
+    //     round += 1;
+    //     if round >= 2 {
+    //         break;
+    //     }
+    // }
+    // let mut cache_bunch = 0;
+    // while cache_bunch < num_groups {
+    //     // num_groups=128 // round loop
+    //     let mut pairs_per_group_in_cache = pairs_per_group;
+    //     let mut distance_in_cache = distance;
+    //     let mut num_groups_in_cache = 1;
+    //     let num_rounds_in_cache = log_n - round; // 17
 
-        let mut round = 0;
-        while round < num_rounds_in_cache {
-            // experiment
+    //     let mut round = 0;
+    //     while round < num_rounds_in_cache {
+    //         // experiment
 
-            let mut k = 0;
-            while k < num_groups_in_cache {
-                // group loop
-                let idx_1 = cache_bunch * pairs_per_group * 2 + k * pairs_per_group_in_cache * 2;
-                let idx_2 = idx_1 + pairs_per_group_in_cache;
-                let s = omegas_bit_reversed[cache_bunch * num_groups_in_cache + k];
+    //         let mut k = 0;
+    //         while k < num_groups_in_cache {
+    //             // group loop
+    //             let idx_1 = cache_bunch * pairs_per_group * 2 + k * pairs_per_group_in_cache * 2;
+    //             let idx_2 = idx_1 + pairs_per_group_in_cache;
+    //             let s = omegas_bit_reversed[cache_bunch * num_groups_in_cache + k];
 
-                let mut j = idx_1;
-                while j < idx_2 {
-                    let mut u = a[j];
-                    let mut v = a[j + distance_in_cache];
-                    v.mul_assign_by_base(&s);
-                    u.sub_assign(&v);
-                    a[j + distance_in_cache] = u;
-                    a[j].add_assign(&v);
+    //             let mut j = idx_1;
+    //             while j < idx_2 {
+    //                 let mut u = a[j];
+    //                 let mut v = a[j + distance_in_cache];
+    //                 v.mul_assign_by_base(&s);
+    //                 u.sub_assign(&v);
+    //                 a[j + distance_in_cache] = u;
+    //                 a[j].add_assign(&v);
 
-                    j += 1;
-                }
-                k += 1;
-            }
-            pairs_per_group_in_cache /= 2;
-            num_groups_in_cache *= 2;
-            distance_in_cache /= 2;
-            round += 1;
-        }
-        cache_bunch += 1;
-    }
+    //                 j += 1;
+    //             }
+    //             k += 1;
+    //         }
+    //         pairs_per_group_in_cache /= 2;
+    //         num_groups_in_cache *= 2;
+    //         distance_in_cache /= 2;
+    //         round += 1;
+    //     }
+    //     cache_bunch += 1;
+    // }
 }

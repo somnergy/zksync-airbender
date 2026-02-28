@@ -3,10 +3,10 @@
 namespace airbender::ntt {
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_main_to_monomials_last_10_stages_register_pipeline_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                                      bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                                      const int log_n,
-                                                                      const int start_stage /*unused, for symmetry with three-pass*/) {
+    void ab_main_to_monomials_last_10_stages_2_pass_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
+                                                           bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                           const int log_n,
+                                                           const int start_stage /*unused, for symmetry with three-pass*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 4;
   constexpr int TILE_SIZE = 1 << LOG_DATA_TILE_SIZE;
@@ -66,7 +66,7 @@ EXTERN __launch_bounds__(512, 1) __global__
 }
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_monomials_to_coset_first_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
+    void ab_monomials_to_evals_first_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
                                                       bf_matrix_setter<st_modifier::cg> gmem_out,
                                                       const bool transposed_monomials) {
   constexpr int WARP_SIZE = 32;
