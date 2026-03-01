@@ -16,7 +16,7 @@ EXTERN __launch_bounds__(512, 2) __global__
   const int lane_in_tile = threadIdx.x & 31;
   const int tile_id = threadIdx.x >> LOG_DATA_TILE_SIZE;
 
-  const int exchg_region_size = 1 << (log_n - start_stage);
+  const int exchg_region_size = 1 << (start_stage + 8);
   const int tile_gmem_stride = exchg_region_size >> LOG_DATA_TILES_PER_BLOCK;
   const int interleaved_gmem_stride = tile_gmem_stride * THREAD_TILES_PER_BLOCK;
 
@@ -44,7 +44,7 @@ EXTERN __launch_bounds__(512, 2) __global__
       vals[i] = gmem_in.get_at_row(row); // read consecutive gmem tiles
 
   int tile_exchg_region_offset = (alternating_block_idx_y * THREAD_TILES_PER_BLOCK + tile_id) << 3;
-  if (start_stage == 0) {
+  if (start_stage == log_n - 8) {
     reg_exchg_fwd<1, 2, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
     reg_exchg_fwd<2, 4, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
     reg_exchg_fwd<4, 8, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
@@ -58,16 +58,16 @@ EXTERN __launch_bounds__(512, 2) __global__
 
 #pragma unroll
   for (int i{0}, addr{thread_ct_smem_start}; i < VALS_PER_THREAD; i++, addr += TILE_SIZE)
-    smem_block[addr] = vals[i]; // read consecutive smem tiles
+    smem_block[addr] = vals[i]; // write consecutive smem tiles
 
   __syncthreads();
 
 #pragma unroll
   for (int i{0}, addr{thread_il_smem_start}; i < VALS_PER_THREAD; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
-    vals[i] = smem_block[addr]; // read interleaved smem tiles
+  vals[i] = smem_block[addr]; // read interleaved smem tiles
 
   int block_exchg_region_offset = alternating_block_idx_y << 3;
-  if (start_stage == 0) {
+  if (start_stage == log_n - 8) {
     reg_exchg_fwd<1, 2, 8>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
     reg_exchg_fwd<2, 4, 4>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
     reg_exchg_fwd<4, 8, 2>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
@@ -81,7 +81,7 @@ EXTERN __launch_bounds__(512, 2) __global__
 
 #pragma unroll
   for (int i{0}, addr{thread_il_gmem_start}; i < VALS_PER_THREAD; i++, addr += interleaved_gmem_stride)
-    vals[i] = gmem_in.get_at_row(addr);
+    gmem_out.set_at_row(addr, vals[i]);
 }
 
 template <int STAGES>

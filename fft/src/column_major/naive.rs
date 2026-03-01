@@ -225,32 +225,32 @@ pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<
         distance *= 2;
 
         stage += 1;
-        if stage == 8 {
-            break;
-        }
+        // if stage == 17 {
+        //     break;
+        // }
     }
 
-    // {
-    //     // special case for omega = 1
-    //     debug_assert!(num_groups == 1);
-    //     let idx_1 = 0;
-    //     let idx_2 = pairs_per_group;
+    {
+        // special case for omega = 1
+        debug_assert!(num_groups == 1);
+        let idx_1 = 0;
+        let idx_2 = pairs_per_group;
 
-    //     let mut j = idx_1;
+        let mut j = idx_1;
 
-    //     while j < idx_2 {
-    //         let u = a[j];
-    //         let v = a[j + distance];
+        while j < idx_2 {
+            let u = a[j];
+            let v = a[j + distance];
 
-    //         let mut tmp = u;
-    //         tmp.sub_assign(&v);
+            let mut tmp = u;
+            tmp.sub_assign(&v);
 
-    //         a[j + distance] = tmp;
-    //         a[j].add_assign(&v);
+            a[j + distance] = tmp;
+            a[j].add_assign(&v);
 
-    //         j += 1;
-    //     }
-    // }
+            j += 1;
+        }
+    }
 }
 
 pub fn cache_friendly_ntt_natural_to_bitreversed<F: Field, E: Field + FieldExtension<F>>(

@@ -382,23 +382,23 @@ fn test_main_to_monomials_3_pass_transposed_monomials_in_place() {
 #[test]
 #[serial]
 fn test_monomials_to_evals_3_pass_out_of_place() {
-    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::Out, false);
+    run_monomials_to_evals(24..25, 8, Passes::Three, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
 fn test_monomials_to_evals_3_pass_in_place() {
-    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::In, false);
+    run_monomials_to_evals(24..25, 8, Passes::Three, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
 fn test_monomials_to_evals_3_pass_transposed_monomials_out_of_place() {
-    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::Out, true);
+    run_monomials_to_evals(24..25, 8, Passes::Three, InOrOutOfPlace::Out, true);
 }
 
 #[test]
 #[serial]
 fn test_monomials_to_evals_3_pass_transposed_monomials_in_place() {
-    run_monomials_to_evals(24..25, 1, Passes::Three, InOrOutOfPlace::In, true);
+    run_monomials_to_evals(24..25, 8, Passes::Three, InOrOutOfPlace::In, true);
 }

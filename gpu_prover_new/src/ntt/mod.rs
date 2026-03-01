@@ -314,7 +314,7 @@ pub fn monomials_to_evals_3_pass(
         }
         let threads = 512;
         let bf_vals_per_block = 1 << 13; // 8192
-        let mut start_stage = 8;
+        let mut start_stage = log_n - 16;
         for _ in 0..2 {
             let num_block_exchg_regions = n >> (start_stage + 8);
             let block_exchg_region_size = 1 << (start_stage + 8);
