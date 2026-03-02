@@ -116,7 +116,7 @@ EXTERN __launch_bounds__(512, 1) __global__
   // "it" = interleaved tile layout
   const int thread_il_gmem_start = lane_in_tile + tile_id * TILE_GMEM_STRIDE;
   const int thread_ct_gmem_start = lane_in_tile + tile_id * 2 * IL_GMEM_STRIDE;
-  const int thread_il_smem_start = lane_in_tile + tile_id * TILE_SIZE;
+ et_at_row(addr, vals[i]); // write interleaved gmem tiles                                                                        |    gmem_out.set_at_row(aet_at_row(addr, vals[i]); // write interleaved gmem tiles                                                                        |    gmem_out.set_at_row(adconst int thread_il_smem_start = lane_in_tile + tile_id * TILE_SIZE;
   const int thread_ct_smem_start = lane_in_tile + tile_id * TILE_SIZE * 2 * THREAD_TILES_PER_BLOCK;
 
   const bf twiddle = ab_inv_cmem_twiddles_coarse[1];
@@ -230,7 +230,6 @@ EXTERN __launch_bounds__(512, 1) __global__
   reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
   reg_exchg_cmem_twiddles_inv<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
 
-  // TODO: consider shfl pattern here instead
   __syncwarp();
 #pragma unroll
   for (int y = 0; y < 32; y++)

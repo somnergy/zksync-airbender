@@ -39,11 +39,11 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i] = gmem_int.get_at_row(row); // read consecutive gmem tiles
 
   int tile_exchg_region_offset = tile_id << 4;
-  reg_exchg_inv<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<16, 32, 1>(vals, tile_exchg_region_offset);
+  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
 
 #pragma unroll
   for (int i{0}, addr{thread_ct_smem_start}; i < 32; i++, addr += TILE_SIZE)
@@ -55,11 +55,11 @@ EXTERN __launch_bounds__(512, 1) __global__
   for (int i{0}, addr{thread_il_smem_start}; i < 32; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
     smem_block[addr] = vals[i]; // read interleaved smem tiles
 
-  reg_exchg_inv<1, 2, 16>(vals, 0);
-  reg_exchg_inv<2, 4, 8>(vals, 0);
-  reg_exchg_inv<4, 8, 4>(vals, 0);
-  reg_exchg_inv<8, 16, 2>(vals, 0);
-  reg_exchg_inv<16, 32, 1>(vals, 0);
+  reg_exchg_fwd<1, 2, 16>(vals, 0);
+  reg_exchg_fwd<2, 4, 8>(vals, 0);
+  reg_exchg_fwd<4, 8, 4>(vals, 0);
+  reg_exchg_fwd<8, 16, 2>(vals, 0);
+  reg_exchg_fwd<16, 32, 1>(vals, 0);
 
   for (int i{0}, addr{thread_il_gmem_start}; i < 32; i++, addr += IL_GMEM_STRIDE)
     gmem_out.set_at_row(addr, vals[i]); // write interleaved gmem tiles
@@ -71,15 +71,15 @@ EXTERN __launch_bounds__(512, 1) __global__
                                                     const int log_n,
                                                     const int start_stage /*unused, for symmetry with three-pass*/) {
   constexpr int VALS_PER_THREAD = 32;
-  constexpr int LOG_DATA_TILE_SIZE = 4;
+  constexpr int LOG_DATA_TILE_SIZE = 5;
   constexpr int TILE_SIZE = 1 << LOG_DATA_TILE_SIZE;
-  constexpr int LOG_DATA_TILES_PER_BLOCK = 10;
-  constexpr int THREAD_TILES_PER_BLOCK = 32;
-  constexpr int TILE_GMEM_STRIDE = 1 << (24 - LOG_DATA_TILES_PER_BLOCK);
+  constexpr int LOG_DATA_TILES_PER_BLOCK = 9;
+  constexpr int THREAD_TILES_PER_BLOCK = 16;
+  constexpr int TILE_GMEM_STRIDE = 1 << (23 - LOG_DATA_TILES_PER_BLOCK);
   constexpr int IL_GMEM_STRIDE = TILE_GMEM_STRIDE * THREAD_TILES_PER_BLOCK;
 
   // TODO: make some of these kernel arguments
-  const int lane_in_tile = threadIdx.x & 15;
+  const int lane_in_tile = threadIdx.x & 31;
   const int tile_id = threadIdx.x >> LOG_DATA_TILE_SIZE;
   const int tile_gmem_stride = 1 << (log_n - LOG_DATA_TILES_PER_BLOCK);
   const int gmem_block_offset = blockIdx.x << LOG_DATA_TILE_SIZE;
@@ -93,7 +93,7 @@ EXTERN __launch_bounds__(512, 1) __global__
   // "ct" = consecutive tile layout
   // "it" = interleaved tile layout
   const int thread_il_gmem_start = lane_in_tile + tile_id * TILE_GMEM_STRIDE;
-  const int thread_ct_gmem_start = lane_in_tile + tile_id * IL_GMEM_STRIDE;
+  const int thread_ct_gmem_start = lane_in_tile + 2 * tile_id * IL_GMEM_STRIDE;
   const int thread_il_smem_start = lane_in_tile + tile_id * TILE_SIZE;
   const int thread_ct_smem_start = lane_in_tile + tile_id * TILE_SIZE * THREAD_TILES_PER_BLOCK;
 
@@ -101,12 +101,12 @@ EXTERN __launch_bounds__(512, 1) __global__
   for (int i{0}, row{thread_ct_gmem_start}; i < 32; i++, row += tile_gmem_stride)
     vals[i] = gmem_int.get_at_row(row); // read consecutive gmem tiles
 
-  int tile_exchg_region_offset = tile_id << 4;
-  reg_exchg_inv<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_inv<16, 32, 1>(vals, tile_exchg_region_offset);
+  int tile_exchg_region_offset = tile_id << 5;
+  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset);
+  // reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
 
 #pragma unroll
   for (int i{0}, addr{thread_ct_smem_start}; i < 32; i++, addr += TILE_SIZE)
@@ -118,11 +118,11 @@ EXTERN __launch_bounds__(512, 1) __global__
   for (int i{0}, addr{thread_il_smem_start}; i < 32; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
     smem_block[addr] = vals[i]; // read interleaved smem tiles
 
-  reg_exchg_inv<1, 2, 16>(vals, 0);
-  reg_exchg_inv<2, 4, 8>(vals, 0);
-  reg_exchg_inv<4, 8, 4>(vals, 0);
-  reg_exchg_inv<8, 16, 2>(vals, 0);
-  reg_exchg_inv<16, 32, 1>(vals, 0);
+  reg_exchg_fwd<1, 2, 16>(vals, 0);
+  reg_exchg_fwd<2, 4, 8>(vals, 0);
+  reg_exchg_fwd<4, 8, 4>(vals, 0);
+  reg_exchg_fwd<8, 16, 2>(vals, 0);
+  reg_exchg_fwd<16, 32, 1>(vals, 0);
 
   for (int i{0}, addr{thread_il_gmem_start}; i < 32; i++, addr += IL_GMEM_STRIDE)
     gmem_out.set_at_row(addr, vals[i]); // write interleaved gmem tiles
@@ -144,100 +144,89 @@ EXTERN __launch_bounds__(512, 1) __global__
   const int thread_start = 64 * warp_id + lane_id;
   const int pipeline_memcpy_start = 4 * threadIdx.x;
   const int pipeline_memcpy_stride = 4 * blockDim.x;
-  gmem_in.add_row(gmem_block_offset);
-  gmem_out.add_row(gmem_block_offset + warp_id * 1024);
+  gmem_in.add_row(gmem_block_offset + warp_id * 1024);
+  gmem_out.add_row(gmem_block_offset);
 
   extern __shared__ bf smem_block[]; // 16384 vals + 8192 twiddles
   bf *smem_warp = smem_block + warp_id * 1024;
   bf *smem_twiddles = smem_block + VALS_PER_BLOCK;
-  constexpr bf *cmem_twiddles = ab_inv_cmem_twiddles_finest_10;
+  constexpr bf *cmem_twiddles = ab_fwd_cmem_twiddles_finest_10;
 
   bf vals[VALS_PER_THREAD];
-
-#pragma unroll
-  for (int i{0}, row{thread_start}; i < 32; i += 2, row += tile_stride) {
-    vals[i] = gmem_in.get_at_row(row);
-    vals[i + 1] = gmem_in.get_at_row(row + 32);
-  }
 
   // Prefetch fine gmem twiddle powers used by last 5 stages.
   // The gmem layout is already swizzled, so it's a linear copy and we can vectorize :)
 #pragma unroll
   for (int i{0}, addr{pipeline_memcpy_start}; i < 4; i++, addr += pipeline_memcpy_stride)
-      __pipeline_memcpy_async(smem_twiddles + addr, ab_inv_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
+      __pipeline_memcpy_async(smem_twiddles + addr, ab_fwd_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
   __pipeline_commit();
-  // unfortunately the first exchange uses the finest twiddles, so we have to eat this wait.
-  __pipeline_wait_prior(0);
-  __syncwarp(); // at first we only need smem twiddles loaded by this warp
-
-  int thread_exchg_region_offset = (threadIdx.x + blockDim.x * gridDim.x) << 4;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  __syncthreads(); // now we need smem twiddles loaded by other warps
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
-
-  int block_exchg_region_offset = blockIdx.x;
-  reg_exchg_cmem_twiddles_inv<16, 32, 1>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<8, 16, 2>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<4, 8, 4>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
 
 #pragma unroll
-  for (int i{0}, row{thread_start}; i < 32; i += 2, row += tile_stride) {
-    smem_block[row] = vals[i];
-    smem_block[row + 32] = vals[i + 1];
+  for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
+    vals[i] = gmem_in.get_at_row(row);
+
+  if (!transposed_monomials) {
+    // transpose coalesced loads into registers
+#pragma unroll
+    for (int y = 0; y < 32; y++)
+      smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
+    __syncwarp();
+#pragma unroll
+    for (int x = 0; x < 32; x++)
+      vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
+    __syncwarp();
   }
 
+  __pipeline_wait_prior(0); // Unfortunately we use all the coarse twiddles in the first exchange, so we can't overlap this with compute.
+  __syncthreads();
+
+  int thread_exchg_region_offset = (threadIdx.x + blockIdx.x * blockDim.x) << 4;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+
+  __syncwarp();
+#pragma unroll
+  for (int y = 0; y < 32; y++)
+    smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
+  __syncwarp();
+#pragma unroll
+  for (int x = 0; x < 32; x++)
+    vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
+
+  int warp_exchg_region_offset = (blockIdx.x * WARPS_PER_BLOCK + warp_id) << 4;
+  reg_exchg_cmem_twiddles_fwd<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, warp_exchg_region_offset);
+
+#pragma unroll
+  for (int i{0}, row{lane_id}; i < 32; i++, row += 32)
+    smem_warp[row] = vals[i];
 
   __syncthreads(); // all-to-all, so ptx barriers are unlikely to help
 
 #pragma unroll
-  for (int i{0}, row{lane_id}; i < 32; i++, row += 32)
-    vals[i] = smem_warp[row];
+  for (int i{0}, row{thread_start}; i < 32; i += 2, row += tile_stride) {
+    vals[i] = smem_block[row];
+    vals[i + 1] = smem_block[row + 32];
+  }
 
-  int warp_exchg_region_offset = block_exchg_region_offset + warp_id;
-  reg_exchg_cmem_twiddles_inv<16, 32, 1>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<8, 16, 2>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<4, 8, 4>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
+  int block_exchg_region_offset = blockIdx.x << 4;
+  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
 
-  // TODO: consider shfl pattern here instead
-  __syncwarp();
 #pragma unroll
-  for (int y = 0; y < 32; y++)
-    smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
-  __syncwarp();
-#pragma unroll
-  for (int x = 0; x < 32; x++)
-    vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
-
-  int thread_exchg_region_offset = warp_exchg_region_offset + lane_id;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
-
-  // uncoalesced, but vectorized and should fire off quickly
-//   uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + 32 * lane_id);
-// #pragma unroll
-//   for (int i{0}; i < 32; i += 4, gmem_monomials_out_ptr++)
-//     *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
-  // un-swizzling + coalesced stores performs better on 5090
-  __syncwarp();
-#pragma unroll
-  for (int y = 0; y < 32; y++)
-    smem_warp[xy_to_swizzled(lane_id, y)] = vals[y];
-  __syncwarp();
-#pragma unroll
-  for (int x = 0; x < 32; x++)
-    vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
-#pragma unroll
-  for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
+  for (int i{0}, row{thread_start}; i < 32; i += 2, row += tile_stride) {
     gmem_out.set_at_row(row, vals[i]);
+    gmem_out.set_at_row(row + 32, vals[i + 1]);
+  }
+
 }
 
 } // namespace airbender::ntt

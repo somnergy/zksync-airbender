@@ -204,7 +204,7 @@ DEVICE_FORCEINLINE void main_to_monomials_final_up_to_8_stages(bf_matrix_getter<
 //       *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
 
     // Unfortunately, 5090 seems to hate the uncoalesced stores. So instead we un-swizzle and store with coalescing.
-    __syncthreads();
+    __syncthreads(); // Alternatively, we could try shuffle transpose to avoid the sync, or have some warps shuffle and some do smem swizzle.
 
     smem_warp = smem_block + warp_id * VALS_PER_WARP;
 #pragma unroll

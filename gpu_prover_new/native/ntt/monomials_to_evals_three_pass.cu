@@ -112,23 +112,20 @@ DEVICE_FORCEINLINE void monomials_to_evals_initial_up_to_8_stages(bf_matrix_gett
 
   // Cooperatively fetch fine gmem twiddle powers used by last 5 stages.
   // The gmem layout is already swizzled, so it's a linear copy and we can vectorize :)
-  // The cooperative twiddle fetch is actually the only reason this kernel needs a __syncthreads().
-  // Unlike the 2-pass kernel, there's no compute overlap here, but gmem->smem is preferable to gmem->register->smem.
 #pragma unroll
   for (int i{0}, addr{pipeline_memcpy_start}; i < 4; i++, addr += pipeline_memcpy_stride)
       __pipeline_memcpy_async(smem_twiddles + addr, ab_fwd_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
   __pipeline_commit();
 
-  if (transposed_monomials) {
 #pragma unroll
-    for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
-      vals[i] = gmem_in.get_at_row(row);
-  } else {
-    // load coalesced and transpose into registers
-#pragma unroll
-    for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
-      vals[i] = gmem_in.get_at_row(row);
+  for (int i{0}, row{lane_id}; i < VALS_PER_THREAD; i++, row += WARP_SIZE)
+    vals[i] = gmem_in.get_at_row(row);
 
+  if (transposed_monomials) {
+    __pipeline_wait_prior(0); // Unfortunately we use all the coarse twiddles in the first exchange, so we can't overlap this with compute.
+    __syncthreads();
+  } else {
+    // transpose coalesced loads into registers
     if (warp_id & 4) {
 #pragma unroll
       for (int y = 0; y < VALS_PER_THREAD; y++)
@@ -139,8 +136,7 @@ DEVICE_FORCEINLINE void monomials_to_evals_initial_up_to_8_stages(bf_matrix_gett
         vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
     }
 
-    __pipeline_wait_prior(0);
-
+    __pipeline_wait_prior(0); // might as well also use this sync to ensure twiddles are ready
     __syncthreads();
 
     if (!(warp_id & 4)) {
@@ -153,10 +149,6 @@ DEVICE_FORCEINLINE void monomials_to_evals_initial_up_to_8_stages(bf_matrix_gett
         vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
     }
   }
-
-  __pipeline_wait_prior(0); // Unfortunately, we use all the coarse twiddles in the first exchange, so we can't overlap this with compute.
-
-  __syncthreads();
 
   int thread_exchg_region_offset = (threadIdx.x + blockIdx.x * blockDim.x) << 4;
   constexpr bf *cmem_twiddles = ab_fwd_cmem_twiddles_finest_11;
