@@ -129,6 +129,7 @@ DEVICE_FORCEINLINE void reg_exchg_inv(bf *vals, const int exchg_region_offset) {
     for (int lane_in_region{0}; lane_in_region < STRIDE; lane_in_region++) {
       const int i = region_offset + lane_in_region;
       exchg_dit(vals[i], vals[i + STRIDE], twiddle);
+      // exchg_dit_0(vals[i], vals[i + STRIDE]);
     }
   }
 }
@@ -143,6 +144,7 @@ DEVICE_FORCEINLINE void reg_exchg_cmem_smem_twiddles_fwd(bf *vals, const int exc
     for (int lane_in_region{0}; lane_in_region < STRIDE; lane_in_region++) {
       const int i = region_offset + lane_in_region;
       exchg_dif(vals[i], vals[i + STRIDE], twiddle);
+      // exchg_dif_0(vals[i], vals[i + STRIDE]);
     }
   }
 }
@@ -157,6 +159,7 @@ DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_fwd(bf *vals, const int exchg_re
     for (int lane_in_region{0}; lane_in_region < STRIDE; lane_in_region++) {
       const int i = region_offset + lane_in_region;
       exchg_dif(vals[i], vals[i + STRIDE], twiddle);
+      // exchg_dif_0(vals[i], vals[i + STRIDE]);
     }
   }
 }
@@ -171,6 +174,7 @@ DEVICE_FORCEINLINE void reg_exchg_fwd(bf *vals, const int exchg_region_offset) {
     for (int lane_in_region{0}; lane_in_region < STRIDE; lane_in_region++) {
       const int i = region_offset + lane_in_region;
       exchg_dif(vals[i], vals[i + STRIDE], twiddle);
+      // exchg_dif_0(vals[i], vals[i + STRIDE]);
     }
   }
 }
