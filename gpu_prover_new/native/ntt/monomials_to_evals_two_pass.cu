@@ -38,11 +38,11 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i] = gmem_in.get_at_row(row); // read consecutive gmem tiles
 
   int tile_exchg_region_offset = tile_id << 4;
-  // reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
+  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
 
 #pragma unroll
   for (int i{0}, addr{thread_ct_smem_start}; i < 32; i++, addr += TILE_SIZE)
@@ -54,11 +54,11 @@ EXTERN __launch_bounds__(512, 1) __global__
   for (int i{0}, addr{thread_il_smem_start}; i < 32; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
     vals[i] = smem_block[addr]; // read interleaved smem tiles
 
-  // reg_exchg_fwd<1, 2, 16>(vals, 0);
-  // reg_exchg_fwd<2, 4, 8>(vals, 0);
-  // reg_exchg_fwd<4, 8, 4>(vals, 0);
-  // reg_exchg_fwd<8, 16, 2>(vals, 0);
-  // reg_exchg_fwd<16, 32, 1>(vals, 0);
+  reg_exchg_fwd<1, 2, 16>(vals, 0);
+  reg_exchg_fwd<2, 4, 8>(vals, 0);
+  reg_exchg_fwd<4, 8, 4>(vals, 0);
+  reg_exchg_fwd<8, 16, 2>(vals, 0);
+  reg_exchg_fwd<16, 32, 1>(vals, 0);
 
   for (int i{0}, addr{thread_il_gmem_start}; i < 32; i++, addr += IL_GMEM_STRIDE)
     gmem_out.set_at_row(addr, vals[i]); // write interleaved gmem tiles
@@ -100,12 +100,12 @@ EXTERN __launch_bounds__(512, 1) __global__
   for (int i{0}, row{thread_ct_gmem_start}; i < 32; i++, row += tile_gmem_stride)
     vals[i] = gmem_in.get_at_row(row); // read consecutive gmem tiles
 
-  int tile_exchg_region_offset = tile_id << 5;
-  // reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  // reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset);
-  // // reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
+  int tile_exchg_region_offset = tile_id << 4;
+  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset);
+  // reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
 
 #pragma unroll
   for (int i{0}, addr{thread_ct_smem_start}; i < 32; i++, addr += TILE_SIZE)
@@ -117,11 +117,11 @@ EXTERN __launch_bounds__(512, 1) __global__
   for (int i{0}, addr{thread_il_smem_start}; i < 32; i++, addr += TILE_SIZE * THREAD_TILES_PER_BLOCK)
     vals[i] = smem_block[addr]; // read interleaved smem tiles
 
-  // reg_exchg_fwd<1, 2, 16>(vals, 0);
-  // reg_exchg_fwd<2, 4, 8>(vals, 0);
-  // reg_exchg_fwd<4, 8, 4>(vals, 0);
-  // reg_exchg_fwd<8, 16, 2>(vals, 0);
-  // reg_exchg_fwd<16, 32, 1>(vals, 0);
+  reg_exchg_fwd<1, 2, 16>(vals, 0);
+  reg_exchg_fwd<2, 4, 8>(vals, 0);
+  reg_exchg_fwd<4, 8, 4>(vals, 0);
+  reg_exchg_fwd<8, 16, 2>(vals, 0);
+  reg_exchg_fwd<16, 32, 1>(vals, 0);
 
   for (int i{0}, addr{thread_il_gmem_start}; i < 32; i++, addr += IL_GMEM_STRIDE)
     gmem_out.set_at_row(addr, vals[i]); // write interleaved gmem tiles
@@ -179,11 +179,11 @@ EXTERN __launch_bounds__(512, 1) __global__
   __syncthreads();
 
   int thread_exchg_region_offset = (threadIdx.x + blockIdx.x * blockDim.x) << 4;
-  // reg_exchg_cmem_smem_twiddles_fwd<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  // reg_exchg_cmem_smem_twiddles_fwd<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  // reg_exchg_cmem_smem_twiddles_fwd<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  // reg_exchg_cmem_smem_twiddles_fwd<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  // reg_exchg_cmem_smem_twiddles_fwd<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
 
 #pragma unroll
   for (int y = 0; y < 32; y++)
@@ -194,11 +194,11 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
 
   int warp_exchg_region_offset = (blockIdx.x * WARPS_PER_BLOCK + warp_id) << 4;
-  // reg_exchg_cmem_twiddles_fwd<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, warp_exchg_region_offset);
+  reg_exchg_cmem_twiddles_fwd<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, warp_exchg_region_offset);
 
   __syncwarp();
 #pragma unroll
@@ -213,11 +213,11 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i + 1] = smem_block[row + 32];
   }
 
-  int block_exchg_region_offset = blockIdx.x << 4;
-  // reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
-  // reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  int block_exchg_region_offset = blockIdx.x << 3;
+  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, block_exchg_region_offset);
 
 #pragma unroll
   for (int i{0}, row{thread_start}; i < 32; i += 2, row += tile_stride) {

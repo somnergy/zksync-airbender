@@ -210,9 +210,9 @@ pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<
                 a[j + distance] = tmp;
                 a[j].add_assign(&v);
 
-                if k == 0 && j == 0 {
-                    println!("from cpu: {} {} {}", u, v, s);
-                } 
+                // if k == 0 && j == 0 {
+                //     println!("from cpu: {} {} {}", u, v, s);
+                // } 
 
                 j += 1;
             }
@@ -225,7 +225,7 @@ pub fn serial_ct_ntt_bitreversed_to_natural<F: Field, E: Field + FieldExtension<
         distance *= 2;
 
         stage += 1;
-        // if stage == 17 {
+        // if stage == 18 {
         //     break;
         // }
     }

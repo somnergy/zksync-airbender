@@ -360,7 +360,7 @@ fn run_monomials_to_evals(
             let twiddles = &twiddles[..(n >> 1)];
             let gpu_results = &outputs_host[xs_range.clone()];
             let mut cpu_refs: Vec<BF> = (&inputs_orig_host[xs_range.clone()]).to_vec();
-            // serial_ct_ntt_bitreversed_to_natural(&mut cpu_refs, log_n as u32, twiddles);
+            serial_ct_ntt_bitreversed_to_natural(&mut cpu_refs, log_n as u32, twiddles);
             // bitreverse_enumeration_inplace(&mut cpu_refs);
             for k in 0..n {
                 assert_eq!(
