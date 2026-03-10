@@ -51,8 +51,7 @@ struct EightStages {
   static constexpr int FINE_MASK = MASK_11;
 };
 
-template <typename T, const bf *fine_powers>
-DEVICE_FORCEINLINE bf get_cmem_smem_twiddle(const int i, const bf *coarse_powers) {
+template <typename T, const bf *fine_powers> DEVICE_FORCEINLINE bf get_cmem_smem_twiddle(const int i, const bf *coarse_powers) {
   int fine_idx = (i >> T::COARSE_LOG_COUNT) & T::FINE_MASK;
   int coarse_idx = i & T::COARSE_MASK;
   const bf coarse = *(coarse_powers + linear_to_swizzled(coarse_idx));
@@ -104,8 +103,7 @@ DEVICE_FORCEINLINE void reg_exchg_cmem_smem_twiddles_inv(bf *vals, const int exc
   }
 }
 
-template <int STRIDE, int REGION_SIZE, int NUM_REGIONS>
-DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_inv(bf *vals, const int exchg_region_offset) {
+template <int STRIDE, int REGION_SIZE, int NUM_REGIONS> DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_inv(bf *vals, const int exchg_region_offset) {
 #pragma unroll
   for (int region{0}; region < NUM_REGIONS; region++) {
     const bf twiddle = get_cmem_twiddle<ab_inv_cmem_twiddles_coarse, ab_inv_cmem_twiddles_fine>(exchg_region_offset + region);
@@ -119,8 +117,7 @@ DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_inv(bf *vals, const int exchg_re
   }
 }
 
-template <int STRIDE, int REGION_SIZE, int NUM_REGIONS>
-DEVICE_FORCEINLINE void reg_exchg_inv(bf *vals, const int exchg_region_offset) {
+template <int STRIDE, int REGION_SIZE, int NUM_REGIONS> DEVICE_FORCEINLINE void reg_exchg_inv(bf *vals, const int exchg_region_offset) {
 #pragma unroll
   for (int region{0}; region < NUM_REGIONS; region++) {
     const bf twiddle = ab_inv_cmem_twiddles_coarse[exchg_region_offset + region];
@@ -149,8 +146,7 @@ DEVICE_FORCEINLINE void reg_exchg_cmem_smem_twiddles_fwd(bf *vals, const int exc
   }
 }
 
-template <int STRIDE, int REGION_SIZE, int NUM_REGIONS>
-DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_fwd(bf *vals, const int exchg_region_offset) {
+template <int STRIDE, int REGION_SIZE, int NUM_REGIONS> DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_fwd(bf *vals, const int exchg_region_offset) {
 #pragma unroll
   for (int region{0}; region < NUM_REGIONS; region++) {
     const bf twiddle = get_cmem_twiddle<ab_fwd_cmem_twiddles_coarse, ab_fwd_cmem_twiddles_fine>(exchg_region_offset + region);
@@ -164,8 +160,7 @@ DEVICE_FORCEINLINE void reg_exchg_cmem_twiddles_fwd(bf *vals, const int exchg_re
   }
 }
 
-template <int STRIDE, int REGION_SIZE, int NUM_REGIONS>
-DEVICE_FORCEINLINE void reg_exchg_fwd(bf *vals, const int exchg_region_offset) {
+template <int STRIDE, int REGION_SIZE, int NUM_REGIONS> DEVICE_FORCEINLINE void reg_exchg_fwd(bf *vals, const int exchg_region_offset) {
 #pragma unroll
   for (int region{0}; region < NUM_REGIONS; region++) {
     const bf twiddle = ab_fwd_cmem_twiddles_coarse[exchg_region_offset + region];
@@ -179,8 +174,7 @@ DEVICE_FORCEINLINE void reg_exchg_fwd(bf *vals, const int exchg_region_offset) {
   }
 }
 
-template <int GROUP>
-DEVICE_FORCEINLINE void exchg_pipeline_group(bf *vals, const bf twiddle) {
+template <int GROUP> DEVICE_FORCEINLINE void exchg_pipeline_group(bf *vals, const bf twiddle) {
   exchg_dit_0(vals[GROUP], vals[GROUP + 16]);
   exchg_dit_0(vals[GROUP + 8], vals[GROUP + 24]);
   exchg_dit_0(vals[GROUP], vals[GROUP + 8]);

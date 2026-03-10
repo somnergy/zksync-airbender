@@ -3,9 +3,7 @@
 namespace airbender::ntt {
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_monomials_to_evals_last_10_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                     const int log_n,
+    void ab_monomials_to_evals_last_10_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in, bf_matrix_setter<st_modifier::cg> gmem_out, const int log_n,
                                                      const int start_stage /*unused, for symmetry with three-pass*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 4;
@@ -38,10 +36,14 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i] = gmem_in.get_at_row(row); // read consecutive gmem tiles
 
   int tile_exchg_region_offset = tile_id << 4;
-  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
   reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
 
 #pragma unroll
@@ -65,9 +67,7 @@ EXTERN __launch_bounds__(512, 1) __global__
 }
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_monomials_to_evals_last_9_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const int log_n,
+    void ab_monomials_to_evals_last_9_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in, bf_matrix_setter<st_modifier::cg> gmem_out, const int log_n,
                                                     const int start_stage /*unused, for symmetry with three-pass*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 5;
@@ -101,9 +101,12 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i] = gmem_in.get_at_row(row); // read consecutive gmem tiles
 
   int tile_exchg_region_offset = tile_id << 4;
-  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
-  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<1, 2, 16>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<2, 4, 8>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
+  reg_exchg_fwd<4, 8, 4>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset >>= 1;
   reg_exchg_fwd<8, 16, 2>(vals, tile_exchg_region_offset);
   // reg_exchg_fwd<16, 32, 1>(vals, tile_exchg_region_offset);
 
@@ -128,8 +131,7 @@ EXTERN __launch_bounds__(512, 1) __global__
 }
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_monomials_to_evals_first_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                      bf_matrix_setter<st_modifier::cg> gmem_out,
+    void ab_monomials_to_evals_first_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in, bf_matrix_setter<st_modifier::cg> gmem_out,
                                                       const bool transposed_monomials) {
   constexpr int WARP_SIZE = 32;
   constexpr int VALS_PER_THREAD = 32;
@@ -157,7 +159,7 @@ EXTERN __launch_bounds__(512, 1) __global__
   // The gmem layout is already swizzled, so it's a linear copy and we can vectorize :)
 #pragma unroll
   for (int i{0}, addr{pipeline_memcpy_start}; i < 4; i++, addr += pipeline_memcpy_stride)
-      __pipeline_memcpy_async(smem_twiddles + addr, ab_fwd_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
+    __pipeline_memcpy_async(smem_twiddles + addr, ab_fwd_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
   __pipeline_commit();
 
 #pragma unroll
@@ -179,10 +181,14 @@ EXTERN __launch_bounds__(512, 1) __global__
   __syncthreads();
 
   int thread_exchg_region_offset = (threadIdx.x + blockIdx.x * blockDim.x) << 4;
-  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
-  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
-  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
-  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset >>= 1;
+  reg_exchg_cmem_smem_twiddles_fwd<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset >>= 1;
   reg_exchg_cmem_smem_twiddles_fwd<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
 
 #pragma unroll
@@ -194,10 +200,14 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
 
   int warp_exchg_region_offset = (blockIdx.x * WARPS_PER_BLOCK + warp_id) << 4;
-  reg_exchg_cmem_twiddles_fwd<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
-  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, warp_exchg_region_offset); warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<1, 2, 16>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset >>= 1;
   reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, warp_exchg_region_offset);
 
   __syncwarp();
@@ -214,9 +224,12 @@ EXTERN __launch_bounds__(512, 1) __global__
   }
 
   int block_exchg_region_offset = blockIdx.x << 3;
-  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
-  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
-  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, block_exchg_region_offset); block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<2, 4, 8>(vals, block_exchg_region_offset);
+  block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<4, 8, 4>(vals, block_exchg_region_offset);
+  block_exchg_region_offset >>= 1;
+  reg_exchg_cmem_twiddles_fwd<8, 16, 2>(vals, block_exchg_region_offset);
+  block_exchg_region_offset >>= 1;
   reg_exchg_cmem_twiddles_fwd<16, 32, 1>(vals, block_exchg_region_offset);
 
 #pragma unroll

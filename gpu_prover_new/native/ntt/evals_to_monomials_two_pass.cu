@@ -3,10 +3,8 @@
 namespace airbender::ntt {
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_main_to_monomials_first_10_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                     bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                     const int log_n,
-                                                     const int start_stage /*unused, for symmetry with three-pass API*/) {
+    void ab_evals_to_monomials_first_10_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in, bf_matrix_setter<st_modifier::cg> gmem_out, const int log_n,
+                                                      const int start_stage /*unused, for symmetry with three-pass API*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 4;
   constexpr int TILE_SIZE = 1 << LOG_DATA_TILE_SIZE;
@@ -69,10 +67,14 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i] = smem_block[addr]; // read consecutive smem tiles
 
   int tile_exchg_region_offset = tile_id;
-  reg_exchg_inv<16, 32, 1>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-  reg_exchg_inv<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-  reg_exchg_inv<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-  reg_exchg_inv<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<16, 32, 1>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<8, 16, 2>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<4, 8, 4>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<2, 4, 8>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
   reg_exchg_inv<1, 2, 16>(vals, tile_exchg_region_offset);
 
 #pragma unroll
@@ -81,10 +83,8 @@ EXTERN __launch_bounds__(512, 1) __global__
 }
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_main_to_monomials_first_9_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const int log_n,
-                                                    const int start_stage /*unused, for symmetry with three-pass API*/) {
+    void ab_evals_to_monomials_first_9_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in, bf_matrix_setter<st_modifier::cg> gmem_out, const int log_n,
+                                                     const int start_stage /*unused, for symmetry with three-pass API*/) {
   constexpr int VALS_PER_THREAD = 32;
   constexpr int LOG_DATA_TILE_SIZE = 5;
   constexpr int TILE_SIZE = 1 << LOG_DATA_TILE_SIZE;
@@ -151,9 +151,12 @@ EXTERN __launch_bounds__(512, 1) __global__
 
   int tile_exchg_region_offset = 2 * tile_id;
   // reg_exchg_inv<16, 32, 1>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-  reg_exchg_inv<8, 16, 2>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-  reg_exchg_inv<4, 8, 4>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
-  reg_exchg_inv<2, 4, 8>(vals, tile_exchg_region_offset); tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<8, 16, 2>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<4, 8, 4>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
+  reg_exchg_inv<2, 4, 8>(vals, tile_exchg_region_offset);
+  tile_exchg_region_offset <<= 1;
   reg_exchg_inv<1, 2, 16>(vals, tile_exchg_region_offset);
 
 #pragma unroll
@@ -162,10 +165,8 @@ EXTERN __launch_bounds__(512, 1) __global__
 }
 
 EXTERN __launch_bounds__(512, 1) __global__
-    void ab_main_to_monomials_last_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in,
-                                                    bf_matrix_setter<st_modifier::cg> gmem_out,
-                                                    const bool transposed_monomials,
-                                                    const int log_n) {
+    void ab_evals_to_monomials_last_14_stages_kernel(bf_matrix_getter<ld_modifier::cg> gmem_in, bf_matrix_setter<st_modifier::cg> gmem_out,
+                                                     const bool transposed_monomials, const int log_n) {
   constexpr int WARP_SIZE = 32;
   constexpr int VALS_PER_THREAD = 32;
   constexpr int WARPS_PER_BLOCK = 16;
@@ -198,14 +199,18 @@ EXTERN __launch_bounds__(512, 1) __global__
   // The gmem layout is already swizzled, so it's a linear copy and we can vectorize :)
 #pragma unroll
   for (int i{0}, addr{pipeline_memcpy_start}; i < 4; i++, addr += pipeline_memcpy_stride)
-      __pipeline_memcpy_async(smem_twiddles + addr, ab_inv_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
+    __pipeline_memcpy_async(smem_twiddles + addr, ab_inv_gmem_twiddles_coarse + addr, 4 * sizeof(bf));
   __pipeline_commit();
 
   int block_exchg_region_offset = blockIdx.x;
-  reg_exchg_cmem_twiddles_inv<16, 32, 1>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<8, 16, 2>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<4, 8, 4>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, block_exchg_region_offset); block_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<16, 32, 1>(vals, block_exchg_region_offset);
+  block_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<8, 16, 2>(vals, block_exchg_region_offset);
+  block_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<4, 8, 4>(vals, block_exchg_region_offset);
+  block_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, block_exchg_region_offset);
+  block_exchg_region_offset <<= 1;
 
 #pragma unroll
   for (int i{0}, row{thread_start}; i < 32; i += 2, row += tile_stride) {
@@ -222,11 +227,16 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[i] = smem_warp[row];
 
   int warp_exchg_region_offset = block_exchg_region_offset + warp_id;
-  reg_exchg_cmem_twiddles_inv<16, 32, 1>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<8, 16, 2>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<4, 8, 4>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
-  reg_exchg_cmem_twiddles_inv<1, 2, 16>(vals, warp_exchg_region_offset); warp_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<16, 32, 1>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<8, 16, 2>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<4, 8, 4>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<2, 4, 8>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset <<= 1;
+  reg_exchg_cmem_twiddles_inv<1, 2, 16>(vals, warp_exchg_region_offset);
+  warp_exchg_region_offset <<= 1;
 
   __syncwarp();
 #pragma unroll
@@ -238,16 +248,20 @@ EXTERN __launch_bounds__(512, 1) __global__
     vals[x] = smem_warp[xy_to_swizzled(x, lane_id)];
 
   int thread_exchg_region_offset = warp_exchg_region_offset + lane_id;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
-  reg_exchg_cmem_smem_twiddles_inv<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles); thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_inv<TenStages, 16, 32, 1, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_inv<TenStages, 8, 16, 2, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_inv<TenStages, 4, 8, 4, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset <<= 1;
+  reg_exchg_cmem_smem_twiddles_inv<TenStages, 2, 4, 8, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
+  thread_exchg_region_offset <<= 1;
   reg_exchg_cmem_smem_twiddles_inv<TenStages, 1, 2, 16, cmem_twiddles>(vals, thread_exchg_region_offset, smem_twiddles);
 
   const bf size_inv = ab_inv_sizes[log_n];
 #pragma unroll
   for (int i = 0; i < 32; i++)
-    vals[i] = bf::mul(vals[i], size_inv); 
+    vals[i] = bf::mul(vals[i], size_inv);
 
   if (transposed_monomials) {
 #pragma unroll
@@ -255,10 +269,10 @@ EXTERN __launch_bounds__(512, 1) __global__
       gmem_out.set_at_row(row, vals[i]);
   } else {
     // uncoalesced, but vectorized and should fire off quickly
-//     uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + 32 * lane_id);
-// #pragma unroll
-//     for (int i{0}; i < 32; i += 4, gmem_monomials_out_ptr++)
-//       *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
+    //     uint4 *gmem_monomials_out_ptr = reinterpret_cast<uint4 *>(gmem_out.ptr + 32 * lane_id);
+    // #pragma unroll
+    //     for (int i{0}; i < 32; i += 4, gmem_monomials_out_ptr++)
+    //       *gmem_monomials_out_ptr = {vals[i].limb, vals[i + 1].limb, vals[i + 2].limb, vals[i + 3].limb};
 
     // un-swizzling + coalesced stores performs better on 5090
     __syncwarp();

@@ -23,10 +23,11 @@ use crate::device_structures::{
 };
 use crate::field::BaseField;
 use crate::ntt::{
-    main_to_monomials_2_pass, main_to_monomials_3_pass, monomials_to_evals_2_pass,
+    evals_to_monomials_2_pass, evals_to_monomials_3_pass, monomials_to_evals_2_pass,
     monomials_to_evals_3_pass,
 };
 use crate::ops::complex::bit_reverse_in_place;
+use crate::prover::context::DeviceProperties;
 
 type BF = BaseField;
 
@@ -55,7 +56,7 @@ fn transpose_monomials(vals: &mut [BF]) {
     }
 }
 
-fn run_main_to_monomials(
+fn run_evals_to_monomials(
     log_n_range: Range<usize>,
     num_bf_cols: usize,
     passes_variant: Passes,
@@ -114,7 +115,7 @@ fn run_main_to_monomials(
                     n,
                 );
                 match passes_variant {
-                    Passes::Two => main_to_monomials_2_pass(
+                    Passes::Two => evals_to_monomials_2_pass(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
@@ -122,7 +123,7 @@ fn run_main_to_monomials(
                         &stream,
                     )
                     .unwrap(),
-                    Passes::Three => main_to_monomials_3_pass(
+                    Passes::Three => evals_to_monomials_3_pass(
                         &inputs_device_matrix,
                         &mut outputs_device_matrix,
                         log_n,
@@ -162,7 +163,7 @@ fn run_main_to_monomials(
                     n,
                 );
                 match passes_variant {
-                    Passes::Two => main_to_monomials_2_pass(
+                    Passes::Two => evals_to_monomials_2_pass(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
@@ -170,7 +171,7 @@ fn run_main_to_monomials(
                         &stream,
                     )
                     .unwrap(),
-                    Passes::Three => main_to_monomials_3_pass(
+                    Passes::Three => evals_to_monomials_3_pass(
                         &inplace_input_view_matrix,
                         &mut inplace_output_view_matrix,
                         log_n,
@@ -376,26 +377,26 @@ fn run_monomials_to_evals(
 
 #[test]
 #[serial]
-fn test_main_to_monomials_2_pass_out_of_place() {
-    run_main_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::Out, false);
+fn test_evals_to_monomials_2_pass_out_of_place() {
+    run_evals_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
-fn test_main_to_monomials_2_pass_in_place() {
-    run_main_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::In, false);
+fn test_evals_to_monomials_2_pass_in_place() {
+    run_evals_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
-fn test_main_to_monomials_2_pass_transposed_monomials_out_of_place() {
-    run_main_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::Out, true);
+fn test_evals_to_monomials_2_pass_transposed_monomials_out_of_place() {
+    run_evals_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::Out, true);
 }
 
 #[test]
 #[serial]
-fn test_main_to_monomials_2_pass_transposed_monomials_in_place() {
-    run_main_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::In, true);
+fn test_evals_to_monomials_2_pass_transposed_monomials_in_place() {
+    run_evals_to_monomials(23..25, 8, Passes::Two, InOrOutOfPlace::In, true);
 }
 
 #[test]
@@ -424,26 +425,26 @@ fn test_monomials_to_evals_2_pass_transposed_monomials_in_place() {
 
 #[test]
 #[serial]
-fn test_main_to_monomials_3_pass_out_of_place() {
-    run_main_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::Out, false);
+fn test_evals_to_monomials_3_pass_out_of_place() {
+    run_evals_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::Out, false);
 }
 
 #[test]
 #[serial]
-fn test_main_to_monomials_3_pass_in_place() {
-    run_main_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::In, false);
+fn test_evals_to_monomials_3_pass_in_place() {
+    run_evals_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::In, false);
 }
 
 #[test]
 #[serial]
-fn test_main_to_monomials_3_pass_transposed_monomials_out_of_place() {
-    run_main_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::Out, true);
+fn test_evals_to_monomials_3_pass_transposed_monomials_out_of_place() {
+    run_evals_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::Out, true);
 }
 
 #[test]
 #[serial]
-fn test_main_to_monomials_3_pass_transposed_monomials_in_place() {
-    run_main_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::In, true);
+fn test_evals_to_monomials_3_pass_transposed_monomials_in_place() {
+    run_evals_to_monomials(21..25, 8, Passes::Three, InOrOutOfPlace::In, true);
 }
 
 #[test]
