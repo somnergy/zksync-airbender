@@ -74,6 +74,7 @@
     },
     "_marker": null
   },
+  "inits_and_teardowns_top_bits": null,
   "final_explicit_evaluations": [
     [
       "PermutationProduct",

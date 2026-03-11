@@ -315,6 +315,7 @@ pub fn gkr_run_basic_unrolled_test_impl(
                 TRACE_LEN_LOG2,
             )
         };
+        serialize_to_file(&add_sub_circuit, "add_sub_lui_auipc_mop_gkr_circuit.json");
 
         let num_calls =
             counters.get_calls_to_circuit_family::<ADD_SUB_LUI_AUIPC_MOP_CIRCUIT_FAMILY_IDX>();

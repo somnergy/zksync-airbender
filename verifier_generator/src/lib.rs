@@ -1,4 +1,6 @@
 #![expect(warnings)]
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 use ::prover::*;
 use prover::cs::one_row_compiler::*;
@@ -12,6 +14,9 @@ pub use self::generator::*;
 
 pub mod inlining_generator;
 pub use self::inlining_generator::*;
+
+pub mod gkr_generator;
+pub use self::gkr_generator::*;
 
 pub fn generate_from_reader<R: std::io::Read>(reader: R) -> (String, String) {
     let description = serde_json::from_reader(reader).unwrap();
@@ -95,6 +100,32 @@ mod test {
                 std::fs::File::create(format!("./generated/{}_quotient.rs", name)).unwrap();
             dst.write_all(&result.to_string().as_bytes()).unwrap();
         }
+    }
+
+    #[test]
+    fn generate_gkr_layout() {
+        use prover::field::baby_bear::base::BabyBearField;
+        use prover::field::baby_bear::ext4::BabyBearExt4;
+        use prover::gkr::prover::GKRProof;
+        use prover::merkle_trees::DefaultTreeConstructor;
+
+        let compiled_circuit: prover::cs::gkr_compiler::GKRCircuitArtifact<BabyBearField> =
+            deserialize_from_file("../prover/add_sub_lui_auipc_mop_gkr_circuit.json");
+        let proof: GKRProof<BabyBearField, BabyBearExt4, DefaultTreeConstructor> =
+            deserialize_from_file("../prover/add_sub_lui_auipc_mop_gkr_proof.json");
+
+        let result = gkr_generator::generate_gkr_config::<
+            BabyBearField,
+            BabyBearExt4,
+            DefaultTreeConstructor,
+        >(
+            &compiled_circuit,
+            &proof,
+            4,
+        );
+
+        let mut dst = std::fs::File::create("./generated/gkr_layout.rs").unwrap();
+        dst.write_all(&result.to_string().as_bytes()).unwrap();
     }
 
     #[test]

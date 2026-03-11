@@ -24,6 +24,7 @@ mod unrolled_families;
 mod witness_tree;
 
 pub mod gkr;
+pub mod gkr_static_types;
 
 pub use self::columns::*;
 pub use self::constants::*;

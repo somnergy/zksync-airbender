@@ -32,6 +32,8 @@ pub use verifier_common::ProofPublicInputs;
 pub use field;
 pub use verifier_common;
 pub use verifier_common::blake2s_u32;
+#[cfg(feature = "gkr_verify")]
+pub use verifier_common::gkr;
 pub use verifier_common::prover;
 pub use verifier_common::transcript;
 

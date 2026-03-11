@@ -397,3 +397,81 @@ fn test_query_values_offsets() {
         }
     }
 }
+
+#[cfg(feature = "gkr_verify")]
+#[path = "generated/gkr_layout.rs"]
+mod generated_gkr;
+
+#[test]
+#[cfg(feature = "gkr_verify")]
+fn test_gkr_sumcheck_verify_with_generated_config() {
+    use field::baby_bear::base::BabyBearField;
+    use field::baby_bear::ext4::BabyBearExt4;
+    use prover::gkr::prover::GKRProof;
+    use prover::merkle_trees::DefaultTreeConstructor;
+    use verifier_common::cs::gkr_compiler::GKRCircuitArtifact;
+    use verifier_common::gkr::flatten::flatten_gkr_proof_for_nds;
+    use verifier_common::gkr::verify_gkr_sumcheck;
+    use verifier_common::prover::nd_source_std::*;
+
+    let proof: GKRProof<BabyBearField, BabyBearExt4, DefaultTreeConstructor> =
+        deserialize_from_file("../prover/add_sub_lui_auipc_mop_gkr_proof.json");
+    let compiled_circuit: GKRCircuitArtifact<BabyBearField> =
+        deserialize_from_file("../prover/add_sub_lui_auipc_mop_gkr_circuit.json");
+
+    let oracle_data = flatten_gkr_proof_for_nds::<
+        BabyBearField,
+        BabyBearExt4,
+        DefaultTreeConstructor,
+    >(&proof, &compiled_circuit);
+
+    let result = std::thread::Builder::new()
+        .name("gkr generated config verifier".to_string())
+        .stack_size(1 << 27)
+        .spawn(move || {
+            set_iterator(oracle_data.into_iter());
+            let config = &generated_gkr::GKR_VERIFIER_CONFIG;
+            use generated_gkr::*;
+            let result = verify_gkr_sumcheck::<
+                BabyBearField,
+                BabyBearExt4,
+                ThreadLocalBasedSource,
+                GKR_ROUNDS,
+                GKR_ADDRS,
+                GKR_RAW_ADDRS,
+                GKR_EVALS,
+                GKR_TRANSCRIPT_U32,
+                GKR_MAX_POW,
+            >(config);
+            match result {
+                Ok(output) => {
+                    println!("Verification complete");
+                    println!(
+                        "  base_layer_claims: {} entries, evaluation_point_len: {}, grand_product_accumulator: {:?}",
+                        output.base_layer_claims.len(), output.evaluation_point_len,
+                        output.grand_product_accumulator
+                    );
+                    assert!(
+                        !output.additional_base_layer_openings.is_empty(),
+                        "expected additional base layer openings for layer 0"
+                    );
+                    println!(
+                        "  additional_base_layer_openings: {} addresses",
+                        output.additional_base_layer_openings.len()
+                    );
+                }
+                Err(e) => panic!("GKR sumcheck verification with generated config failed: {:?}", e),
+            }
+        })
+        .map(|t| t.join());
+
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            std::panic::resume_unwind(e);
+        }
+        Err(err) => {
+            panic!("Failed to spawn verifier thread: {}", err);
+        }
+    }
+}

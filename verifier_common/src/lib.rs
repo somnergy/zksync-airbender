@@ -1,5 +1,7 @@
 #![cfg_attr(not(any(test, feature = "replace_csr")), no_std)]
 #![cfg_attr(any(test, feature = "proof_utils"), feature(allocator_api))]
+#![allow(incomplete_features)]
+#![feature(generic_const_exprs)]
 
 #[cfg(any(all(feature = "security_80", feature = "security_100"),))]
 compile_error!("multiple security levels selected same time");
@@ -113,6 +115,8 @@ pub use non_determinism_source;
 pub use prover;
 pub use transcript;
 pub mod fri_folding;
+#[cfg(feature = "gkr_verify")]
+pub mod gkr;
 #[cfg(any(test, feature = "proof_utils"))]
 pub mod proof_flattener;
 

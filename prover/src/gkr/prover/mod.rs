@@ -90,6 +90,7 @@ pub struct GKRProof<
     T: ColumnMajorMerkleTreeConstructor<F>,
 > {
     pub external_challenges: GKRExternalChallenges<F, E>,
+    pub inits_and_teardowns_top_bits: Option<u32>,
     #[serde_as(as = "Vec<(_, _)>")]
     pub final_explicit_evaluations: BTreeMap<OutputType, [Vec<E>; 2]>,
     #[serde_as(as = "Vec<(_, _)>")]
@@ -648,6 +649,7 @@ where
 
     GKRProof {
         external_challenges: *external_challenges,
+        inits_and_teardowns_top_bits,
         whir_proof,
         final_explicit_evaluations,
         sumcheck_intermediate_values,

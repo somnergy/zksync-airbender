@@ -34,3 +34,5 @@ verifier_program = ["modular_ops"]
 proof_utils = ["prover/prover"]
 # If enabled, allows passing custom values into CSR.
 replace_csr = ["prover/prover"]
+# GKR sumcheck verifier
+gkr_verify = []
