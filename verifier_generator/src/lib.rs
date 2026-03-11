@@ -113,7 +113,6 @@ mod test {
         }
     }
 
-    #[cfg(feature = "legacy_tests")]
     #[test]
     fn generate_gkr_layout() {
         use prover::field::baby_bear::base::BabyBearField;
@@ -140,6 +139,7 @@ mod test {
         dst.write_all(&result.to_string().as_bytes()).unwrap();
     }
 
+    #[cfg(feature = "legacy_tests")]
     #[test]
     #[serial_test::serial]
     // TODO(legacy-cleanup): determine whether the legacy code path exercised here can be removed.
