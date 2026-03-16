@@ -570,7 +570,19 @@ fn scan_used_relation_types(layers: &[GKRLayerDescription]) -> (bool, bool, bool
                     uses_linear = true;
                     uses_vector_lookup = true;
                 }
-                _ => panic!("unsupported relation")
+                R::Copy { .. }
+                | R::InitialGrandProductFromCaches { .. }
+                | R::TrivialProduct { .. }
+                | R::MaskIntoIdentityProduct { .. }
+                | R::LookupFromMaterializedBaseInputWithSetup { .. } 
+                | R::LookupPairFromMaterializedBaseInputs { .. } 
+                | R::EnforceConstraintsMaxQuadratic { .. }
+                | R::UnbalancedGrandProductWithCache { .. }
+                | R::LookupWithCachedDensAndSetup { .. }
+                | R::LookupUnbalancedPairWithMaterializedBaseInputs { .. }
+                | R::LookupPair { .. } => {
+                    // No special type imports needed
+                }
             }
         }
     }

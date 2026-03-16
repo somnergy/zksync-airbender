@@ -768,12 +768,10 @@ where
     let coeff_data_words = 4 * E::DEGREE;
     let total_commit_words = BLAKE2S_DIGEST_SIZE_U32_WORDS + coeff_data_words;
 
-    // Aligned buffer: zero-initialized (padding stays zero), reused across rounds.
     let mut commit_buf: AlignedArray64<u32, 32> = AlignedArray64::from_value(0u32);
     let mut hasher = DelegatedBlake2sState::new();
 
     for round in 0..num_regular_rounds {
-        // Copy seed into aligned buffer
         commit_buf[0..BLAKE2S_DIGEST_SIZE_U32_WORDS].copy_from_slice(&seed.0);
 
         // Read NDS words directly into the data region of the aligned buffer.
