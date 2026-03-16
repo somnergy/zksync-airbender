@@ -47,6 +47,15 @@ pub struct GKRVerifierConfig<'a> {
     pub global_input_addrs: &'a [GKRAddress],
 }
 
+/// Mutable state threaded through each layer of the GKR sumcheck verification.
+#[derive(Clone, Debug)]
+pub struct LayerState<E: Field, const ROUNDS: usize, const ADDRS: usize> {
+    prev_point: [E; ROUNDS],
+    prev_point_len: usize,
+    prev_claims: LazyVec<E, ADDRS>,
+    batching_challenge: E,
+}
+
 #[derive(Clone, Debug)]
 #[repr(C)]
 pub struct LazyVec<V: Copy, const N: usize> {
@@ -56,7 +65,7 @@ pub struct LazyVec<V: Copy, const N: usize> {
 
 impl<V: Copy, const N: usize> LazyVec<V, N> {
     #[inline(always)]
-    fn new() -> Self {
+    const fn new() -> Self {
         Self {
             data: [MaybeUninit::uninit(); N],
             len: 0,
@@ -79,22 +88,22 @@ impl<V: Copy, const N: usize> LazyVec<V, N> {
     }
 
     #[inline(always)]
-    fn as_slice(&self) -> &[V] {
-        unsafe { core::slice::from_raw_parts(self.data.as_ptr() as *const V, self.len) }
+    const fn as_slice(&self) -> &[V] {
+        unsafe { core::slice::from_raw_parts(self.data.as_ptr().cast::<V>(), self.len) }
     }
 
     #[inline(always)]
-    fn clear(&mut self) {
+    const fn clear(&mut self) {
         self.len = 0;
     }
 
     #[inline(always)]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.len
     }
 
     #[inline(always)]
-    pub unsafe fn as_array(self) -> [V; N] {
+    pub const unsafe fn as_array(self) -> [V; N] {
         MaybeUninit::array_assume_init(self.data)
     }
 }
@@ -106,7 +115,7 @@ where
 {
     use field::FixedArrayConvertible;
     let mut array = [F::ZERO; E::DEGREE];
-    for a in array.iter_mut() {
+    for a in &mut array {
         let value = I::read_word();
         *a = F::from_reduced_raw_repr(value);
     }
@@ -134,7 +143,7 @@ where
     assert!(align_of::<F>() == align_of::<u32>());
 
     let total = els.len() * E::DEGREE;
-    let as_u32 = unsafe { core::slice::from_raw_parts(els.as_ptr() as *const u32, total) };
+    let as_u32 = unsafe { core::slice::from_raw_parts(els.as_ptr().cast::<u32>(), total) };
     Blake2sTranscript::commit_with_seed(seed, as_u32);
 }
 
@@ -155,7 +164,7 @@ fn draw_field_els_into<F: PrimeField, E: FieldExtension<F>>(
     let mut arr = [F::ZERO; E::DEGREE];
 
     unsafe {
-        let dst = core::slice::from_raw_parts_mut(words.as_mut_ptr() as *mut u32, padded);
+        let dst = core::slice::from_raw_parts_mut(words.as_mut_ptr().cast::<u32>(), padded);
         Blake2sTranscript::draw_randomness_using_hasher(hasher, seed, dst);
     }
 
@@ -185,6 +194,37 @@ where
     dst[0]
 }
 
+#[inline(always)]
+fn read_eval_data_from_nds<I: NonDeterminismSource, const BUF: usize>(
+    buf: &mut AlignedArray64<MaybeUninit<u32>, BUF>,
+    data_words: usize,
+) {
+    let total_commit_words = BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words;
+    for i in 0..data_words {
+        buf.write(BLAKE2S_DIGEST_SIZE_U32_WORDS + i, I::read_word());
+    }
+    let padded = total_commit_words.next_multiple_of(BLAKE2S_BLOCK_SIZE_U32_WORDS);
+    unsafe { buf.zero_range(BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words, padded) };
+}
+
+#[inline(always)]
+fn commit_eval_buffer<const BUF: usize>(
+    buf: &mut AlignedArray64<MaybeUninit<u32>, BUF>,
+    hasher: &mut DelegatedBlake2sState,
+    seed: &mut Seed,
+    data_words: usize,
+) {
+    let total_commit_words = BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words;
+    buf.copy_from_slice(0, &seed.0);
+    let buf_ref = unsafe { buf.assume_init_ref() };
+    Blake2sTranscript::commit_with_seed_using_hasher_and_aligned_buffer(
+        hasher,
+        seed,
+        buf_ref,
+        total_commit_words,
+    );
+}
+
 #[derive(Clone, Debug)]
 pub enum GKRVerificationError {
     SumcheckRoundFailed { layer: usize, round: usize },
@@ -204,11 +244,7 @@ fn dot_eq<E: Field>(values: &[E], eq: &[E]) -> E {
 }
 
 #[inline(always)]
-fn eval_constraint_kernel<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    const MAX_POW: usize,
->(
+fn eval_constraint_kernel<F: PrimeField, E: FieldExtension<F> + Field, const MAX_POW: usize>(
     rel: &StaticNoFieldMaxQuadraticConstraintsGKRRelation,
     challenge_powers: &[E; MAX_POW],
     evals: &[[E; 2]],
@@ -222,16 +258,16 @@ fn eval_constraint_kernel<
 
     // Coefficients are pre-converted to Montgomery form by the code generator,
     // so we use from_reduced_raw_repr
-    for &(coeff, pow) in rel.constants.iter() {
+    for &(coeff, pow) in rel.constants {
         let mut t = get_pow(pow);
         let c = F::from_reduced_raw_repr(coeff);
         t.mul_assign_by_base(&c);
         result.add_assign(&t);
     }
 
-    for (idx, terms) in rel.linear_terms.iter() {
+    for (idx, terms) in rel.linear_terms {
         let val = get_value_at(*idx);
-        for &(coeff, pow) in terms.iter() {
+        for &(coeff, pow) in *terms {
             let mut t = get_pow(pow);
             let c = F::from_reduced_raw_repr(coeff);
             t.mul_assign_by_base(&c);
@@ -240,12 +276,12 @@ fn eval_constraint_kernel<
         }
     }
 
-    for ((idx_a, idx_b), terms) in rel.quadratic_terms.iter() {
+    for ((idx_a, idx_b), terms) in rel.quadratic_terms {
         let va = get_value_at(*idx_a);
         let vb = get_value_at(*idx_b);
         let mut prod = *va;
         prod.mul_assign(vb);
-        for &(coeff, pow) in terms.iter() {
+        for &(coeff, pow) in *terms {
             let mut t = get_pow(pow);
             let c = F::from_reduced_raw_repr(coeff);
             t.mul_assign_by_base(&c);
@@ -289,7 +325,7 @@ where
     let relations = layer
         .gates
         .iter()
-        .chain(layer.gates_with_external_connections.iter())
+        .chain(layer.gates_with_external_connections)
         .map(|g| &g.enforced_relation);
 
     for relation in relations {
@@ -481,10 +517,7 @@ fn eval_two_output_relation<F: PrimeField, E: FieldExtension<F> + Field>(
 }
 
 #[inline(always)]
-fn compute_dim_reducing_final_step_accumulator<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
->(
+fn compute_dim_reducing_final_step_accumulator<F: PrimeField, E: FieldExtension<F> + Field>(
     output_groups: &[GKROutputGroup],
     input_sorted_indices: &[usize],
     final_step_evaluations: &[[E; 4]],
@@ -504,7 +537,7 @@ where
     };
 
     let mut iter_idx = 0;
-    for group in output_groups.iter() {
+    for group in output_groups {
         match group.output_type {
             OutputType::PermutationProduct => {
                 for _ in 0..group.num_addresses {
@@ -617,7 +650,7 @@ fn compute_standard_layer_claim<F: PrimeField, E: FieldExtension<F> + Field, con
     let gates = layer
         .gates
         .iter()
-        .chain(layer.gates_with_external_connections.iter())
+        .chain(layer.gates_with_external_connections)
         .map(|g| &g.enforced_relation);
 
     let mut combined = E::ZERO;
@@ -705,7 +738,7 @@ fn compute_dim_reducing_layer_claim<
     // They are already in sorted order matching output_groups iteration,
     // so output index = iteration index.
     let mut out_idx = 0;
-    for group in output_groups.iter() {
+    for group in output_groups {
         match group.output_type {
             OutputType::PermutationProduct => {
                 for _ in 0..group.num_addresses {
@@ -788,7 +821,7 @@ where
         }
 
         let coeffs =
-            unsafe { &*(commit_buf.as_ptr().add(BLAKE2S_DIGEST_SIZE_U32_WORDS) as *const [E; 4]) };
+            unsafe { &*commit_buf.as_ptr().add(BLAKE2S_DIGEST_SIZE_U32_WORDS).cast::<[E; 4]>() };
 
         let p0 = coeffs[0];
         let mut p1 = coeffs[0];
@@ -877,6 +910,298 @@ fn verify_final_step_check<F: PrimeField, E: FieldExtension<F> + Field>(
     Ok(())
 }
 
+/// Read top-layer polynomial evaluations from NDS and build initial claims.
+#[inline(always)]
+fn build_initial_claims<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    I: NonDeterminismSource,
+    const ROUNDS: usize,
+    const ADDRS: usize,
+    const EVALS: usize,
+>(
+    config: &GKRVerifierConfig,
+    top_layer_meta: &GKRLayerMeta,
+    seed: &mut Seed,
+    hasher: &mut DelegatedBlake2sState,
+) -> LayerState<E, ROUNDS, ADDRS>
+where
+    [(); E::DEGREE]: Sized,
+    [(); ROUNDS + 1]: Sized,
+{
+    let mut total_output_polys = 0usize;
+    for group in top_layer_meta.output_groups {
+        total_output_polys += group.num_addresses;
+    }
+
+    let evals_per_poly = 1usize << config.final_trace_size_log_2;
+    let total_evals = total_output_polys * evals_per_poly;
+    assert!(total_evals <= EVALS);
+
+    let mut evals_flat = [MaybeUninit::<E>::uninit(); EVALS];
+    read_field_els::<F, E, I>(unsafe {
+        core::slice::from_raw_parts_mut(evals_flat.as_mut_ptr().cast(), total_evals)
+    });
+    let evals_slice =
+        unsafe { core::slice::from_raw_parts(evals_flat.as_ptr().cast(), total_evals) };
+    commit_field_els::<F, E>(seed, evals_slice);
+
+    let num_challenges = config.final_trace_size_log_2 + 1;
+    let mut all_challenges = [E::ZERO; ROUNDS + 1];
+    draw_field_els_into::<F, E>(hasher, seed, &mut all_challenges[..num_challenges]);
+    let batching_challenge = all_challenges[num_challenges - 1];
+    let evaluation_point_len = config.final_trace_size_log_2;
+
+    let mut eq_buf = [E::ZERO; 64]; // max 2^6 = 64 entries
+    assert!(evals_per_poly <= 64);
+    make_eq_poly_last(&all_challenges[..evaluation_point_len], &mut eq_buf);
+
+    let mut prev_claims: LazyVec<E, ADDRS> = LazyVec::new();
+    let mut eval_offset = 0usize;
+    for group in top_layer_meta.output_groups {
+        let count = match group.output_type {
+            OutputType::PermutationProduct => group.num_addresses,
+            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
+                2
+            }
+        };
+        for _ in 0..count {
+            let claim = dot_eq(
+                &evals_slice[eval_offset..eval_offset + evals_per_poly],
+                &eq_buf[..evals_per_poly],
+            );
+            prev_claims.push(claim);
+            eval_offset += evals_per_poly;
+        }
+    }
+
+    let mut prev_point = [E::ZERO; ROUNDS];
+    prev_point[..evaluation_point_len].copy_from_slice(&all_challenges[..evaluation_point_len]);
+
+    LayerState {
+        prev_point,
+        prev_point_len: evaluation_point_len,
+        prev_claims,
+        batching_challenge,
+    }
+}
+
+/// Verify a single dim-reducing layer and update the state for the next layer.
+#[inline(always)]
+fn verify_dim_reducing_layer<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    I: NonDeterminismSource,
+    const ROUNDS: usize,
+    const ADDRS: usize,
+    const EVAL_BUF: usize,
+>(
+    layer_meta: &GKRLayerMeta,
+    layer_idx: usize,
+    state: &mut LayerState<E, ROUNDS, ADDRS>,
+    seed: &mut Seed,
+    hasher: &mut DelegatedBlake2sState,
+) -> Result<(), GKRVerificationError>
+where
+    [(); E::DEGREE]: Sized,
+    [(); ROUNDS + 1]: Sized,
+{
+    let initial_claim = compute_dim_reducing_layer_claim::<F, E, ADDRS>(
+        layer_meta.output_groups,
+        &state.prev_claims,
+        state.batching_challenge,
+    );
+
+    let num_regular_rounds = layer_meta.num_sumcheck_rounds - 1;
+    let (final_claim, final_eq_prefactor, mut folding_challenges, mut fc_len) =
+        verify_sumcheck_rounds::<F, E, I, ROUNDS>(
+            seed,
+            initial_claim,
+            &state.prev_point[..num_regular_rounds],
+            layer_idx,
+        )?;
+
+    let num_input_addrs = layer_meta.sorted_dedup_input_addrs.len();
+    let data_words = num_input_addrs * 4 * E::DEGREE;
+    let mut eval_buf = AlignedArray64::<u32, EVAL_BUF>::new_uninit();
+    read_eval_data_from_nds::<I, EVAL_BUF>(&mut eval_buf, data_words);
+
+    // Verify final step consistency
+    {
+        let final_step_evals: &[[E; 4]] =
+            unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_input_addrs) };
+        let f = compute_dim_reducing_final_step_accumulator::<F, E>(
+            layer_meta.output_groups,
+            layer_meta.input_sorted_indices,
+            final_step_evals,
+            state.batching_challenge,
+        );
+        debug_assert!(1 <= state.prev_point_len);
+        debug_assert!(state.prev_point_len <= state.prev_point.len());
+        verify_final_step_check::<F, E>(
+            f,
+            unsafe { *state.prev_point.get_unchecked(state.prev_point_len - 1) },
+            final_eq_prefactor,
+            final_claim,
+            layer_idx,
+        )?;
+    }
+
+    commit_eval_buffer(&mut eval_buf, hasher, seed, data_words);
+
+    let mut draw_buf = [E::ZERO; 3];
+    draw_field_els_into::<F, E>(hasher, seed, &mut draw_buf);
+    let r_before_last = draw_buf[0];
+    let r_last = draw_buf[1];
+    let next_batching = draw_buf[2];
+
+    debug_assert!(fc_len + 1 < folding_challenges.len());
+    unsafe {
+        *folding_challenges.get_unchecked_mut(fc_len) = r_before_last;
+        fc_len += 1;
+        *folding_challenges.get_unchecked_mut(fc_len) = r_last;
+        fc_len += 1;
+    }
+
+    // Compute new claims via eq-poly dot product
+    let mut eq4 = [E::ZERO; 4];
+    make_eq_poly_last(&[r_before_last, r_last], &mut eq4);
+    let final_step_evals: &[[E; 4]] =
+        unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_input_addrs) };
+    state.prev_claims.clear();
+    for i in 0..num_input_addrs {
+        let evals = unsafe { final_step_evals.get_unchecked(i) };
+        let claim = dot_eq(evals, &eq4);
+        state.prev_claims.push(claim);
+    }
+
+    state.batching_challenge = next_batching;
+    state.prev_point = folding_challenges;
+    state.prev_point_len = fc_len;
+    Ok(())
+}
+
+/// Compute new claims for a standard layer via linear interpolation.
+#[inline(always)]
+fn fold_standard_claims<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    const ADDRS: usize,
+    const BUF: usize,
+>(
+    eval_buf: &AlignedArray64<MaybeUninit<u32>, BUF>,
+    num_dedup_addrs: usize,
+    last_r: E,
+    claims: &mut LazyVec<E, ADDRS>,
+) {
+    let final_step_evals: &[[E; 2]] =
+        unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_dedup_addrs) };
+    claims.clear();
+    for i in 0..num_dedup_addrs {
+        let evals = unsafe { final_step_evals.get_unchecked(i) };
+        let f0 = evals[0];
+        let f1 = evals[1];
+        let mut diff = f1;
+        diff.sub_assign(&f0);
+        diff.mul_assign(&last_r);
+        diff.add_assign(&f0);
+        claims.push(diff);
+    }
+}
+
+/// Verify a single standard layer and update the state for the next layer.
+#[inline(always)]
+fn verify_standard_layer<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    I: NonDeterminismSource,
+    const ROUNDS: usize,
+    const ADDRS: usize,
+    const MAX_POW: usize,
+    const EVAL_BUF: usize,
+>(
+    layer_meta: &GKRLayerMeta,
+    layer_idx: usize,
+    state: &mut LayerState<E, ROUNDS, ADDRS>,
+    seed: &mut Seed,
+    hasher: &mut DelegatedBlake2sState,
+    lookup_additive_challenge: E,
+    constraints_batch_challenge: E,
+) -> Result<(), GKRVerificationError>
+where
+    [(); E::DEGREE]: Sized,
+    [(); ROUNDS + 1]: Sized,
+{
+    let layer_desc = layer_meta
+        .layer_desc
+        .expect("standard layer must have layer_desc");
+
+    let initial_claim = compute_standard_layer_claim::<F, E, ADDRS>(
+        layer_desc,
+        &state.prev_claims,
+        state.batching_challenge,
+    );
+
+    let num_regular_rounds = layer_meta.num_sumcheck_rounds - 1;
+    let (final_claim, final_eq_prefactor, mut folding_challenges, mut fc_len) =
+        verify_sumcheck_rounds::<F, E, I, ROUNDS>(
+            seed,
+            initial_claim,
+            &state.prev_point[..num_regular_rounds],
+            layer_idx,
+        )?;
+
+    let num_dedup_addrs = layer_meta.sorted_dedup_input_addrs.len();
+    let data_words = num_dedup_addrs * 2 * E::DEGREE;
+    let mut eval_buf = AlignedArray64::<u32, EVAL_BUF>::new_uninit();
+    read_eval_data_from_nds::<I, EVAL_BUF>(&mut eval_buf, data_words);
+
+    // Verify final step consistency
+    {
+        let final_step_evals: &[[E; 2]] =
+            unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_dedup_addrs) };
+        let f = compute_standard_final_step_accumulator::<F, E, MAX_POW>(
+            layer_desc,
+            final_step_evals,
+            state.batching_challenge,
+            lookup_additive_challenge,
+            constraints_batch_challenge,
+        );
+        debug_assert!(1 <= state.prev_point_len);
+        debug_assert!(state.prev_point_len <= state.prev_point.len());
+        verify_final_step_check::<F, E>(
+            f,
+            unsafe { *state.prev_point.get_unchecked(state.prev_point_len - 1) },
+            final_eq_prefactor,
+            final_claim,
+            layer_idx,
+        )?;
+    }
+
+    commit_eval_buffer(&mut eval_buf, hasher, seed, data_words);
+
+    let mut draw_buf = [E::ZERO; 2];
+    draw_field_els_into::<F, E>(hasher, seed, &mut draw_buf);
+    let last_r = draw_buf[0];
+    let next_batching = draw_buf[1];
+
+    debug_assert!(fc_len < folding_challenges.len());
+    unsafe { *folding_challenges.get_unchecked_mut(fc_len) = last_r };
+    fc_len += 1;
+
+    fold_standard_claims::<F, E, ADDRS, EVAL_BUF>(
+        &eval_buf,
+        num_dedup_addrs,
+        last_r,
+        &mut state.prev_claims,
+    );
+
+    state.batching_challenge = next_batching;
+    state.prev_point = folding_challenges;
+    state.prev_point_len = fc_len;
+    Ok(())
+}
+
 pub fn verify_gkr_sumcheck<
     'cfg,
     F: PrimeField,
@@ -912,279 +1237,41 @@ where
 
     let total_layers = config.layers.len();
     let num_standard = config.num_standard_layers;
-    let num_dim_reducing = total_layers - num_standard;
-
     let top_layer_meta = &config.layers[total_layers - 1];
 
-    let mut total_output_polys = 0usize;
-    for group in top_layer_meta.output_groups.iter() {
-        total_output_polys += group.num_addresses;
-    }
+    let mut state = build_initial_claims::<F, E, I, ROUNDS, ADDRS, EVALS>(
+        config,
+        top_layer_meta,
+        &mut seed,
+        &mut hasher,
+    );
 
-    let evals_per_poly = 1usize << config.final_trace_size_log_2;
-    let total_evals = total_output_polys * evals_per_poly;
-
-    assert!(total_evals <= EVALS);
-
-    let mut evals_flat = [MaybeUninit::<E>::uninit(); EVALS];
-
-    read_field_els::<F, E, I>(unsafe {
-        core::slice::from_raw_parts_mut(evals_flat.as_mut_ptr().cast(), total_evals)
-    });
-
-    let evals_slice =
-        unsafe { core::slice::from_raw_parts(evals_flat.as_ptr().cast(), total_evals) };
-    commit_field_els::<F, E>(&mut seed, evals_slice);
-
-    let num_challenges = config.final_trace_size_log_2 + 1;
-    let mut all_challenges = [E::ZERO; ROUNDS + 1];
-    draw_field_els_into::<F, E>(&mut hasher, &mut seed, &mut all_challenges[..num_challenges]);
-    let mut batching_challenge = all_challenges[num_challenges - 1];
-    let evaluation_point_len = config.final_trace_size_log_2;
-
-    let mut eq_buf = [E::ZERO; 64]; // max 2^6 = 64 entries
-    assert!(evals_per_poly <= 64);
-    make_eq_poly_last(&all_challenges[..evaluation_point_len], &mut eq_buf);
-
-    let initial_layer_for_sumcheck = if num_dim_reducing > 0 {
-        num_standard + num_dim_reducing - 1
-    } else {
-        num_standard - 1
-    };
-    let top_layer_idx = initial_layer_for_sumcheck + 1;
-
-    // Build initial claims. For the topmost dim-reducing layer, output addresses are
-    // InnerLayer{layer: top_layer_idx, offset: ...} — sequential, so output index = iteration index.
-    let mut current_claims: LazyVec<E, ADDRS> = LazyVec::new();
-    let mut eval_offset = 0usize;
-    for group in top_layer_meta.output_groups.iter() {
-        match group.output_type {
-            OutputType::PermutationProduct => {
-                for _ in 0..group.num_addresses {
-                    let claim = dot_eq(
-                        &evals_slice[eval_offset..eval_offset + evals_per_poly],
-                        &eq_buf[..evals_per_poly],
-                    );
-                    current_claims.push(claim);
-                    eval_offset += evals_per_poly;
-                }
-            }
-            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
-                for _ in 0..2 {
-                    let claim = dot_eq(
-                        &evals_slice[eval_offset..eval_offset + evals_per_poly],
-                        &eq_buf[..evals_per_poly],
-                    );
-                    current_claims.push(claim);
-                    eval_offset += evals_per_poly;
-                }
-            }
-        }
-    }
-
-    let mut prev_point = [E::ZERO; ROUNDS];
-    prev_point[..evaluation_point_len].copy_from_slice(&all_challenges[..evaluation_point_len]);
-    let mut prev_point_len = evaluation_point_len;
-    let mut prev_claims = current_claims;
-
+    // Dim-reducing layers (top to bottom)
     for config_idx in (num_standard..total_layers).rev() {
         let layer_meta = &config.layers[config_idx];
         assert!(layer_meta.is_dim_reducing != 0);
-
-        let circuit_layer_idx = config_idx;
-
-        let initial_claim = compute_dim_reducing_layer_claim::<F, E, ADDRS>(
-            layer_meta.output_groups,
-            &prev_claims,
-            batching_challenge,
-        );
-
-        let num_regular_rounds = layer_meta.num_sumcheck_rounds - 1;
-        let (final_claim, final_eq_prefactor, mut folding_challenges, mut fc_len) =
-            verify_sumcheck_rounds::<F, E, I, ROUNDS>(
-                &mut seed,
-                initial_claim,
-                &prev_point[..num_regular_rounds],
-                circuit_layer_idx,
-            )?;
-
-        let num_input_addrs = layer_meta.sorted_dedup_input_addrs.len();
-        // 4 ext4 evals per addr = 4 * E::DEGREE u32 words per addr
-        let data_words = num_input_addrs * 4 * E::DEGREE;
-        let total_commit_words = BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words;
-
-        // Read NDS directly into aligned buffer at offset 8 (leaving room for seed)
-        let mut eval_buf = AlignedArray64::<u32, EVAL_BUF>::new_uninit();
-        for i in 0..data_words {
-            eval_buf.write(BLAKE2S_DIGEST_SIZE_U32_WORDS + i, I::read_word());
-        }
-        // Zero-pad the last block
-        let padded = total_commit_words.next_multiple_of(BLAKE2S_BLOCK_SIZE_U32_WORDS);
-        unsafe { eval_buf.zero_range(BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words, padded) };
-
-        // Reinterpret data region as &[[E; 4]] for computation, then do all
-        // reads from eval_buf before writing the seed for the commit.
-        {
-            let final_step_evals: &[[E; 4]] = unsafe {
-                eval_buf.data_as_slice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_input_addrs)
-            };
-
-            // final step consistency check
-            let f = compute_dim_reducing_final_step_accumulator::<F, E>(
-                layer_meta.output_groups,
-                layer_meta.input_sorted_indices,
-                final_step_evals,
-                batching_challenge,
-            );
-            debug_assert!(1 <= prev_point_len);
-            debug_assert!(prev_point_len <= prev_point.len());
-            verify_final_step_check::<F, E>(
-                f,
-                unsafe { *prev_point.get_unchecked(prev_point_len - 1) },
-                final_eq_prefactor,
-                final_claim,
-                circuit_layer_idx,
-            )?;
-        }
-        // immutable borrow of eval_buf ends here
-
-        // Write seed and commit from the same aligned buffer
-        eval_buf.copy_from_slice(0, &seed.0);
-        let eval_buf = unsafe { eval_buf.assume_init_ref() };
-        Blake2sTranscript::commit_with_seed_using_hasher_and_aligned_buffer(
-            &mut hasher, &mut seed, eval_buf, total_commit_words,
-        );
-
-        let mut draw_buf = [E::ZERO; 3];
-        draw_field_els_into::<F, E>(&mut hasher, &mut seed, &mut draw_buf);
-        let r_before_last = draw_buf[0];
-        let r_last = draw_buf[1];
-        let next_batching = draw_buf[2];
-
-        debug_assert!(fc_len + 1 < folding_challenges.len());
-        unsafe {
-            *folding_challenges.get_unchecked_mut(fc_len) = r_before_last;
-            fc_len += 1;
-            *folding_challenges.get_unchecked_mut(fc_len) = r_last;
-            fc_len += 1;
-        }
-
-        let mut eq4 = [E::ZERO; 4];
-        make_eq_poly_last(&[r_before_last, r_last], &mut eq4);
-
-        // Reinterpret again for prev_claims computation (seed region was overwritten
-        // but data region at offset 8+ is unchanged)
-        let final_step_evals: &[[E; 4]] = unsafe {
-            eval_buf.data_as_slice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_input_addrs)
-        };
-        prev_claims.clear();
-        for i in 0..num_input_addrs {
-            let evals = unsafe { final_step_evals.get_unchecked(i) };
-            let claim = dot_eq(evals, &eq4);
-            prev_claims.push(claim);
-        }
-
-        batching_challenge = next_batching;
-        prev_point = folding_challenges;
-        prev_point_len = fc_len;
+        verify_dim_reducing_layer::<F, E, I, ROUNDS, ADDRS, EVAL_BUF>(
+            layer_meta,
+            config_idx,
+            &mut state,
+            &mut seed,
+            &mut hasher,
+        )?;
     }
 
+    // Standard layers (top to bottom)
     for config_idx in (0..num_standard).rev() {
         let layer_meta = &config.layers[config_idx];
         assert!(layer_meta.is_dim_reducing == 0);
-        let layer_desc = layer_meta
-            .layer_desc
-            .expect("standard layer must have layer_desc");
-
-        let initial_claim = compute_standard_layer_claim::<F, E, ADDRS>(
-            layer_desc,
-            &prev_claims,
-            batching_challenge,
-        );
-
-        let num_regular_rounds = layer_meta.num_sumcheck_rounds - 1;
-        let (final_claim, final_eq_prefactor, mut folding_challenges, mut fc_len) =
-            verify_sumcheck_rounds::<F, E, I, ROUNDS>(
-                &mut seed,
-                initial_claim,
-                &prev_point[..num_regular_rounds],
-                config_idx,
-            )?;
-
-        let num_dedup_addrs = layer_meta.sorted_dedup_input_addrs.len();
-        // 2 ext4 evals per addr = 2 * E::DEGREE u32 words per addr
-        let data_words = num_dedup_addrs * 2 * E::DEGREE;
-        let total_commit_words = BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words;
-
-        // Read NDS directly into aligned buffer (reuse EVAL_BUF size)
-        let mut eval_buf = AlignedArray64::<u32, EVAL_BUF>::new_uninit();
-        for i in 0..data_words {
-            eval_buf.write(BLAKE2S_DIGEST_SIZE_U32_WORDS + i, I::read_word());
-        }
-        let padded = total_commit_words.next_multiple_of(BLAKE2S_BLOCK_SIZE_U32_WORDS);
-        unsafe { eval_buf.zero_range(BLAKE2S_DIGEST_SIZE_U32_WORDS + data_words, padded) };
-
-        {
-            let final_step_evals: &[[E; 2]] = unsafe {
-                eval_buf.data_as_slice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_dedup_addrs)
-            };
-
-            let f = compute_standard_final_step_accumulator::<F, E, MAX_POW>(
-                layer_desc,
-                final_step_evals,
-                batching_challenge,
-                lookup_additive_challenge,
-                constraints_batch_challenge,
-            );
-
-            debug_assert!(1 <= prev_point_len);
-            debug_assert!(prev_point_len <= prev_point.len());
-            verify_final_step_check::<F, E>(
-                f,
-                unsafe { *prev_point.get_unchecked(prev_point_len - 1) },
-                final_eq_prefactor,
-                final_claim,
-                config_idx,
-            )?;
-        }
-
-        // Write seed and commit from the same aligned buffer
-        eval_buf.copy_from_slice(0, &seed.0);
-        let eval_buf = unsafe { eval_buf.assume_init_ref() };
-        Blake2sTranscript::commit_with_seed_using_hasher_and_aligned_buffer(
-            &mut hasher, &mut seed, eval_buf, total_commit_words,
-        );
-
-        let mut draw_buf = [E::ZERO; 2];
-        draw_field_els_into::<F, E>(&mut hasher, &mut seed, &mut draw_buf);
-        let last_r = draw_buf[0];
-        let next_batching = draw_buf[1];
-
-        debug_assert!(fc_len < folding_challenges.len());
-        unsafe { *folding_challenges.get_unchecked_mut(fc_len) = last_r };
-        fc_len += 1;
-
-        // Reinterpret again for prev_claims (seed region overwritten but data region intact)
-        let final_step_evals: &[[E; 2]] = unsafe {
-            eval_buf.data_as_slice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_dedup_addrs)
-        };
-        prev_claims.clear();
-        for i in 0..num_dedup_addrs {
-            let evals = unsafe { final_step_evals.get_unchecked(i) };
-            unsafe {
-                let f0 = *evals.get_unchecked(0);
-                let f1 = *evals.get_unchecked(1);
-                let mut diff = f1;
-                diff.sub_assign(&f0);
-                diff.mul_assign(&last_r);
-                diff.add_assign(&f0);
-                prev_claims.push(diff);
-            }
-        }
-
-        batching_challenge = next_batching;
-        prev_point = folding_challenges;
-        prev_point_len = fc_len;
+        verify_standard_layer::<F, E, I, ROUNDS, ADDRS, MAX_POW, EVAL_BUF>(
+            layer_meta,
+            config_idx,
+            &mut state,
+            &mut seed,
+            &mut hasher,
+            lookup_additive_challenge,
+            constraints_batch_challenge,
+        )?;
     }
 
     let grand_product_accumulator: E = read_field_el::<F, E, I>();
@@ -1196,20 +1283,18 @@ where
         .layers
         .first()
         .and_then(|l| l.layer_desc)
-        .map(|desc| desc.additional_base_layer_openings)
-        .unwrap_or(&[]);
+        .map_or(&[] as &[GKRAddress], |desc| desc.additional_base_layer_openings);
 
     let base_layer_addrs = config
         .layers
         .first()
-        .map(|l| l.sorted_dedup_input_addrs)
-        .unwrap_or(&[]);
+        .map_or(&[] as &[GKRAddress], |l| l.sorted_dedup_input_addrs);
 
     Ok(GKRVerifierOutput {
-        base_layer_claims: prev_claims,
+        base_layer_claims: state.prev_claims,
         base_layer_addrs,
-        evaluation_point: prev_point,
-        evaluation_point_len: prev_point_len,
+        evaluation_point: state.prev_point,
+        evaluation_point_len: state.prev_point_len,
         grand_product_accumulator,
         additional_base_layer_openings,
         whir_batching_challenge,

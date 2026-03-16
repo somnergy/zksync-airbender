@@ -549,8 +549,7 @@ fn test_gkr_verifier_in_transpiler() {
         );
 
     let cycles_bound = 1 << 24;
-    let mut state =
-        State::initial_with_counters(DelegationsAndFamiliesCounters::default());
+    let mut state = State::initial_with_counters(DelegationsAndFamiliesCounters::default());
     let mut snapshotter = SimpleSnapshotter::<
         DelegationsAndFamiliesCounters,
         { common_constants::rom::ROM_SECOND_WORD_BITS },
@@ -559,13 +558,10 @@ fn test_gkr_verifier_in_transpiler() {
 
     let symbols_path = std::path::PathBuf::from("../tools/gkr_verifier/app.elf");
     let output_path = std::env::current_dir().unwrap().join("gkr_flamegraph.svg");
-    let mut fg_config = riscv_transpiler::vm::FlamegraphConfig::new(
-        symbols_path,
-        output_path.clone(),
-    );
+    let mut fg_config =
+        riscv_transpiler::vm::FlamegraphConfig::new(symbols_path, output_path.clone());
     fg_config.frequency_recip = 1; // sample every cycle for accuracy
-    let mut profiler =
-        riscv_transpiler::vm::VmFlamegraphProfiler::new(fg_config).unwrap();
+    let mut profiler = riscv_transpiler::vm::VmFlamegraphProfiler::new(fg_config).unwrap();
 
     let is_program_finished =
         VM::<DelegationsAndFamiliesCounters>::run_basic_unrolled_with_flamegraph::<_, _, _>(
@@ -599,7 +595,10 @@ fn test_gkr_verifier_in_transpiler() {
         let layer = state.registers[12].value;
         let round = state.registers[13].value;
         match error_code {
-            1 => panic!("GKR SumcheckRoundFailed at layer={}, round={}", layer, round),
+            1 => panic!(
+                "GKR SumcheckRoundFailed at layer={}, round={}",
+                layer, round
+            ),
             2 => panic!("GKR FinalStepCheckFailed at layer={}", layer),
             _ => panic!("GKR unknown error code={}", error_code),
         }

@@ -333,7 +333,11 @@ fn transform_gate(
     output_sorted_addrs: &[GKRAddress],
 ) -> TokenStream {
     let output_layer = gate.output_layer;
-    let rel = transform_relation(&gate.enforced_relation, input_sorted_addrs, output_sorted_addrs);
+    let rel = transform_relation(
+        &gate.enforced_relation,
+        input_sorted_addrs,
+        output_sorted_addrs,
+    );
     quote! {
         StaticGateArtifacts {
             output_layer: #output_layer,
@@ -440,14 +444,11 @@ fn collect_sorted_unique_addrs(layer: &GKRLayerDescription) -> Vec<GKRAddress> {
             R::Copy { input, .. } => {
                 addrs.insert(*input);
             }
-            R::InitialGrandProductFromCaches { input, .. }
-            | R::TrivialProduct { input, .. } => {
+            R::InitialGrandProductFromCaches { input, .. } | R::TrivialProduct { input, .. } => {
                 addrs.insert(input[0]);
                 addrs.insert(input[1]);
             }
-            R::UnbalancedGrandProductWithCache {
-                scalar, input, ..
-            } => {
+            R::UnbalancedGrandProductWithCache { scalar, input, .. } => {
                 addrs.insert(*scalar);
                 addrs.insert(*input);
             }
@@ -565,8 +566,7 @@ fn scan_used_relation_types(layers: &[GKRLayerDescription]) -> (bool, bool, bool
                     uses_linear = true;
                     uses_single_lookup = true;
                 }
-                R::MaterializedVectorLookupInput { .. }
-                | R::LookupPairFromVectorInputs { .. } => {
+                R::MaterializedVectorLookupInput { .. } | R::LookupPairFromVectorInputs { .. } => {
                     uses_linear = true;
                     uses_vector_lookup = true;
                 }
@@ -574,8 +574,8 @@ fn scan_used_relation_types(layers: &[GKRLayerDescription]) -> (bool, bool, bool
                 | R::InitialGrandProductFromCaches { .. }
                 | R::TrivialProduct { .. }
                 | R::MaskIntoIdentityProduct { .. }
-                | R::LookupFromMaterializedBaseInputWithSetup { .. } 
-                | R::LookupPairFromMaterializedBaseInputs { .. } 
+                | R::LookupFromMaterializedBaseInputWithSetup { .. }
+                | R::LookupPairFromMaterializedBaseInputs { .. }
                 | R::EnforceConstraintsMaxQuadratic { .. }
                 | R::UnbalancedGrandProductWithCache { .. }
                 | R::LookupWithCachedDensAndSetup { .. }

@@ -32,7 +32,7 @@ impl<T, A, const N: usize> AlignedArray<T, A, N> {
             data: [value; N],
         }
     }
-    
+
     #[inline(always)]
     pub fn new_uninit() -> AlignedArray<MaybeUninit<T>, A, N> {
         AlignedArray {
@@ -53,8 +53,8 @@ impl<T, A, const N: usize> AlignedArray<T, A, N> {
     /// The caller must ensure that the region is valid and that alignment/layout
     /// of `U` is compatible with the underlying `T` data.
     #[inline(always)]
-    pub unsafe fn data_as_slice<U>(&self, offset: usize, count: usize) -> &[U] {
-        let ptr = self.data.as_ptr().add(offset) as *const U;
+    pub unsafe fn transmute_subslice<U>(&self, offset: usize, count: usize) -> &[U] {
+        let ptr = self.data.as_ptr().add(offset).cast::<U>();
         core::slice::from_raw_parts(ptr, count)
     }
 }
@@ -80,7 +80,7 @@ impl<T, A> AlignedSlice<T, A> {
 impl<T, A, const N: usize> AlignedArray<MaybeUninit<T>, A, N> {
     #[inline(always)]
     pub unsafe fn assume_init_ref(&self) -> &AlignedArray<T, A, N> {
-        &*(self as *const Self as *const AlignedArray<T, A, N>)
+        &*(self as *const Self).cast::<AlignedArray<T, A, N>>()
     }
 
     #[inline(always)]
@@ -97,7 +97,7 @@ impl<T, A, const N: usize> AlignedArray<MaybeUninit<T>, A, N> {
         unsafe {
             core::ptr::copy_nonoverlapping(
                 src.as_ptr(),
-                self.data.as_mut_ptr().add(offset) as *mut T,
+                self.data.as_mut_ptr().add(offset).cast::<T>(),
                 src.len(),
             );
         }

@@ -129,11 +129,7 @@ mod test {
             BabyBearField,
             BabyBearExt4,
             DefaultTreeConstructor,
-        >(
-            &compiled_circuit,
-            &proof,
-            4,
-        );
+        >(&compiled_circuit, &proof, 4);
 
         let mut dst = std::fs::File::create("./generated/gkr_layout.rs").unwrap();
         dst.write_all(&result.to_string().as_bytes()).unwrap();
