@@ -2,10 +2,7 @@ use crate::unrolled::{
     compute_setup_for_machine_configuration, flatten_proof_into_responses_for_unrolled_recursion,
     UnrolledProgramProof, UnrolledProgramSetup,
 };
-use crate::{
-    get_padded_binary, RECURSION_UNIFIED_BIN, RECURSION_UNIFIED_TXT, RECURSION_UNROLLED_BIN,
-    RECURSION_UNROLLED_TXT,
-};
+use crate::get_padded_binary;
 use gpu_prover::{
     execution::prover::{ExecutionKind, ExecutionProver, ExecutionProverConfiguration},
     machine_type::MachineType,
