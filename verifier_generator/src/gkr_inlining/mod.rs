@@ -193,12 +193,7 @@ fn compute_max_pow(layer: &GKRLayerDescription) -> usize {
     max_pow
 }
 
-pub fn generate_gkr_inlined<
-    MW: MersenneWrapper,
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    T,
->(
+pub fn generate_gkr_inlined<MW: MersenneWrapper, F: PrimeField, E: FieldExtension<F> + Field, T>(
     compiled_circuit: &GKRCircuitArtifact<F>,
     proof: &GKRProof<F, E, T>,
     final_trace_size_log_2: usize,
@@ -369,7 +364,6 @@ where
         tmp.len()
     };
 
-
     // --- Generate per-layer functions ---
     let mut layer_functions = TokenStream::new();
 
@@ -381,20 +375,24 @@ where
             get_output_sorted_addrs(layer_idx),
         ));
         let layer_max_pow = compute_max_pow(&compiled_circuit.layers[layer_idx]) + 1;
-        layer_functions.extend(standard_layer::generate_layer_final_step_accumulator::<MW, F>(
-            &compiled_circuit.layers[layer_idx],
-            layer_idx,
-            &standard_sorted_addrs[layer_idx],
-            layer_max_pow,
-        ));
+        layer_functions.extend(
+            standard_layer::generate_layer_final_step_accumulator::<MW, F>(
+                &compiled_circuit.layers[layer_idx],
+                layer_idx,
+                &standard_sorted_addrs[layer_idx],
+                layer_max_pow,
+            ),
+        );
     }
 
     // Dim-reducing layers
     for (dim_idx, layer_idx) in (num_standard_layers..=initial_layer_for_sumcheck).enumerate() {
-        layer_functions.extend(dim_reducing_layer::generate_dim_reducing_compute_claim::<MW>(
-            &output_groups,
-            layer_idx,
-        ));
+        layer_functions.extend(
+            dim_reducing_layer::generate_dim_reducing_compute_claim::<MW>(
+                &output_groups,
+                layer_idx,
+            ),
+        );
         let iteration_order_addrs = build_dim_reducing_addrs(layer_idx);
         let sorted = &dim_reducing_sorted_addrs[dim_idx];
         let input_sorted_indices: Vec<usize> = iteration_order_addrs
@@ -417,10 +415,7 @@ where
     if !standard_sorted_addrs.is_empty() {
         let sorted = &standard_sorted_addrs[0];
         let mut addrs_stream = TokenStream::new();
-        addrs_stream.append_separated(
-            sorted.iter().map(|a| transform_gkr_address(a)),
-            quote! {,},
-        );
+        addrs_stream.append_separated(sorted.iter().map(|a| transform_gkr_address(a)), quote! {,});
         static_data.extend(quote! {
             const LAYER_0_SORTED_ADDRS: &[GKRAddress] = &[#addrs_stream];
         });
@@ -543,7 +538,6 @@ where
         let dim_idx = config_idx - num_standard_layers;
         let num_input_addrs = dim_reducing_sorted_addrs[dim_idx].len();
 
-
         let compute_claim_fn = quote::format_ident!("dim_reducing_{}_compute_claim", config_idx);
         let final_step_fn =
             quote::format_ident!("dim_reducing_{}_final_step_accumulator", config_idx);
@@ -640,10 +634,8 @@ where
         let num_sumcheck_rounds = proof_values.sumcheck_num_rounds;
         let num_dedup_addrs = standard_sorted_addrs[config_idx].len();
 
-
         let compute_claim_fn = quote::format_ident!("layer_{}_compute_claim", config_idx);
-        let final_step_fn =
-            quote::format_ident!("layer_{}_final_step_accumulator", config_idx);
+        let final_step_fn = quote::format_ident!("layer_{}_final_step_accumulator", config_idx);
 
         let num_regular_rounds = num_sumcheck_rounds - 1;
 

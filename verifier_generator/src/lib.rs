@@ -115,15 +115,13 @@ mod test {
     #[test]
     fn generate_gkr_inlined() {
         use crate::inlining_generator::DefaultBabyBearField;
-        use prover::field::baby_bear::base::BabyBearField;
         use prover::cs::gkr_compiler::GKRCircuitArtifact;
+        use prover::field::baby_bear::base::BabyBearField;
         use prover::field::baby_bear::ext4::BabyBearExt4;
         use prover::gkr::prover::GKRProof;
         use prover::merkle_trees::DefaultTreeConstructor;
 
-        let circuit_names = vec![
-            "add_sub_lui_auipc_mop",
-        ];
+        let circuit_names = vec!["add_sub_lui_auipc_mop"];
 
         for name in circuit_names {
             let compiled_circuit: GKRCircuitArtifact<BabyBearField> =
@@ -131,18 +129,20 @@ mod test {
             let proof: GKRProof<BabyBearField, BabyBearExt4, DefaultTreeConstructor> =
                 deserialize_from_file(&format!("../prover/{}_gkr_proof.json", name));
 
-            let result =
-                gkr_inlining::generate_gkr_inlined::<DefaultBabyBearField, _, _, _>(
-                    &compiled_circuit,
-                    &proof,
-                    4,
-                );
+            let result = gkr_inlining::generate_gkr_inlined::<DefaultBabyBearField, _, _, _>(
+                &compiled_circuit,
+                &proof,
+                4,
+            );
 
             let path = format!("../verifier/src/generated/gkr_verifier.rs");
             let mut dst = std::fs::File::create(&path).unwrap();
             dst.write_all(&result.to_string().as_bytes()).unwrap();
             drop(dst);
-            std::process::Command::new("rustfmt").arg(&path).status().ok();
+            std::process::Command::new("rustfmt")
+                .arg(&path)
+                .status()
+                .ok();
         }
     }
 

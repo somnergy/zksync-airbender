@@ -2,8 +2,8 @@ use proc_macro2::TokenStream;
 use quote::quote;
 
 use crate::inlining_generator::MersenneWrapper;
-use prover::cs::gkr_compiler::OutputType;
 use prover::cs::definitions::GKRAddress;
+use prover::cs::gkr_compiler::OutputType;
 
 use super::GKROutputGroupInfo;
 
@@ -43,9 +43,7 @@ pub fn generate_dim_reducing_compute_claim<MW: MersenneWrapper>(
                     });
                 }
             }
-            OutputType::Lookup16Bits
-            | OutputType::LookupTimestamps
-            | OutputType::GenericLookup => {
+            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
                 let idx0 = out_idx;
                 let idx1 = out_idx + 1;
                 out_idx += 2;
@@ -82,7 +80,6 @@ pub fn generate_dim_reducing_compute_claim<MW: MersenneWrapper>(
         }
     }
 }
-
 
 pub fn generate_dim_reducing_final_step_accumulator<MW: MersenneWrapper>(
     output_groups: &[GKROutputGroupInfo],
@@ -136,9 +133,7 @@ pub fn generate_dim_reducing_final_step_accumulator<MW: MersenneWrapper>(
                     });
                 }
             }
-            OutputType::Lookup16Bits
-            | OutputType::LookupTimestamps
-            | OutputType::GenericLookup => {
+            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
                 let si0 = input_sorted_indices[iter_idx];
                 let si1 = input_sorted_indices[iter_idx + 1];
                 iter_idx += 2;
@@ -153,7 +148,10 @@ pub fn generate_dim_reducing_final_step_accumulator<MW: MersenneWrapper>(
                 for (j, (a0, a1, b0, b1, acc_idx)) in [
                     (0usize, 1usize, 0usize, 1usize, 0usize),
                     (2usize, 3usize, 2usize, 3usize, 1usize),
-                ].iter().enumerate() {
+                ]
+                .iter()
+                .enumerate()
+                {
                     let mul_num = mul_assign_fn(quote! { num }, quote! { v1b });
                     let mul_cb = mul_assign_fn(quote! { cb_tmp }, quote! { v1a });
                     let add_num = add_assign_fn(quote! { num }, quote! { cb_tmp });

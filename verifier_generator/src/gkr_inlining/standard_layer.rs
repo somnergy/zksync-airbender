@@ -53,7 +53,11 @@ pub fn generate_layer_compute_claim<MW: MersenneWrapper>(
                 let out_idx = addr_to_idx(output, output_sorted_addrs);
                 let mul_t = MW::mul_assign(quote! { t }, quote! { claim });
                 let add_combined = MW::add_assign(quote! { combined }, quote! { t });
-                let advance = if is_last { quote! {} } else { quote! { #mul_batch; } };
+                let advance = if is_last {
+                    quote! {}
+                } else {
+                    quote! { #mul_batch; }
+                };
                 body.extend(quote! {
                     {
                         let bc = current_batch;
@@ -80,7 +84,11 @@ pub fn generate_layer_compute_claim<MW: MersenneWrapper>(
                 let add_t0 = MW::add_assign(quote! { combined }, quote! { t0 });
                 let mul_t1 = MW::mul_assign(quote! { t1 }, quote! { c1 });
                 let add_t1 = MW::add_assign(quote! { combined }, quote! { t1 });
-                let advance = if is_last { quote! {} } else { quote! { #mul_batch; } };
+                let advance = if is_last {
+                    quote! {}
+                } else {
+                    quote! { #mul_batch; }
+                };
                 body.extend(quote! {
                     {
                         let bc0 = current_batch;
@@ -144,8 +152,7 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
         use NoFieldGKRRelation as R;
         match &gate.enforced_relation {
             R::EnforceConstraintsMaxQuadratic { input } => {
-                let kernel_body =
-                    generate_constraint_kernel::<MW, F>(input, input_sorted_addrs);
+                let kernel_body = generate_constraint_kernel::<MW, F>(input, input_sorted_addrs);
                 let mul_contrib = MW::mul_assign(quote! { contrib }, quote! { val });
                 let add_acc = MW::add_assign(quote! { acc[j] }, quote! { contrib });
                 body.extend(quote! {
@@ -178,8 +185,7 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
                     }
                 });
             }
-            R::InitialGrandProductFromCaches { input, .. }
-            | R::TrivialProduct { input, .. } => {
+            R::InitialGrandProductFromCaches { input, .. } | R::TrivialProduct { input, .. } => {
                 let i0 = addr_to_idx(&input[0], input_sorted_addrs);
                 let i1 = addr_to_idx(&input[1], input_sorted_addrs);
                 let mul_ab = MW::mul_assign(quote! { val }, quote! { vb });
@@ -231,7 +237,8 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
                 let i10 = addr_to_idx(&input[1][0], input_sorted_addrs);
                 let i11 = addr_to_idx(&input[1][1], input_sorted_addrs);
                 generate_two_output_body::<MW>(
-                    &mut body, &mul_batch,
+                    &mut body,
+                    &mul_batch,
                     quote! {
                         let a = unsafe { evals.get_unchecked(#i00) }[j];
                         let b = unsafe { evals.get_unchecked(#i01) }[j];
@@ -267,14 +274,17 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
                 let i0 = addr_to_idx(&input[0], input_sorted_addrs);
                 let i1 = addr_to_idx(&input[1], input_sorted_addrs);
                 generate_two_output_body::<MW>(
-                    &mut body, &mul_batch,
+                    &mut body,
+                    &mul_batch,
                     quote! {
                         let mut b_g = unsafe { evals.get_unchecked(#i0) }[j];
                         let mut d_g = unsafe { evals.get_unchecked(#i1) }[j];
                     },
                     |_, mw_add| {
-                        let add_gamma_b = mw_add(quote! { b_g }, quote! { lookup_additive_challenge });
-                        let add_gamma_d = mw_add(quote! { d_g }, quote! { lookup_additive_challenge });
+                        let add_gamma_b =
+                            mw_add(quote! { b_g }, quote! { lookup_additive_challenge });
+                        let add_gamma_d =
+                            mw_add(quote! { d_g }, quote! { lookup_additive_challenge });
                         let add_bd = mw_add(quote! { num }, quote! { d_g });
                         quote! {
                             #add_gamma_b;
@@ -299,15 +309,18 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
                 let s0 = addr_to_idx(&setup[0], input_sorted_addrs);
                 let s1 = addr_to_idx(&setup[1], input_sorted_addrs);
                 generate_two_output_body::<MW>(
-                    &mut body, &mul_batch,
+                    &mut body,
+                    &mul_batch,
                     quote! {
                         let mut b_g = unsafe { evals.get_unchecked(#i_in) }[j];
                         let mut d_g = unsafe { evals.get_unchecked(#s1) }[j];
                         let mut cb_g = unsafe { evals.get_unchecked(#s0) }[j];
                     },
                     |mw_mul, mw_add| {
-                        let add_gamma_b = mw_add(quote! { b_g }, quote! { lookup_additive_challenge });
-                        let add_gamma_d = mw_add(quote! { d_g }, quote! { lookup_additive_challenge });
+                        let add_gamma_b =
+                            mw_add(quote! { b_g }, quote! { lookup_additive_challenge });
+                        let add_gamma_d =
+                            mw_add(quote! { d_g }, quote! { lookup_additive_challenge });
                         let mul_cb = mw_mul(quote! { cb_g }, quote! { b_g });
                         let sub_cb = MW::sub_assign(quote! { num }, quote! { cb_g });
                         quote! {
@@ -336,14 +349,16 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
                 let i1 = addr_to_idx(&input[1], input_sorted_addrs);
                 let r = addr_to_idx(remainder, input_sorted_addrs);
                 generate_two_output_body::<MW>(
-                    &mut body, &mul_batch,
+                    &mut body,
+                    &mul_batch,
                     quote! {
                         let a = unsafe { evals.get_unchecked(#i0) }[j];
                         let b = unsafe { evals.get_unchecked(#i1) }[j];
                         let mut d_g = unsafe { evals.get_unchecked(#r) }[j];
                     },
                     |mw_mul, mw_add| {
-                        let add_gamma = mw_add(quote! { d_g }, quote! { lookup_additive_challenge });
+                        let add_gamma =
+                            mw_add(quote! { d_g }, quote! { lookup_additive_challenge });
                         let mul_ad = mw_mul(quote! { num }, quote! { d_g });
                         let add_b = mw_add(quote! { num }, quote! { b });
                         quote! {
@@ -370,7 +385,8 @@ pub fn generate_layer_final_step_accumulator<MW: MersenneWrapper, F: PrimeField>
                 let s0 = addr_to_idx(&setup[0], input_sorted_addrs);
                 let s1 = addr_to_idx(&setup[1], input_sorted_addrs);
                 generate_two_output_body::<MW>(
-                    &mut body, &mul_batch,
+                    &mut body,
+                    &mul_batch,
                     quote! {
                         let a = unsafe { evals.get_unchecked(#i0) }[j];
                         let b = unsafe { evals.get_unchecked(#i1) }[j];

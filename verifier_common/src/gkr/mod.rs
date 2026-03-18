@@ -61,7 +61,7 @@ impl<V: Copy, const N: usize> LazyVec<V, N> {
 
     #[inline(always)]
     pub fn as_mut_slice(&mut self) -> &mut [V] {
-        unsafe { core::slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<V>(), self.len)}
+        unsafe { core::slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<V>(), self.len) }
     }
 
     #[inline(always)]
@@ -102,7 +102,7 @@ where
     [(); E::DEGREE]: Sized,
 {
     use field::FixedArrayConvertible;
-    let mut words = LazyVec::<F, {E::DEGREE}>::new();
+    let mut words = LazyVec::<F, { E::DEGREE }>::new();
     for _ in 0..E::DEGREE {
         words.push(F::from_reduced_raw_repr(I::read_word()));
     }
@@ -161,8 +161,13 @@ pub fn draw_field_els_into<F: PrimeField, E: FieldExtension<F>>(
         for &w in chunk {
             arr.push(F::from_u32_with_reduction(w));
         }
-        
-        dst[i] = E::from_coeffs_ref(unsafe { arr.as_slice().as_ptr().cast::<E::Coeffs>().as_ref_unchecked() });
+
+        dst[i] = E::from_coeffs_ref(unsafe {
+            arr.as_slice()
+                .as_ptr()
+                .cast::<E::Coeffs>()
+                .as_ref_unchecked()
+        });
         arr.clear();
     }
 }
@@ -218,7 +223,7 @@ pub fn dot_eq<E: Field, const N: usize>(values: &[E; N], eq: &[E; N]) -> E {
 #[inline(always)]
 pub fn make_eq_poly<E: Field + Copy, const N: usize>(
     challenges: &[E; N],
-    buf: &mut LazyVec<E, {1 << N}>,
+    buf: &mut LazyVec<E, { 1 << N }>,
 ) {
     unsafe { buf.set_unchecked(0, E::ONE) };
     let mut size = 1usize;
@@ -294,8 +299,12 @@ where
             commit_buf[BLAKE2S_DIGEST_SIZE_U32_WORDS + i] = I::read_word();
         }
 
-        let coeffs =
-            unsafe { &*commit_buf.as_ptr().add(BLAKE2S_DIGEST_SIZE_U32_WORDS).cast::<[E; 4]>() };
+        let coeffs = unsafe {
+            &*commit_buf
+                .as_ptr()
+                .add(BLAKE2S_DIGEST_SIZE_U32_WORDS)
+                .cast::<[E; 4]>()
+        };
 
         let p0 = coeffs[0];
         let mut p1 = coeffs[0];
@@ -323,12 +332,17 @@ where
 
         Blake2sTranscript::draw_randomness_using_hasher(&mut hasher, seed, &mut draw_buf);
         let r_k = {
-            let mut arr = LazyVec::<F, {E::DEGREE}>::new();
+            let mut arr = LazyVec::<F, { E::DEGREE }>::new();
             for i in 0..E::DEGREE {
                 let w = draw_buf[i];
                 arr.push(F::from_u32_with_reduction(w));
             }
-            E::from_coeffs_ref(unsafe { arr.as_slice().as_ptr().cast::<E::Coeffs>().as_ref_unchecked() })
+            E::from_coeffs_ref(unsafe {
+                arr.as_slice()
+                    .as_ptr()
+                    .cast::<E::Coeffs>()
+                    .as_ref_unchecked()
+            })
         };
 
         {

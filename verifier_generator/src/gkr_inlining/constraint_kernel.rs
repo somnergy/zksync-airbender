@@ -16,7 +16,6 @@ pub fn generate_constraint_kernel<MW: MersenneWrapper, F: PrimeField>(
     rel: &NoFieldMaxQuadraticConstraintsGKRRelation,
     input_sorted_addrs: &[GKRAddress],
 ) -> TokenStream {
-
     let quartic_zero = MW::quartic_zero();
     let mut body = quote! {
         let mut result = #quartic_zero;
@@ -26,8 +25,7 @@ pub fn generate_constraint_kernel<MW: MersenneWrapper, F: PrimeField>(
     for &(coeff, pow) in &rel.constants {
         let mont = coeff_to_internal_repr::<F>(coeff);
         let field_coeff = MW::field_new(quote! { #mont });
-        let mul_by_base =
-            MW::mul_assign_by_base(quote! { t }, field_coeff);
+        let mul_by_base = MW::mul_assign_by_base(quote! { t }, field_coeff);
         let add_to_result = MW::add_assign(quote! { result }, quote! { t });
         body.extend(quote! {
             {
@@ -45,8 +43,7 @@ pub fn generate_constraint_kernel<MW: MersenneWrapper, F: PrimeField>(
         for &(coeff, pow) in terms.iter() {
             let mont = coeff_to_internal_repr::<F>(coeff);
             let field_coeff = MW::field_new(quote! { #mont });
-            let mul_by_base =
-                MW::mul_assign_by_base(quote! { t }, field_coeff);
+            let mul_by_base = MW::mul_assign_by_base(quote! { t }, field_coeff);
             let mul_by_val = MW::mul_assign(quote! { t }, quote! { val });
             let add_to_result = MW::add_assign(quote! { result }, quote! { t });
             term_body.extend(quote! {
@@ -75,8 +72,7 @@ pub fn generate_constraint_kernel<MW: MersenneWrapper, F: PrimeField>(
         for &(coeff, pow) in terms.iter() {
             let mont = coeff_to_internal_repr::<F>(coeff);
             let field_coeff = MW::field_new(quote! { #mont });
-            let mul_by_base =
-                MW::mul_assign_by_base(quote! { t }, field_coeff);
+            let mul_by_base = MW::mul_assign_by_base(quote! { t }, field_coeff);
             let mul_by_prod = MW::mul_assign(quote! { t }, quote! { prod });
             let add_to_result = MW::add_assign(quote! { result }, quote! { t });
             term_body.extend(quote! {
