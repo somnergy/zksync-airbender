@@ -33,6 +33,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gkr_verifier"
+version = "0.1.0"
+dependencies = [
+ "field",
+ "non_determinism_source",
+ "riscv_common",
+ "verifier_common",
+]
+
+[[package]]
 name = "non_determinism_source"
 version = "0.1.0"
 
@@ -207,14 +217,4 @@ dependencies = [
  "serde",
  "transcript",
  "unroll",
-]
-
-[[package]]
-name = "zksync_os_gkr_verifier"
-version = "0.1.0"
-dependencies = [
- "field",
- "non_determinism_source",
- "riscv_common",
- "verifier_common",
 ]

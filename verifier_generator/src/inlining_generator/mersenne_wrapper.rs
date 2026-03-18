@@ -28,6 +28,98 @@ pub trait MersenneWrapper {
     // Structures that could differ
     fn proof_aux_values_struct() -> TokenStream;
     fn aux_arguments_boundary_values_struct() -> TokenStream;
+
+    /// Generate use statements for the field types (base + extension).
+    fn field_use_statements() -> TokenStream {
+        quote! {}
+    }
+}
+
+pub struct DefaultBabyBearField;
+
+impl MersenneWrapper for DefaultBabyBearField {
+    fn field_struct() -> TokenStream {
+        quote! { BabyBearField }
+    }
+
+    fn complex_struct() -> TokenStream {
+        quote! { BabyBearExt2 }
+    }
+
+    fn quartic_struct() -> TokenStream {
+        quote! { BabyBearExt4 }
+    }
+
+    fn field_one() -> TokenStream {
+        quote! { BabyBearField::ONE }
+    }
+
+    fn field_new(value: TokenStream) -> TokenStream {
+        quote! { BabyBearField::from_reduced_raw_repr(#value) }
+    }
+
+    fn quartic_zero() -> TokenStream {
+        quote! { BabyBearExt4::ZERO }
+    }
+
+    fn quartic_one() -> TokenStream {
+        quote! { BabyBearExt4::ONE }
+    }
+
+    fn add_assign(a: TokenStream, b: TokenStream) -> TokenStream {
+        quote! { field_ops::add_assign(&mut #a, & #b) }
+    }
+
+    fn sub_assign(a: TokenStream, b: TokenStream) -> TokenStream {
+        quote! { field_ops::sub_assign(&mut #a, & #b) }
+    }
+
+    fn mul_assign(a: TokenStream, b: TokenStream) -> TokenStream {
+        quote! { field_ops::mul_assign(&mut #a, & #b) }
+    }
+
+    fn add_assign_base(a: TokenStream, b: TokenStream) -> TokenStream {
+        quote! { field_ops::add_assign_base(&mut #a, & #b) }
+    }
+
+    fn sub_assign_base(a: TokenStream, b: TokenStream) -> TokenStream {
+        quote! { field_ops::sub_assign_base(&mut #a, & #b) }
+    }
+
+    fn mul_assign_by_base(a: TokenStream, b: TokenStream) -> TokenStream {
+        quote! { field_ops::mul_assign_by_base(&mut #a, & #b) }
+    }
+
+    fn negate(a: TokenStream) -> TokenStream {
+        quote! { field_ops::negate(&mut #a) }
+    }
+
+    fn generic_function_parameters() -> TokenStream {
+        quote! {}
+    }
+
+    fn additional_function_arguments() -> TokenStream {
+        quote! {}
+    }
+
+    fn additional_definition_function_arguments() -> TokenStream {
+        quote! {}
+    }
+
+    fn proof_aux_values_struct() -> TokenStream {
+        quote! { ProofAuxValues }
+    }
+
+    fn aux_arguments_boundary_values_struct() -> TokenStream {
+        quote! { AuxArgumentsBoundaryValues }
+    }
+
+    fn field_use_statements() -> TokenStream {
+        quote! {
+            use ::verifier_common::field::baby_bear::base::BabyBearField;
+            use ::verifier_common::field::baby_bear::ext4::BabyBearExt4;
+        }
+    }
 }
 
 pub struct DefaultMersenne31Field;

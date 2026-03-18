@@ -4,10 +4,6 @@ use blake2s_u32::{
     AlignedArray64, DelegatedBlake2sState, BLAKE2S_BLOCK_SIZE_U32_WORDS,
     BLAKE2S_DIGEST_SIZE_U32_WORDS,
 };
-use cs::definitions::gkr_static_types::{
-    OutputType, StaticGKRLayerDescription, StaticNoFieldGKRRelation,
-    StaticNoFieldMaxQuadraticConstraintsGKRRelation,
-};
 use cs::definitions::GKRAddress;
 use field::{Field, FieldExtension, PrimeField};
 use non_determinism_source::NonDeterminismSource;
@@ -18,42 +14,13 @@ pub mod flatten;
 
 const DRAW_BUF_CAPACITY: usize = 64;
 
-#[derive(Clone, Copy, Debug)]
-pub struct GKROutputGroup {
-    pub output_type: OutputType,
-    pub num_addresses: usize,
-}
-
-#[derive(Clone, Debug)]
-pub struct GKRLayerMeta<'a> {
-    pub is_dim_reducing: usize, // 0 = standard (N=2), nonzero = dim-reducing (N=4)
-    pub num_sumcheck_rounds: usize,
-    pub output_groups: &'a [GKROutputGroup],
-    pub layer_desc: Option<&'a StaticGKRLayerDescription<'a>>,
-    pub sorted_dedup_input_addrs: &'a [GKRAddress],
-    /// For dim-reducing layers: mapping from iteration order (output_groups walk)
-    /// to sorted position in sorted_dedup_input_addrs.
-    /// Empty for standard layers.
-    pub input_sorted_indices: &'a [usize],
-}
-
-#[derive(Clone, Debug)]
-pub struct GKRVerifierConfig<'a> {
-    pub layers: &'a [GKRLayerMeta<'a>],
-    pub has_inits_teardowns: usize, // 0 = false, nonzero = true
-    pub initial_transcript_num_u32_words: usize,
-    pub final_trace_size_log_2: usize,
-    pub num_standard_layers: usize,
-    pub global_input_addrs: &'a [GKRAddress],
-}
-
 /// Mutable state threaded through each layer of the GKR sumcheck verification.
 #[derive(Clone, Debug)]
 pub struct LayerState<E: Field, const ROUNDS: usize, const ADDRS: usize> {
-    prev_point: [E; ROUNDS],
-    prev_point_len: usize,
-    prev_claims: LazyVec<E, ADDRS>,
-    batching_challenge: E,
+    pub prev_point: [E; ROUNDS],
+    pub prev_point_len: usize,
+    pub prev_claims: LazyVec<E, ADDRS>,
+    pub batching_challenge: E,
 }
 
 #[derive(Clone, Debug)]
@@ -65,7 +32,7 @@ pub struct LazyVec<V: Copy, const N: usize> {
 
 impl<V: Copy, const N: usize> LazyVec<V, N> {
     #[inline(always)]
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             data: [MaybeUninit::uninit(); N],
             len: 0,
@@ -73,7 +40,7 @@ impl<V: Copy, const N: usize> LazyVec<V, N> {
     }
 
     #[inline(always)]
-    fn push(&mut self, val: V) {
+    pub fn push(&mut self, val: V) {
         debug_assert!(self.len < N);
         unsafe {
             self.data.get_unchecked_mut(self.len).write(val);
@@ -82,18 +49,23 @@ impl<V: Copy, const N: usize> LazyVec<V, N> {
     }
 
     #[inline(always)]
-    fn get(&self, idx: usize) -> &V {
+    pub fn get(&self, idx: usize) -> &V {
         debug_assert!(idx < self.len);
         unsafe { self.data.get_unchecked(idx).assume_init_ref() }
     }
 
     #[inline(always)]
-    const fn as_slice(&self) -> &[V] {
+    pub fn as_slice(&self) -> &[V] {
         unsafe { core::slice::from_raw_parts(self.data.as_ptr().cast::<V>(), self.len) }
     }
 
     #[inline(always)]
-    const fn clear(&mut self) {
+    pub fn as_mut_slice(&mut self) -> &mut [V] {
+        unsafe { core::slice::from_raw_parts_mut(self.data.as_mut_ptr().cast::<V>(), self.len)}
+    }
+
+    #[inline(always)]
+    pub const fn clear(&mut self) {
         self.len = 0;
     }
 
@@ -103,28 +75,43 @@ impl<V: Copy, const N: usize> LazyVec<V, N> {
     }
 
     #[inline(always)]
-    pub const unsafe fn as_array(self) -> [V; N] {
+    pub unsafe fn get_unchecked(&self, idx: usize) -> &V {
+        self.data.get_unchecked(idx).assume_init_ref()
+    }
+
+    #[inline(always)]
+    pub unsafe fn set_unchecked(&mut self, idx: usize, val: V) {
+        self.data.get_unchecked_mut(idx).write(val);
+    }
+
+    #[inline(always)]
+    pub unsafe fn set_len(&mut self, new_len: usize) {
+        debug_assert!(new_len <= N);
+        self.len = new_len;
+    }
+
+    #[inline(always)]
+    pub unsafe fn into_array(self) -> [V; N] {
         MaybeUninit::array_assume_init(self.data)
     }
 }
 
 #[inline(always)]
-fn read_field_el<F: PrimeField, E: FieldExtension<F>, I: NonDeterminismSource>() -> E
+pub fn read_field_el<F: PrimeField, E: FieldExtension<F>, I: NonDeterminismSource>() -> E
 where
     [(); E::DEGREE]: Sized,
 {
     use field::FixedArrayConvertible;
-    let mut array = [F::ZERO; E::DEGREE];
-    for a in &mut array {
-        let value = I::read_word();
-        *a = F::from_reduced_raw_repr(value);
+    let mut words = LazyVec::<F, {E::DEGREE}>::new();
+    for _ in 0..E::DEGREE {
+        words.push(F::from_reduced_raw_repr(I::read_word()));
     }
-    let coeffs = E::Coeffs::from_array(array);
+    let coeffs = E::Coeffs::from_array(unsafe { words.into_array() });
     E::from_coeffs(coeffs)
 }
 
 #[inline(always)]
-fn read_field_els<F: PrimeField, E: FieldExtension<F>, I: NonDeterminismSource>(dst: &mut [E])
+pub fn read_field_els<F: PrimeField, E: FieldExtension<F>, I: NonDeterminismSource>(dst: &mut [E])
 where
     [(); E::DEGREE]: Sized,
 {
@@ -134,7 +121,7 @@ where
 }
 
 #[inline(always)]
-fn commit_field_els<F: PrimeField, E: FieldExtension<F>>(seed: &mut Seed, els: &[E])
+pub fn commit_field_els<F: PrimeField, E: FieldExtension<F>>(seed: &mut Seed, els: &[E])
 where
     [(); E::DEGREE]: Sized,
 {
@@ -148,54 +135,40 @@ where
 }
 
 #[inline(always)]
-fn draw_field_els_into<F: PrimeField, E: FieldExtension<F>>(
+pub fn draw_field_els_into<F: PrimeField, E: FieldExtension<F>>(
     hasher: &mut DelegatedBlake2sState,
     seed: &mut Seed,
     dst: &mut [E],
 ) where
     [(); E::DEGREE]: Sized,
 {
-    use field::FixedArrayConvertible;
     let n = dst.len();
     let padded = (n * E::DEGREE).next_multiple_of(BLAKE2S_DIGEST_SIZE_U32_WORDS);
     assert!(padded <= DRAW_BUF_CAPACITY, "draw buffer too small");
 
-    let mut words = [MaybeUninit::<u32>::uninit(); DRAW_BUF_CAPACITY];
-    let mut arr = [F::ZERO; E::DEGREE];
+    let mut words = LazyVec::<u32, DRAW_BUF_CAPACITY>::new();
+    let mut arr = LazyVec::<F, { E::DEGREE }>::new();
 
     unsafe {
-        let dst = core::slice::from_raw_parts_mut(words.as_mut_ptr().cast::<u32>(), padded);
-        Blake2sTranscript::draw_randomness_using_hasher(hasher, seed, dst);
+        words.set_len(padded);
+        Blake2sTranscript::draw_randomness_using_hasher(hasher, seed, words.as_mut_slice());
     }
 
-    for (i, chunk) in words[..n * E::DEGREE]
+    for (i, chunk) in words.as_slice()[..n * E::DEGREE]
         .chunks_exact(E::DEGREE)
-        .map(|chunk| unsafe { chunk.assume_init_ref() })
         .enumerate()
     {
-        for (j, &w) in chunk.iter().enumerate() {
-            arr[j] = F::from_u32_with_reduction(w);
+        for &w in chunk {
+            arr.push(F::from_u32_with_reduction(w));
         }
-        let fixed = E::Coeffs::from_array(arr);
-        dst[i] = E::from_coeffs(fixed);
+        
+        dst[i] = E::from_coeffs_ref(unsafe { arr.as_slice().as_ptr().cast::<E::Coeffs>().as_ref_unchecked() });
+        arr.clear();
     }
 }
 
 #[inline(always)]
-fn draw_one_field_el<F: PrimeField, E: FieldExtension<F> + Field>(
-    hasher: &mut DelegatedBlake2sState,
-    seed: &mut Seed,
-) -> E
-where
-    [(); E::DEGREE]: Sized,
-{
-    let mut dst = [E::ZERO; 1];
-    draw_field_els_into::<F, E>(hasher, seed, &mut dst);
-    dst[0]
-}
-
-#[inline(always)]
-fn read_eval_data_from_nds<I: NonDeterminismSource, const BUF: usize>(
+pub fn read_eval_data_from_nds<I: NonDeterminismSource, const BUF: usize>(
     buf: &mut AlignedArray64<MaybeUninit<u32>, BUF>,
     data_words: usize,
 ) {
@@ -208,7 +181,7 @@ fn read_eval_data_from_nds<I: NonDeterminismSource, const BUF: usize>(
 }
 
 #[inline(always)]
-fn commit_eval_buffer<const BUF: usize>(
+pub fn commit_eval_buffer<const BUF: usize>(
     buf: &mut AlignedArray64<MaybeUninit<u32>, BUF>,
     hasher: &mut DelegatedBlake2sState,
     seed: &mut Seed,
@@ -232,392 +205,26 @@ pub enum GKRVerificationError {
 }
 
 #[inline(always)]
-fn dot_eq<E: Field>(values: &[E], eq: &[E]) -> E {
-    assert_eq!(values.len(), eq.len());
+pub fn dot_eq<E: Field, const N: usize>(values: &[E; N], eq: &[E; N]) -> E {
     let mut result = E::ZERO;
-    for (v, e) in values.iter().zip(eq.iter()) {
-        let mut t = *v;
-        t.mul_assign(e);
+    for i in 0..N {
+        let mut t = unsafe { *values.get_unchecked(i) };
+        t.mul_assign(unsafe { eq.get_unchecked(i) });
         result.add_assign(&t);
     }
     result
 }
 
 #[inline(always)]
-fn eval_constraint_kernel<F: PrimeField, E: FieldExtension<F> + Field, const MAX_POW: usize>(
-    rel: &StaticNoFieldMaxQuadraticConstraintsGKRRelation,
-    challenge_powers: &[E; MAX_POW],
-    evals: &[[E; 2]],
-    j: usize,
-) -> E {
-    let get_value_at = |idx: usize| unsafe { &evals.get_unchecked(idx)[j] };
-
-    let mut result = E::ZERO;
-
-    let get_pow = |pow: usize| unsafe { *challenge_powers.get_unchecked(pow) };
-
-    // Coefficients are pre-converted to Montgomery form by the code generator,
-    // so we use from_reduced_raw_repr
-    for &(coeff, pow) in rel.constants {
-        let mut t = get_pow(pow);
-        let c = F::from_reduced_raw_repr(coeff);
-        t.mul_assign_by_base(&c);
-        result.add_assign(&t);
-    }
-
-    for (idx, terms) in rel.linear_terms {
-        let val = get_value_at(*idx);
-        for &(coeff, pow) in *terms {
-            let mut t = get_pow(pow);
-            let c = F::from_reduced_raw_repr(coeff);
-            t.mul_assign_by_base(&c);
-            t.mul_assign(val);
-            result.add_assign(&t);
-        }
-    }
-
-    for ((idx_a, idx_b), terms) in rel.quadratic_terms {
-        let va = get_value_at(*idx_a);
-        let vb = get_value_at(*idx_b);
-        let mut prod = *va;
-        prod.mul_assign(vb);
-        for &(coeff, pow) in *terms {
-            let mut t = get_pow(pow);
-            let c = F::from_reduced_raw_repr(coeff);
-            t.mul_assign_by_base(&c);
-            t.mul_assign(&prod);
-            result.add_assign(&t);
-        }
-    }
-
-    result
-}
-
-#[inline(always)]
-fn compute_standard_final_step_accumulator<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    const MAX_POW: usize,
->(
-    layer: &StaticGKRLayerDescription,
-    final_step_evaluations: &[[E; 2]],
-    batching_challenge: E,
-    lookup_additive_challenge: E,
-    constraints_batch_challenge: E,
-) -> [E; 2]
-where
-    [(); E::DEGREE]: Sized,
-{
-    use StaticNoFieldGKRRelation as Rel;
-
-    let mut acc = [E::ZERO; 2];
-    let mut current_batch = E::ONE;
-    let batch_base = batching_challenge;
-
-    let mut challenge_powers = [E::ZERO; MAX_POW];
-    challenge_powers[0] = E::ONE;
-    challenge_powers.iter_mut().reduce(|prev, cur| {
-        *cur = *prev;
-        cur.mul_assign(&constraints_batch_challenge);
-        cur
-    });
-
-    let relations = layer
-        .gates
-        .iter()
-        .chain(layer.gates_with_external_connections)
-        .map(|g| &g.enforced_relation);
-
-    for relation in relations {
-        let mut get_challenge = || {
-            let c = current_batch;
-            current_batch.mul_assign(&batch_base);
-            c
-        };
-
-        match relation {
-            Rel::EnforceConstraintsMaxQuadratic { input } => {
-                let bc = get_challenge();
-                for (j, acc_j) in acc.iter_mut().enumerate() {
-                    let val = eval_constraint_kernel::<F, E, MAX_POW>(
-                        input,
-                        &challenge_powers,
-                        final_step_evaluations,
-                        j,
-                    );
-                    let mut contrib = bc;
-                    contrib.mul_assign(&val);
-                    acc_j.add_assign(&contrib);
-                }
-            }
-            Rel::Copy { .. }
-            | Rel::InitialGrandProductFromCaches { .. }
-            | Rel::TrivialProduct { .. }
-            | Rel::MaskIntoIdentityProduct { .. } => {
-                let bc = get_challenge();
-                for (j, acc_j) in acc.iter_mut().enumerate() {
-                    let val = eval_single_output_relation::<F, E>(
-                        relation,
-                        final_step_evaluations,
-                        lookup_additive_challenge,
-                        j,
-                    );
-                    let mut contrib = bc;
-                    contrib.mul_assign(&val);
-                    acc_j.add_assign(&contrib);
-                }
-            }
-            Rel::LookupPair { .. }
-            | Rel::LookupPairFromMaterializedBaseInputs { .. }
-            | Rel::LookupFromMaterializedBaseInputWithSetup { .. }
-            | Rel::LookupUnbalancedPairWithMaterializedBaseInputs { .. }
-            | Rel::LookupWithCachedDensAndSetup { .. } => {
-                let bc0 = get_challenge();
-                let bc1 = get_challenge();
-                for (j, acc_j) in acc.iter_mut().enumerate() {
-                    let [out0, out1] = eval_two_output_relation::<F, E>(
-                        relation,
-                        final_step_evaluations,
-                        lookup_additive_challenge,
-                        j,
-                    );
-                    let mut c0 = bc0;
-                    c0.mul_assign(&out0);
-                    let mut c1 = bc1;
-                    c1.mul_assign(&out1);
-                    acc_j.add_assign(&c0);
-                    acc_j.add_assign(&c1);
-                }
-            }
-            Rel::UnbalancedGrandProductWithCache { .. }
-            | Rel::MaterializeSingleLookupInput { .. }
-            | Rel::MaterializedVectorLookupInput { .. }
-            | Rel::LookupPairFromBaseInputs { .. }
-            | Rel::LookupUnbalancedPairWithBaseInputs { .. }
-            | Rel::LookupFromBaseInputsWithSetup { .. }
-            | Rel::LookupPairFromVectorInputs { .. } => {
-                panic!("unimplemented relation variant in final step check");
-            }
-        }
-    }
-
-    acc
-}
-
-#[inline(always)]
-fn eval_single_output_relation<F: PrimeField, E: FieldExtension<F> + Field>(
-    relation: &StaticNoFieldGKRRelation,
-    evals: &[[E; 2]],
-    _lookup_additive_challenge: E,
-    j: usize,
-) -> E {
-    use StaticNoFieldGKRRelation as Rel;
-    let get = |idx: usize| unsafe { &evals.get_unchecked(idx)[j] };
-
-    match relation {
-        Rel::Copy { input, .. } => *get(*input),
-        Rel::InitialGrandProductFromCaches { input, .. } | Rel::TrivialProduct { input, .. } => {
-            let mut v = *get(input[0]);
-            v.mul_assign(get(input[1]));
-            v
-        }
-        Rel::MaskIntoIdentityProduct { input, mask, .. } => {
-            let input_val = get(*input);
-            let mask_val = get(*mask);
-            let mut out = *input_val;
-            out.sub_assign_base(&F::ONE);
-            out.mul_assign(mask_val);
-            out.add_assign_base(&F::ONE);
-            out
-        }
-        _ => unreachable!("eval_single_output_relation called with non-single-output relation"),
-    }
-}
-
-#[inline(always)]
-fn eval_two_output_relation<F: PrimeField, E: FieldExtension<F> + Field>(
-    relation: &StaticNoFieldGKRRelation,
-    evals: &[[E; 2]],
-    lookup_additive_challenge: E,
-    j: usize,
-) -> [E; 2] {
-    use StaticNoFieldGKRRelation as Rel;
-    let get = |idx: usize| unsafe { &evals.get_unchecked(idx)[j] };
-    let gamma = lookup_additive_challenge;
-
-    match relation {
-        Rel::LookupPair { input, .. } => {
-            let a = get(input[0][0]);
-            let b = get(input[0][1]);
-            let c = get(input[1][0]);
-            let d = get(input[1][1]);
-            let mut num = *a;
-            num.mul_assign(d);
-            let mut cb = *c;
-            cb.mul_assign(b);
-            num.add_assign(&cb);
-            let mut den = *b;
-            den.mul_assign(d);
-            [num, den]
-        }
-        Rel::LookupPairFromMaterializedBaseInputs { input, .. } => {
-            let mut b_g = *get(input[0]);
-            b_g.add_assign(&gamma);
-            let mut d_g = *get(input[1]);
-            d_g.add_assign(&gamma);
-            let mut num = b_g;
-            num.add_assign(&d_g);
-            let mut den = b_g;
-            den.mul_assign(&d_g);
-            [num, den]
-        }
-        Rel::LookupFromMaterializedBaseInputWithSetup { input, setup, .. } => {
-            let mut b_g = *get(*input);
-            b_g.add_assign(&gamma);
-            let mut d_g = *get(setup[1]);
-            d_g.add_assign(&gamma);
-            let mut cb_g = *get(setup[0]);
-            cb_g.mul_assign(&b_g);
-            let mut num = d_g;
-            num.sub_assign(&cb_g);
-            let mut den = b_g;
-            den.mul_assign(&d_g);
-            [num, den]
-        }
-        Rel::LookupUnbalancedPairWithMaterializedBaseInputs {
-            input, remainder, ..
-        } => {
-            let a = get(input[0]);
-            let b = get(input[1]);
-            let mut d_g = *get(*remainder);
-            d_g.add_assign(&gamma);
-            let mut num = *a;
-            num.mul_assign(&d_g);
-            num.add_assign(b);
-            let mut den = *b;
-            den.mul_assign(&d_g);
-            [num, den]
-        }
-        Rel::LookupWithCachedDensAndSetup { input, setup, .. } => {
-            let a = get(input[0]);
-            let b = get(input[1]);
-            let c = get(setup[0]);
-            let d = get(setup[1]);
-            let mut ad = *a;
-            ad.mul_assign(d);
-            let mut cb = *c;
-            cb.mul_assign(b);
-            ad.sub_assign(&cb);
-            let mut den = *b;
-            den.mul_assign(d);
-            [ad, den]
-        }
-        _ => unreachable!("eval_two_output_relation called with non-two-output relation"),
-    }
-}
-
-#[inline(always)]
-fn compute_dim_reducing_final_step_accumulator<F: PrimeField, E: FieldExtension<F> + Field>(
-    output_groups: &[GKROutputGroup],
-    input_sorted_indices: &[usize],
-    final_step_evaluations: &[[E; 4]],
-    batching_challenge: E,
-) -> [E; 2]
-where
-    [(); E::DEGREE]: Sized,
-{
-    let mut acc = [E::ZERO; 2];
-    let mut current_batch = E::ONE;
-    let batch_base = batching_challenge;
-
-    let mut get_challenge = || {
-        let c = current_batch;
-        current_batch.mul_assign(&batch_base);
-        c
-    };
-
-    let mut iter_idx = 0;
-    for group in output_groups {
-        match group.output_type {
-            OutputType::PermutationProduct => {
-                for _ in 0..group.num_addresses {
-                    debug_assert!(iter_idx < input_sorted_indices.len());
-                    let sorted_idx = unsafe { *input_sorted_indices.get_unchecked(iter_idx) };
-                    iter_idx += 1;
-                    let bc = get_challenge();
-                    let evals = unsafe { final_step_evaluations.get_unchecked(sorted_idx) };
-                    unsafe {
-                        let mut v01 = *evals.get_unchecked(0);
-                        v01.mul_assign(evals.get_unchecked(1));
-                        let mut c0 = bc;
-                        c0.mul_assign(&v01);
-                        acc[0].add_assign(&c0);
-                        let mut v23 = *evals.get_unchecked(2);
-                        v23.mul_assign(evals.get_unchecked(3));
-                        let mut c1 = bc;
-                        c1.mul_assign(&v23);
-                        acc[1].add_assign(&c1);
-                    }
-                }
-            }
-            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
-                let bc0 = get_challenge();
-                let bc1 = get_challenge();
-                debug_assert!(iter_idx + 1 < input_sorted_indices.len());
-                let si0 = unsafe { *input_sorted_indices.get_unchecked(iter_idx) };
-                let si1 = unsafe { *input_sorted_indices.get_unchecked(iter_idx + 1) };
-                iter_idx += 2;
-                let v0 = unsafe { final_step_evaluations.get_unchecked(si0) };
-                let v1 = unsafe { final_step_evaluations.get_unchecked(si1) };
-                unsafe {
-                    // j=0
-                    let mut num0 = *v0.get_unchecked(0);
-                    num0.mul_assign(v1.get_unchecked(1));
-                    let mut cb0 = *v0.get_unchecked(1);
-                    cb0.mul_assign(v1.get_unchecked(0));
-                    num0.add_assign(&cb0);
-                    let mut den0 = *v1.get_unchecked(0);
-                    den0.mul_assign(v1.get_unchecked(1));
-                    let mut c00 = bc0;
-                    c00.mul_assign(&num0);
-                    let mut c01 = bc1;
-                    c01.mul_assign(&den0);
-                    acc[0].add_assign(&c00);
-                    acc[0].add_assign(&c01);
-                    // j=1
-                    let mut num1 = *v0.get_unchecked(2);
-                    num1.mul_assign(v1.get_unchecked(3));
-                    let mut cb1 = *v0.get_unchecked(3);
-                    cb1.mul_assign(v1.get_unchecked(2));
-                    num1.add_assign(&cb1);
-                    let mut den1 = *v1.get_unchecked(2);
-                    den1.mul_assign(v1.get_unchecked(3));
-                    let mut c10 = bc0;
-                    c10.mul_assign(&num1);
-                    let mut c11 = bc1;
-                    c11.mul_assign(&den1);
-                    acc[1].add_assign(&c10);
-                    acc[1].add_assign(&c11);
-                }
-            }
-        }
-    }
-
-    acc
-}
-
-#[inline(always)]
-fn make_eq_poly_last<E: Field>(challenges: &[E], buf: &mut [E]) {
-    assert!(!challenges.is_empty());
-    let n = challenges.len();
-    assert!(buf.len() >= 1 << n);
-
-    buf[0] = E::ONE;
+pub fn make_eq_poly_last<E: Field + Copy, const N: usize>(
+    challenges: &[E; N],
+    buf: &mut LazyVec<E, {1 << N}>,
+) {
+    unsafe { buf.set_unchecked(0, E::ONE) };
     let mut size = 1usize;
-    let mut idx = n;
-    for _ in 0..n {
+    let mut idx = N;
+    for _ in 0..N {
         idx -= 1;
-        debug_assert!(idx < challenges.len());
         let c = unsafe { *challenges.get_unchecked(idx) };
         let f1 = c;
         let mut f0 = E::ONE;
@@ -625,145 +232,19 @@ fn make_eq_poly_last<E: Field>(challenges: &[E], buf: &mut [E]) {
         let half = size;
 
         for i in (0..half).rev() {
-            debug_assert!(i < buf.len());
-            debug_assert!(i + half < buf.len());
             let prev = unsafe { *buf.get_unchecked(i) };
             let mut left = prev;
             let mut right = prev;
             left.mul_assign(&f0);
             right.mul_assign(&f1);
             unsafe {
-                *buf.get_unchecked_mut(i) = left;
-                *buf.get_unchecked_mut(i + half) = right;
+                buf.set_unchecked(i, left);
+                buf.set_unchecked(i + half, right);
             }
         }
         size *= 2;
     }
-}
-
-#[inline(always)]
-fn compute_standard_layer_claim<F: PrimeField, E: FieldExtension<F> + Field, const ADDRS: usize>(
-    layer: &StaticGKRLayerDescription,
-    output_claims: &LazyVec<E, ADDRS>,
-    batching_challenge: E,
-) -> E {
-    let gates = layer
-        .gates
-        .iter()
-        .chain(layer.gates_with_external_connections)
-        .map(|g| &g.enforced_relation);
-
-    let mut combined = E::ZERO;
-    let mut current_batch = E::ONE;
-    let batch_base = batching_challenge;
-
-    for relation in gates {
-        let mut get_challenge = || {
-            let c = current_batch;
-            current_batch.mul_assign(&batch_base);
-            c
-        };
-        add_relation_claim(relation, output_claims, &mut get_challenge, &mut combined);
-    }
-    combined
-}
-
-#[inline(always)]
-fn add_relation_claim<F: PrimeField, E: FieldExtension<F> + Field, const ADDRS: usize>(
-    relation: &StaticNoFieldGKRRelation,
-    output_claims: &LazyVec<E, ADDRS>,
-    get_challenge: &mut impl FnMut() -> E,
-    combined: &mut E,
-) {
-    use StaticNoFieldGKRRelation as Rel;
-    match relation {
-        Rel::EnforceConstraintsMaxQuadratic { .. } => {
-            let _ = get_challenge();
-        }
-        Rel::Copy { output, .. }
-        | Rel::InitialGrandProductFromCaches { output, .. }
-        | Rel::TrivialProduct { output, .. }
-        | Rel::MaskIntoIdentityProduct { output, .. }
-        | Rel::UnbalancedGrandProductWithCache { output, .. }
-        | Rel::MaterializeSingleLookupInput { output, .. }
-        | Rel::MaterializedVectorLookupInput { output, .. } => {
-            let bc = get_challenge();
-            let claim = output_claims.get(*output);
-            let mut t = bc;
-            t.mul_assign(claim);
-            combined.add_assign(&t);
-        }
-        Rel::LookupPair { output, .. }
-        | Rel::LookupPairFromBaseInputs { output, .. }
-        | Rel::LookupPairFromMaterializedBaseInputs { output, .. }
-        | Rel::LookupUnbalancedPairWithBaseInputs { output, .. }
-        | Rel::LookupUnbalancedPairWithMaterializedBaseInputs { output, .. }
-        | Rel::LookupFromBaseInputsWithSetup { output, .. }
-        | Rel::LookupFromMaterializedBaseInputWithSetup { output, .. }
-        | Rel::LookupPairFromVectorInputs { output, .. }
-        | Rel::LookupWithCachedDensAndSetup { output, .. } => {
-            let bc0 = get_challenge();
-            let bc1 = get_challenge();
-            for (bc, idx) in [(bc0, output[0]), (bc1, output[1])] {
-                let claim = output_claims.get(idx);
-                let mut t = bc;
-                t.mul_assign(claim);
-                combined.add_assign(&t);
-            }
-        }
-    }
-}
-
-#[inline(always)]
-fn compute_dim_reducing_layer_claim<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    const ADDRS: usize,
->(
-    output_groups: &[GKROutputGroup],
-    output_claims: &LazyVec<E, ADDRS>,
-    batching_challenge: E,
-) -> E {
-    let mut combined = E::ZERO;
-    let mut current_batch = E::ONE;
-    let batch_base = batching_challenge;
-
-    let mut get_challenge = || {
-        let c = current_batch;
-        current_batch.mul_assign(&batch_base);
-        c
-    };
-
-    // For dim-reducing layers, output addresses are sequential InnerLayer addresses.
-    // They are already in sorted order matching output_groups iteration,
-    // so output index = iteration index.
-    let mut out_idx = 0;
-    for group in output_groups {
-        match group.output_type {
-            OutputType::PermutationProduct => {
-                for _ in 0..group.num_addresses {
-                    let bc = get_challenge();
-                    let claim = output_claims.get(out_idx);
-                    out_idx += 1;
-                    let mut t = bc;
-                    t.mul_assign(claim);
-                    combined.add_assign(&t);
-                }
-            }
-            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
-                let bc0 = get_challenge();
-                let bc1 = get_challenge();
-                for bc in [bc0, bc1] {
-                    let claim = output_claims.get(out_idx);
-                    out_idx += 1;
-                    let mut t = bc;
-                    t.mul_assign(claim);
-                    combined.add_assign(&t);
-                }
-            }
-        }
-    }
-    combined
+    unsafe { buf.set_len(1 << N) };
 }
 
 pub struct GKRVerifierOutput<'a, E: Field, const ROUNDS: usize, const ADDRS: usize> {
@@ -779,43 +260,36 @@ pub struct GKRVerifierOutput<'a, E: Field, const ROUNDS: usize, const ADDRS: usi
     pub whir_transcript_seed: Seed,
 }
 
-/// Run the regular sumcheck rounds (all rounds except the final step).
-/// Returns (final_claim, final_eq_prefactor, folding_challenges, fc_len).
+/// Run the regular sumcheck rounds (all rounds except the final step)
 #[inline(always)]
-fn verify_sumcheck_rounds<
+pub fn verify_sumcheck_rounds<
     F: PrimeField,
     E: FieldExtension<F> + Field,
     I: NonDeterminismSource,
-    const ROUNDS: usize,
+    const NUM_ROUNDS: usize,
+    const COMMIT_BUF: usize,
 >(
     seed: &mut Seed,
     initial_claim: E,
-    prev_point: &[E],
+    challenges: &mut [E],
     layer_idx: usize,
-) -> Result<(E, E, [E; ROUNDS], usize), GKRVerificationError>
+) -> Result<(E, E), GKRVerificationError>
 where
     [(); E::DEGREE]: Sized,
 {
-    let num_regular_rounds = prev_point.len();
     let mut claim = initial_claim;
     let mut eq_prefactor = E::ONE;
-    let mut folding_challenges: LazyVec<E, ROUNDS> = LazyVec::new();
 
-    // Sumcheck coefficients: 4 ext field elements = 4 * E::DEGREE u32 words.
-    // With seed (8 words), total = 8 + 4*DEGREE words.
-    // For BabyBearExt4 (DEGREE=4): 24 words = 2 blocks of 16.
     let coeff_data_words = 4 * E::DEGREE;
     let total_commit_words = BLAKE2S_DIGEST_SIZE_U32_WORDS + coeff_data_words;
 
-    let mut commit_buf: AlignedArray64<u32, 32> = AlignedArray64::from_value(0u32);
+    let mut commit_buf: AlignedArray64<u32, COMMIT_BUF> = AlignedArray64::from_value(0u32);
     let mut hasher = DelegatedBlake2sState::new();
+    let mut draw_buf = [0u32; BLAKE2S_DIGEST_SIZE_U32_WORDS];
 
-    for round in 0..num_regular_rounds {
+    for round in 0..NUM_ROUNDS {
         commit_buf[0..BLAKE2S_DIGEST_SIZE_U32_WORDS].copy_from_slice(&seed.0);
 
-        // Read NDS words directly into the data region of the aligned buffer.
-        // The words are Montgomery-form field elements, so the buffer can be
-        // reinterpreted as &[E; 4] without conversion.
         for i in 0..coeff_data_words {
             commit_buf[BLAKE2S_DIGEST_SIZE_U32_WORDS + i] = I::read_word();
         }
@@ -846,9 +320,18 @@ where
             &commit_buf,
             total_commit_words,
         );
-        let r_k = draw_one_field_el::<F, E>(&mut hasher, seed);
 
-        // Fused eval_cubic_poly + eval_eq to share r_k in registers
+        Blake2sTranscript::draw_randomness_using_hasher(&mut hasher, seed, &mut draw_buf);
+        let r_k = {
+            let mut arr = LazyVec::<F, {E::DEGREE}>::new();
+            [F::ZERO; E::DEGREE];
+            for i in 0..E::DEGREE {
+                let w = draw_buf[i];
+                arr.push(F::from_u32_with_reduction(w));
+            }
+            E::from_coeffs_ref(unsafe { arr.as_slice().as_ptr().cast::<E::Coeffs>().as_ref_unchecked() })
+        };
+
         {
             let mut result = coeffs[3];
             result.mul_assign(&r_k);
@@ -860,8 +343,7 @@ where
             claim = result;
         }
         {
-            debug_assert!(round < prev_point.len());
-            let p = unsafe { *prev_point.get_unchecked(round) };
+            let p = unsafe { *challenges.get_unchecked(round) };
             let mut one_minus_r = E::ONE;
             one_minus_r.sub_assign(&r_k);
             let mut one_minus_p = E::ONE;
@@ -874,22 +356,15 @@ where
             eq_prefactor = t;
         }
 
-        folding_challenges.push(r_k);
+        unsafe { *challenges.get_unchecked_mut(round) = r_k };
     }
 
-    let fc_len = folding_challenges.len();
-
-    for _ in num_regular_rounds..ROUNDS {
-        folding_challenges.push(E::ZERO);
-    }
-    let folding_challenges = unsafe { folding_challenges.as_array() };
-
-    Ok((claim, eq_prefactor, folding_challenges, fc_len))
+    Ok((claim, eq_prefactor))
 }
 
 /// Verify the final step consistency: ((1 - last_prev) * f[0] + last_prev * f[1]) * eq_prefactor == claim.
 #[inline(always)]
-fn verify_final_step_check<F: PrimeField, E: FieldExtension<F> + Field>(
+pub fn verify_final_step_check<F: PrimeField, E: FieldExtension<F> + Field>(
     f: [E; 2],
     last_prev_point: E,
     final_eq_prefactor: E,
@@ -910,194 +385,23 @@ fn verify_final_step_check<F: PrimeField, E: FieldExtension<F> + Field>(
     Ok(())
 }
 
-/// Read top-layer polynomial evaluations from NDS and build initial claims.
-#[inline(always)]
-fn build_initial_claims<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    I: NonDeterminismSource,
-    const ROUNDS: usize,
-    const ADDRS: usize,
-    const EVALS: usize,
->(
-    config: &GKRVerifierConfig,
-    top_layer_meta: &GKRLayerMeta,
-    seed: &mut Seed,
-    hasher: &mut DelegatedBlake2sState,
-) -> LayerState<E, ROUNDS, ADDRS>
-where
-    [(); E::DEGREE]: Sized,
-    [(); ROUNDS + 1]: Sized,
-{
-    let mut total_output_polys = 0usize;
-    for group in top_layer_meta.output_groups {
-        total_output_polys += group.num_addresses;
-    }
-
-    let evals_per_poly = 1usize << config.final_trace_size_log_2;
-    let total_evals = total_output_polys * evals_per_poly;
-    assert!(total_evals <= EVALS);
-
-    let mut evals_flat = [MaybeUninit::<E>::uninit(); EVALS];
-    read_field_els::<F, E, I>(unsafe {
-        core::slice::from_raw_parts_mut(evals_flat.as_mut_ptr().cast(), total_evals)
-    });
-    let evals_slice =
-        unsafe { core::slice::from_raw_parts(evals_flat.as_ptr().cast(), total_evals) };
-    commit_field_els::<F, E>(seed, evals_slice);
-
-    let num_challenges = config.final_trace_size_log_2 + 1;
-    let mut all_challenges = [E::ZERO; ROUNDS + 1];
-    draw_field_els_into::<F, E>(hasher, seed, &mut all_challenges[..num_challenges]);
-    let batching_challenge = all_challenges[num_challenges - 1];
-    let evaluation_point_len = config.final_trace_size_log_2;
-
-    let mut eq_buf = [E::ZERO; 64]; // max 2^6 = 64 entries
-    assert!(evals_per_poly <= 64);
-    make_eq_poly_last(&all_challenges[..evaluation_point_len], &mut eq_buf);
-
-    let mut prev_claims: LazyVec<E, ADDRS> = LazyVec::new();
-    let mut eval_offset = 0usize;
-    for group in top_layer_meta.output_groups {
-        let count = match group.output_type {
-            OutputType::PermutationProduct => group.num_addresses,
-            OutputType::Lookup16Bits | OutputType::LookupTimestamps | OutputType::GenericLookup => {
-                2
-            }
-        };
-        for _ in 0..count {
-            let claim = dot_eq(
-                &evals_slice[eval_offset..eval_offset + evals_per_poly],
-                &eq_buf[..evals_per_poly],
-            );
-            prev_claims.push(claim);
-            eval_offset += evals_per_poly;
-        }
-    }
-
-    let mut prev_point = [E::ZERO; ROUNDS];
-    prev_point[..evaluation_point_len].copy_from_slice(&all_challenges[..evaluation_point_len]);
-
-    LayerState {
-        prev_point,
-        prev_point_len: evaluation_point_len,
-        prev_claims,
-        batching_challenge,
-    }
-}
-
-/// Verify a single dim-reducing layer and update the state for the next layer.
-#[inline(always)]
-fn verify_dim_reducing_layer<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    I: NonDeterminismSource,
-    const ROUNDS: usize,
-    const ADDRS: usize,
-    const EVAL_BUF: usize,
->(
-    layer_meta: &GKRLayerMeta,
-    layer_idx: usize,
-    state: &mut LayerState<E, ROUNDS, ADDRS>,
-    seed: &mut Seed,
-    hasher: &mut DelegatedBlake2sState,
-) -> Result<(), GKRVerificationError>
-where
-    [(); E::DEGREE]: Sized,
-    [(); ROUNDS + 1]: Sized,
-{
-    let initial_claim = compute_dim_reducing_layer_claim::<F, E, ADDRS>(
-        layer_meta.output_groups,
-        &state.prev_claims,
-        state.batching_challenge,
-    );
-
-    let num_regular_rounds = layer_meta.num_sumcheck_rounds - 1;
-    let (final_claim, final_eq_prefactor, mut folding_challenges, mut fc_len) =
-        verify_sumcheck_rounds::<F, E, I, ROUNDS>(
-            seed,
-            initial_claim,
-            &state.prev_point[..num_regular_rounds],
-            layer_idx,
-        )?;
-
-    let num_input_addrs = layer_meta.sorted_dedup_input_addrs.len();
-    let data_words = num_input_addrs * 4 * E::DEGREE;
-    let mut eval_buf = AlignedArray64::<u32, EVAL_BUF>::new_uninit();
-    read_eval_data_from_nds::<I, EVAL_BUF>(&mut eval_buf, data_words);
-
-    // Verify final step consistency
-    {
-        let final_step_evals: &[[E; 4]] =
-            unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_input_addrs) };
-        let f = compute_dim_reducing_final_step_accumulator::<F, E>(
-            layer_meta.output_groups,
-            layer_meta.input_sorted_indices,
-            final_step_evals,
-            state.batching_challenge,
-        );
-        debug_assert!(1 <= state.prev_point_len);
-        debug_assert!(state.prev_point_len <= state.prev_point.len());
-        verify_final_step_check::<F, E>(
-            f,
-            unsafe { *state.prev_point.get_unchecked(state.prev_point_len - 1) },
-            final_eq_prefactor,
-            final_claim,
-            layer_idx,
-        )?;
-    }
-
-    commit_eval_buffer(&mut eval_buf, hasher, seed, data_words);
-
-    let mut draw_buf = [E::ZERO; 3];
-    draw_field_els_into::<F, E>(hasher, seed, &mut draw_buf);
-    let r_before_last = draw_buf[0];
-    let r_last = draw_buf[1];
-    let next_batching = draw_buf[2];
-
-    debug_assert!(fc_len + 1 < folding_challenges.len());
-    unsafe {
-        *folding_challenges.get_unchecked_mut(fc_len) = r_before_last;
-        fc_len += 1;
-        *folding_challenges.get_unchecked_mut(fc_len) = r_last;
-        fc_len += 1;
-    }
-
-    // Compute new claims via eq-poly dot product
-    let mut eq4 = [E::ZERO; 4];
-    make_eq_poly_last(&[r_before_last, r_last], &mut eq4);
-    let final_step_evals: &[[E; 4]] =
-        unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_input_addrs) };
-    state.prev_claims.clear();
-    for i in 0..num_input_addrs {
-        let evals = unsafe { final_step_evals.get_unchecked(i) };
-        let claim = dot_eq(evals, &eq4);
-        state.prev_claims.push(claim);
-    }
-
-    state.batching_challenge = next_batching;
-    state.prev_point = folding_challenges;
-    state.prev_point_len = fc_len;
-    Ok(())
-}
-
 /// Compute new claims for a standard layer via linear interpolation.
 #[inline(always)]
-fn fold_standard_claims<
+pub fn fold_standard_claims<
     F: PrimeField,
     E: FieldExtension<F> + Field,
+    const NUM_ADDRS: usize,
     const ADDRS: usize,
     const BUF: usize,
 >(
     eval_buf: &AlignedArray64<MaybeUninit<u32>, BUF>,
-    num_dedup_addrs: usize,
     last_r: E,
     claims: &mut LazyVec<E, ADDRS>,
 ) {
     let final_step_evals: &[[E; 2]] =
-        unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_dedup_addrs) };
+        unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, NUM_ADDRS) };
     claims.clear();
-    for i in 0..num_dedup_addrs {
+    for i in 0..NUM_ADDRS {
         let evals = unsafe { final_step_evals.get_unchecked(i) };
         let f0 = evals[0];
         let f1 = evals[1];
@@ -1107,197 +411,4 @@ fn fold_standard_claims<
         diff.add_assign(&f0);
         claims.push(diff);
     }
-}
-
-/// Verify a single standard layer and update the state for the next layer.
-#[inline(always)]
-fn verify_standard_layer<
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    I: NonDeterminismSource,
-    const ROUNDS: usize,
-    const ADDRS: usize,
-    const MAX_POW: usize,
-    const EVAL_BUF: usize,
->(
-    layer_meta: &GKRLayerMeta,
-    layer_idx: usize,
-    state: &mut LayerState<E, ROUNDS, ADDRS>,
-    seed: &mut Seed,
-    hasher: &mut DelegatedBlake2sState,
-    lookup_additive_challenge: E,
-    constraints_batch_challenge: E,
-) -> Result<(), GKRVerificationError>
-where
-    [(); E::DEGREE]: Sized,
-    [(); ROUNDS + 1]: Sized,
-{
-    let layer_desc = layer_meta
-        .layer_desc
-        .expect("standard layer must have layer_desc");
-
-    let initial_claim = compute_standard_layer_claim::<F, E, ADDRS>(
-        layer_desc,
-        &state.prev_claims,
-        state.batching_challenge,
-    );
-
-    let num_regular_rounds = layer_meta.num_sumcheck_rounds - 1;
-    let (final_claim, final_eq_prefactor, mut folding_challenges, mut fc_len) =
-        verify_sumcheck_rounds::<F, E, I, ROUNDS>(
-            seed,
-            initial_claim,
-            &state.prev_point[..num_regular_rounds],
-            layer_idx,
-        )?;
-
-    let num_dedup_addrs = layer_meta.sorted_dedup_input_addrs.len();
-    let data_words = num_dedup_addrs * 2 * E::DEGREE;
-    let mut eval_buf = AlignedArray64::<u32, EVAL_BUF>::new_uninit();
-    read_eval_data_from_nds::<I, EVAL_BUF>(&mut eval_buf, data_words);
-
-    // Verify final step consistency
-    {
-        let final_step_evals: &[[E; 2]] =
-            unsafe { eval_buf.transmute_subslice(BLAKE2S_DIGEST_SIZE_U32_WORDS, num_dedup_addrs) };
-        let f = compute_standard_final_step_accumulator::<F, E, MAX_POW>(
-            layer_desc,
-            final_step_evals,
-            state.batching_challenge,
-            lookup_additive_challenge,
-            constraints_batch_challenge,
-        );
-        debug_assert!(1 <= state.prev_point_len);
-        debug_assert!(state.prev_point_len <= state.prev_point.len());
-        verify_final_step_check::<F, E>(
-            f,
-            unsafe { *state.prev_point.get_unchecked(state.prev_point_len - 1) },
-            final_eq_prefactor,
-            final_claim,
-            layer_idx,
-        )?;
-    }
-
-    commit_eval_buffer(&mut eval_buf, hasher, seed, data_words);
-
-    let mut draw_buf = [E::ZERO; 2];
-    draw_field_els_into::<F, E>(hasher, seed, &mut draw_buf);
-    let last_r = draw_buf[0];
-    let next_batching = draw_buf[1];
-
-    debug_assert!(fc_len < folding_challenges.len());
-    unsafe { *folding_challenges.get_unchecked_mut(fc_len) = last_r };
-    fc_len += 1;
-
-    fold_standard_claims::<F, E, ADDRS, EVAL_BUF>(
-        &eval_buf,
-        num_dedup_addrs,
-        last_r,
-        &mut state.prev_claims,
-    );
-
-    state.batching_challenge = next_batching;
-    state.prev_point = folding_challenges;
-    state.prev_point_len = fc_len;
-    Ok(())
-}
-
-pub fn verify_gkr_sumcheck<
-    'cfg,
-    F: PrimeField,
-    E: FieldExtension<F> + Field,
-    I: NonDeterminismSource,
-    const ROUNDS: usize,
-    const ADDRS: usize,
-    const EVALS: usize,
-    const TRANSCRIPT_U32: usize,
-    const MAX_POW: usize,
-    const EVAL_BUF: usize,
->(
-    config: &'cfg GKRVerifierConfig,
-) -> Result<GKRVerifierOutput<'cfg, E, ROUNDS, ADDRS>, GKRVerificationError>
-where
-    [(); E::DEGREE]: Sized,
-    [(); ROUNDS + 1]: Sized,
-{
-    let mut transcript_buf = LazyVec::<u32, TRANSCRIPT_U32>::new();
-    let transcript_len = config.initial_transcript_num_u32_words;
-    assert!(transcript_len <= TRANSCRIPT_U32);
-    for _ in 0..transcript_len {
-        transcript_buf.push(I::read_word());
-    }
-    let mut seed = Blake2sTranscript::commit_initial(transcript_buf.as_slice());
-    let mut hasher = DelegatedBlake2sState::new();
-
-    // init_challenges[0] is lookup_alpha for lookups preprocessing - not needed by the verifier
-    let mut init_challenges = [E::ZERO; 3];
-    draw_field_els_into::<F, E>(&mut hasher, &mut seed, &mut init_challenges);
-    let lookup_additive_challenge = init_challenges[1];
-    let constraints_batch_challenge = init_challenges[2];
-
-    let total_layers = config.layers.len();
-    let num_standard = config.num_standard_layers;
-    let top_layer_meta = &config.layers[total_layers - 1];
-
-    let mut state = build_initial_claims::<F, E, I, ROUNDS, ADDRS, EVALS>(
-        config,
-        top_layer_meta,
-        &mut seed,
-        &mut hasher,
-    );
-
-    // Dim-reducing layers (top to bottom)
-    for config_idx in (num_standard..total_layers).rev() {
-        let layer_meta = &config.layers[config_idx];
-        assert!(layer_meta.is_dim_reducing != 0);
-        verify_dim_reducing_layer::<F, E, I, ROUNDS, ADDRS, EVAL_BUF>(
-            layer_meta,
-            config_idx,
-            &mut state,
-            &mut seed,
-            &mut hasher,
-        )?;
-    }
-
-    // Standard layers (top to bottom)
-    for config_idx in (0..num_standard).rev() {
-        let layer_meta = &config.layers[config_idx];
-        assert!(layer_meta.is_dim_reducing == 0);
-        verify_standard_layer::<F, E, I, ROUNDS, ADDRS, MAX_POW, EVAL_BUF>(
-            layer_meta,
-            config_idx,
-            &mut state,
-            &mut seed,
-            &mut hasher,
-            lookup_additive_challenge,
-            constraints_batch_challenge,
-        )?;
-    }
-
-    let grand_product_accumulator: E = read_field_el::<F, E, I>();
-    commit_field_els::<F, E>(&mut seed, &[grand_product_accumulator]);
-
-    let whir_batching_challenge = draw_one_field_el::<F, E>(&mut hasher, &mut seed);
-
-    let additional_base_layer_openings = config
-        .layers
-        .first()
-        .and_then(|l| l.layer_desc)
-        .map_or(&[] as &[GKRAddress], |desc| desc.additional_base_layer_openings);
-
-    let base_layer_addrs = config
-        .layers
-        .first()
-        .map_or(&[] as &[GKRAddress], |l| l.sorted_dedup_input_addrs);
-
-    Ok(GKRVerifierOutput {
-        base_layer_claims: state.prev_claims,
-        base_layer_addrs,
-        evaluation_point: state.prev_point,
-        evaluation_point_len: state.prev_point_len,
-        grand_product_accumulator,
-        additional_base_layer_openings,
-        whir_batching_challenge,
-        whir_transcript_seed: seed,
-    })
 }

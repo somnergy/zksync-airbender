@@ -15,8 +15,7 @@ pub use self::generator::*;
 pub mod inlining_generator;
 pub use self::inlining_generator::*;
 
-pub mod gkr_generator;
-pub use self::gkr_generator::*;
+pub mod gkr_inlining;
 
 pub fn generate_from_reader<R: std::io::Read>(reader: R) -> (String, String) {
     let description = serde_json::from_reader(reader).unwrap();
@@ -114,25 +113,37 @@ mod test {
     }
 
     #[test]
-    fn generate_gkr_layout() {
+    fn generate_gkr_inlined() {
+        use crate::inlining_generator::DefaultBabyBearField;
         use prover::field::baby_bear::base::BabyBearField;
+        use prover::cs::gkr_compiler::GKRCircuitArtifact;
         use prover::field::baby_bear::ext4::BabyBearExt4;
         use prover::gkr::prover::GKRProof;
         use prover::merkle_trees::DefaultTreeConstructor;
 
-        let compiled_circuit: prover::cs::gkr_compiler::GKRCircuitArtifact<BabyBearField> =
-            deserialize_from_file("../prover/add_sub_lui_auipc_mop_gkr_circuit.json");
-        let proof: GKRProof<BabyBearField, BabyBearExt4, DefaultTreeConstructor> =
-            deserialize_from_file("../prover/add_sub_lui_auipc_mop_gkr_proof.json");
+        let circuit_names = vec![
+            "add_sub_lui_auipc_mop",
+        ];
 
-        let result = gkr_generator::generate_gkr_config::<
-            BabyBearField,
-            BabyBearExt4,
-            DefaultTreeConstructor,
-        >(&compiled_circuit, &proof, 4);
+        for name in circuit_names {
+            let compiled_circuit: GKRCircuitArtifact<BabyBearField> =
+                deserialize_from_file(&format!("../prover/{}_gkr_circuit.json", name));
+            let proof: GKRProof<BabyBearField, BabyBearExt4, DefaultTreeConstructor> =
+                deserialize_from_file(&format!("../prover/{}_gkr_proof.json", name));
 
-        let mut dst = std::fs::File::create("./generated/gkr_layout.rs").unwrap();
-        dst.write_all(&result.to_string().as_bytes()).unwrap();
+            let result =
+                gkr_inlining::generate_gkr_inlined::<DefaultBabyBearField, _, _, _>(
+                    &compiled_circuit,
+                    &proof,
+                    4,
+                );
+
+            let path = format!("../verifier/src/generated/gkr_verifier.rs");
+            let mut dst = std::fs::File::create(&path).unwrap();
+            dst.write_all(&result.to_string().as_bytes()).unwrap();
+            drop(dst);
+            std::process::Command::new("rustfmt").arg(&path).status().ok();
+        }
     }
 
     #[cfg(feature = "legacy_tests")]

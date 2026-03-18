@@ -44,7 +44,7 @@ pub enum LookupType {
     Generic,
 }
 
-pub use crate::definitions::gkr_static_types::OutputType;
+pub use crate::definitions::OutputType;
 
 #[derive(Default)]
 pub struct GKRCompiler<F: PrimeField> {

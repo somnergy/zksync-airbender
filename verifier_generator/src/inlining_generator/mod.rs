@@ -19,7 +19,7 @@ mod first_or_last_rows;
 use self::first_or_last_rows::*;
 
 pub mod mersenne_wrapper;
-pub use mersenne_wrapper::{DefaultMersenne31Field, MersenneWrapper};
+pub use mersenne_wrapper::{DefaultBabyBearField, DefaultMersenne31Field, MersenneWrapper};
 
 #[derive(Clone)]
 struct Idents {

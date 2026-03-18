@@ -419,19 +419,18 @@ fn test_query_values_offsets() {
 }
 
 #[cfg(feature = "gkr_verify")]
-#[path = "generated/gkr_layout.rs"]
-mod generated_gkr;
+#[path = "generated/gkr_verifier.rs"]
+mod generated_gkr_inlined;
 
 #[test]
 #[cfg(feature = "gkr_verify")]
-fn test_gkr_sumcheck_verify_with_generated_config() {
+fn test_gkr_sumcheck_verify_inlined() {
     use field::baby_bear::base::BabyBearField;
     use field::baby_bear::ext4::BabyBearExt4;
     use prover::gkr::prover::GKRProof;
     use prover::merkle_trees::DefaultTreeConstructor;
     use verifier_common::cs::gkr_compiler::GKRCircuitArtifact;
     use verifier_common::gkr::flatten::flatten_gkr_proof_for_nds;
-    use verifier_common::gkr::verify_gkr_sumcheck;
     use verifier_common::prover::nd_source_std::*;
 
     let proof: GKRProof<BabyBearField, BabyBearExt4, DefaultTreeConstructor> =
@@ -446,23 +445,13 @@ fn test_gkr_sumcheck_verify_with_generated_config() {
     >(&proof, &compiled_circuit);
 
     let result = std::thread::Builder::new()
-        .name("gkr generated config verifier".to_string())
+        .name("gkr verifier".to_string())
         .stack_size(1 << 27)
         .spawn(move || {
             set_iterator(oracle_data.into_iter());
-            let config = &generated_gkr::GKR_VERIFIER_CONFIG;
-            use generated_gkr::*;
-            let result = verify_gkr_sumcheck::<
-                BabyBearField,
-                BabyBearExt4,
+            let result = generated_gkr_inlined::verify_gkr_sumcheck::<
                 ThreadLocalBasedSource,
-                GKR_ROUNDS,
-                GKR_ADDRS,
-                GKR_EVALS,
-                GKR_TRANSCRIPT_U32,
-                GKR_MAX_POW,
-                GKR_EVAL_BUF,
-            >(config);
+            >();
             match result {
                 Ok(output) => {
                     println!("Verification complete");
@@ -480,7 +469,7 @@ fn test_gkr_sumcheck_verify_with_generated_config() {
                         output.additional_base_layer_openings.len()
                     );
                 }
-                Err(e) => panic!("GKR sumcheck verification with generated config failed: {:?}", e),
+                Err(e) => panic!("GKR verification failed: {:?}", e),
             }
         })
         .map(|t| t.join());

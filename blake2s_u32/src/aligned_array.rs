@@ -55,6 +55,10 @@ impl<T, A, const N: usize> AlignedArray<T, A, N> {
     #[inline(always)]
     pub unsafe fn transmute_subslice<U>(&self, offset: usize, count: usize) -> &[U] {
         let ptr = self.data.as_ptr().add(offset).cast::<U>();
+        debug_assert!(
+            (ptr as usize) % core::mem::align_of::<U>() == 0,
+            "transmute_subslice: pointer not aligned for target type"
+        );
         core::slice::from_raw_parts(ptr, count)
     }
 }

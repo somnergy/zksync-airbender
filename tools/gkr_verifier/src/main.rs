@@ -4,13 +4,11 @@
 #![feature(generic_const_exprs)]
 #![no_main]
 
-use field::baby_bear::base::BabyBearField;
-use field::baby_bear::ext4::BabyBearExt4;
 use non_determinism_source::CSRBasedSource;
 use riscv_common::zksync_os_finish_success;
-use verifier_common::gkr::{verify_gkr_sumcheck, GKRVerificationError};
+use verifier_common::gkr::GKRVerificationError;
 
-#[path = "generated/gkr_layout.rs"]
+#[path = "../../../verifier/src/generated/gkr_verifier.rs"]
 mod generated_gkr;
 
 #[no_mangle]
@@ -23,19 +21,7 @@ unsafe extern "C" fn start_rust() -> ! {
 }
 
 unsafe fn workload() -> ! {
-    let config = &generated_gkr::GKR_VERIFIER_CONFIG;
-    use generated_gkr::*;
-    let result = verify_gkr_sumcheck::<
-        BabyBearField,
-        BabyBearExt4,
-        CSRBasedSource,
-        GKR_ROUNDS,
-        GKR_ADDRS,
-        GKR_EVALS,
-        GKR_TRANSCRIPT_U32,
-        GKR_MAX_POW,
-        GKR_EVAL_BUF,
-    >(config);
+    let result = generated_gkr::verify_gkr_sumcheck::<CSRBasedSource>();
 
     match result {
         Ok(_output) => {

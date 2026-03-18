@@ -1,0 +1,775 @@
+use proc_macro2::TokenStream;
+use quote::{quote, TokenStreamExt};
+
+use crate::inlining_generator::MersenneWrapper;
+use prover::cs::definitions::GKRAddress;
+use prover::cs::gkr_compiler::{
+    GKRCircuitArtifact, GKRLayerDescription, NoFieldGKRRelation, OutputType,
+};
+use prover::field::{Field, FieldExtension, PrimeField};
+use prover::gkr::prover::GKRProof;
+use prover::merkle_trees::ColumnMajorMerkleTreeConstructor;
+
+pub mod constraint_kernel;
+pub mod dim_reducing_layer;
+pub mod standard_layer;
+
+/// Output group metadata used during code generation.
+#[derive(Clone, Debug)]
+pub struct GKROutputGroupInfo {
+    pub output_type: OutputType,
+    pub num_addresses: usize,
+}
+
+fn addr_to_idx(addr: &GKRAddress, sorted: &[GKRAddress]) -> usize {
+    sorted
+        .binary_search(addr)
+        .unwrap_or_else(|_| panic!("address {:?} not found in sorted list", addr))
+}
+
+fn transform_gkr_address(addr: &GKRAddress) -> TokenStream {
+    match addr {
+        GKRAddress::BaseLayerWitness(offset) => {
+            quote! { GKRAddress::BaseLayerWitness(#offset) }
+        }
+        GKRAddress::BaseLayerMemory(offset) => {
+            quote! { GKRAddress::BaseLayerMemory(#offset) }
+        }
+        GKRAddress::InnerLayer { layer, offset } => {
+            quote! { GKRAddress::InnerLayer { layer: #layer, offset: #offset } }
+        }
+        GKRAddress::Setup(offset) => {
+            quote! { GKRAddress::Setup(#offset) }
+        }
+        GKRAddress::OptimizedOut(offset) => {
+            quote! { GKRAddress::OptimizedOut(#offset) }
+        }
+        GKRAddress::Cached { layer, offset } => {
+            quote! { GKRAddress::Cached { layer: #layer, offset: #offset } }
+        }
+    }
+}
+
+fn collect_sorted_unique_addrs(layer: &GKRLayerDescription) -> Vec<GKRAddress> {
+    use std::collections::BTreeSet;
+    let mut addrs = BTreeSet::new();
+
+    for gate in layer
+        .gates
+        .iter()
+        .chain(layer.gates_with_external_connections.iter())
+    {
+        use NoFieldGKRRelation as R;
+        match &gate.enforced_relation {
+            R::EnforceConstraintsMaxQuadratic { input } => {
+                for ((a, b), _) in &input.quadratic_terms {
+                    addrs.insert(*a);
+                    addrs.insert(*b);
+                }
+                for (addr, _) in &input.linear_terms {
+                    addrs.insert(*addr);
+                }
+            }
+            R::Copy { input, .. } => {
+                addrs.insert(*input);
+            }
+            R::InitialGrandProductFromCaches { input, .. } | R::TrivialProduct { input, .. } => {
+                addrs.insert(input[0]);
+                addrs.insert(input[1]);
+            }
+            R::UnbalancedGrandProductWithCache { scalar, input, .. } => {
+                addrs.insert(*scalar);
+                addrs.insert(*input);
+            }
+            R::MaskIntoIdentityProduct { input, mask, .. } => {
+                addrs.insert(*input);
+                addrs.insert(*mask);
+            }
+            R::MaterializeSingleLookupInput { input, .. } => {
+                for (_, addr) in &input.input.linear_terms {
+                    addrs.insert(*addr);
+                }
+            }
+            R::MaterializedVectorLookupInput { input, .. } => {
+                for col in &input.columns {
+                    for (_, addr) in &col.linear_terms {
+                        addrs.insert(*addr);
+                    }
+                }
+            }
+            R::LookupWithCachedDensAndSetup { input, setup, .. } => {
+                addrs.insert(input[0]);
+                addrs.insert(input[1]);
+                addrs.insert(setup[0]);
+                addrs.insert(setup[1]);
+            }
+            R::LookupPairFromBaseInputs { input, .. } => {
+                for (_, addr) in &input[0].input.linear_terms {
+                    addrs.insert(*addr);
+                }
+                for (_, addr) in &input[1].input.linear_terms {
+                    addrs.insert(*addr);
+                }
+            }
+            R::LookupPairFromMaterializedBaseInputs { input, .. } => {
+                addrs.insert(input[0]);
+                addrs.insert(input[1]);
+            }
+            R::LookupUnbalancedPairWithBaseInputs {
+                input, remainder, ..
+            } => {
+                addrs.insert(input[0]);
+                addrs.insert(input[1]);
+                for (_, addr) in &remainder.input.linear_terms {
+                    addrs.insert(*addr);
+                }
+            }
+            R::LookupFromBaseInputsWithSetup { input, setup, .. } => {
+                for (_, addr) in &input.input.linear_terms {
+                    addrs.insert(*addr);
+                }
+                addrs.insert(setup[0]);
+                addrs.insert(setup[1]);
+            }
+            R::LookupFromMaterializedBaseInputWithSetup { input, setup, .. } => {
+                addrs.insert(*input);
+                addrs.insert(setup[0]);
+                addrs.insert(setup[1]);
+            }
+            R::LookupUnbalancedPairWithMaterializedBaseInputs {
+                input, remainder, ..
+            } => {
+                addrs.insert(input[0]);
+                addrs.insert(input[1]);
+                addrs.insert(*remainder);
+            }
+            R::LookupPairFromVectorInputs { input, .. } => {
+                for col in &input[0].columns {
+                    for (_, addr) in &col.linear_terms {
+                        addrs.insert(*addr);
+                    }
+                }
+                for col in &input[1].columns {
+                    for (_, addr) in &col.linear_terms {
+                        addrs.insert(*addr);
+                    }
+                }
+            }
+            R::LookupPair { input, .. } => {
+                addrs.insert(input[0][0]);
+                addrs.insert(input[0][1]);
+                addrs.insert(input[1][0]);
+                addrs.insert(input[1][1]);
+            }
+        }
+    }
+    addrs.into_iter().collect()
+}
+
+fn compute_max_pow(layer: &GKRLayerDescription) -> usize {
+    use NoFieldGKRRelation as R;
+    let mut max_pow = 0usize;
+    for gate in layer
+        .gates
+        .iter()
+        .chain(layer.gates_with_external_connections.iter())
+    {
+        if let R::EnforceConstraintsMaxQuadratic { input } = &gate.enforced_relation {
+            for (_, terms) in &input.quadratic_terms {
+                for &(_, pow) in terms.iter() {
+                    max_pow = max_pow.max(pow);
+                }
+            }
+            for (_, terms) in &input.linear_terms {
+                for &(_, pow) in terms.iter() {
+                    max_pow = max_pow.max(pow);
+                }
+            }
+            for &(_, pow) in input.constants.iter() {
+                max_pow = max_pow.max(pow);
+            }
+        }
+    }
+    max_pow
+}
+
+pub fn generate_gkr_inlined<
+    MW: MersenneWrapper,
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    T,
+>(
+    compiled_circuit: &GKRCircuitArtifact<F>,
+    proof: &GKRProof<F, E, T>,
+    final_trace_size_log_2: usize,
+) -> TokenStream
+where
+    T: ColumnMajorMerkleTreeConstructor<F>,
+    [(); E::DEGREE]: Sized,
+{
+    let num_standard_layers = compiled_circuit.layers.len();
+    let initial_layer_for_sumcheck = *proof
+        .sumcheck_intermediate_values
+        .keys()
+        .max()
+        .expect("proof must have sumcheck values");
+
+    // Precompute sorted input addresses for each standard layer.
+    let standard_sorted_addrs: Vec<Vec<GKRAddress>> = compiled_circuit
+        .layers
+        .iter()
+        .map(|l| collect_sorted_unique_addrs(l))
+        .collect();
+
+    // Build dim-reducing iteration-order addresses.
+    let build_dim_reducing_addrs = |layer_idx: usize| -> Vec<GKRAddress> {
+        let mut addrs = Vec::new();
+        if layer_idx == num_standard_layers {
+            for (_, group_addrs) in compiled_circuit.global_output_map.iter() {
+                for addr in group_addrs.iter() {
+                    addrs.push(*addr);
+                }
+            }
+        } else {
+            let mut off = 0;
+            for (output_type, group_addrs) in compiled_circuit.global_output_map.iter() {
+                match output_type {
+                    OutputType::PermutationProduct => {
+                        for i in 0..group_addrs.len() {
+                            addrs.push(GKRAddress::InnerLayer {
+                                layer: layer_idx,
+                                offset: off + i,
+                            });
+                        }
+                        off += group_addrs.len();
+                    }
+                    _ => {
+                        addrs.push(GKRAddress::InnerLayer {
+                            layer: layer_idx,
+                            offset: off,
+                        });
+                        addrs.push(GKRAddress::InnerLayer {
+                            layer: layer_idx,
+                            offset: off + 1,
+                        });
+                        off += 2;
+                    }
+                }
+            }
+        }
+        addrs
+    };
+
+    let dim_reducing_sorted_addrs: Vec<Vec<GKRAddress>> = (num_standard_layers
+        ..=initial_layer_for_sumcheck)
+        .map(|layer_idx| {
+            let mut addrs = build_dim_reducing_addrs(layer_idx);
+            addrs.sort();
+            addrs
+        })
+        .collect();
+
+    // For standard layer N, output addresses index into the next layer's input space.
+    let get_output_sorted_addrs = |layer_idx: usize| -> &[GKRAddress] {
+        if layer_idx + 1 < num_standard_layers {
+            &standard_sorted_addrs[layer_idx + 1]
+        } else if !dim_reducing_sorted_addrs.is_empty() {
+            &dim_reducing_sorted_addrs[0]
+        } else {
+            &standard_sorted_addrs[layer_idx]
+        }
+    };
+
+    // Output group info
+    let output_groups: Vec<GKROutputGroupInfo> = compiled_circuit
+        .global_output_map
+        .iter()
+        .map(|(ot, addrs)| GKROutputGroupInfo {
+            output_type: *ot,
+            num_addresses: addrs.len(),
+        })
+        .collect();
+
+    // --- Buffer size constants ---
+    let max_sumcheck_rounds = proof
+        .sumcheck_intermediate_values
+        .values()
+        .map(|v| v.sumcheck_num_rounds)
+        .max()
+        .unwrap_or(0);
+
+    let max_unique_addrs_standard = compiled_circuit
+        .layers
+        .iter()
+        .map(|l| collect_sorted_unique_addrs(l).len())
+        .max()
+        .unwrap_or(0);
+
+    let dim_reducing_addr_count: usize = compiled_circuit
+        .global_output_map
+        .iter()
+        .map(|(_, addrs)| addrs.len())
+        .sum();
+    let max_addrs = max_unique_addrs_standard.max(dim_reducing_addr_count);
+
+    let max_pow = compiled_circuit
+        .layers
+        .iter()
+        .map(|l| compute_max_pow(l))
+        .max()
+        .unwrap_or(0)
+        + 1;
+
+    let total_output_polys: usize = compiled_circuit
+        .global_output_map
+        .iter()
+        .map(|(_, addrs)| addrs.len())
+        .sum();
+    let max_evals = total_output_polys * (1usize << final_trace_size_log_2);
+
+    let degree = E::DEGREE;
+    let digest_words = prover::transcript::blake2s_u32::BLAKE2S_DIGEST_SIZE_U32_WORDS;
+    let block_words = prover::transcript::blake2s_u32::BLAKE2S_BLOCK_SIZE_U32_WORDS;
+    let dim_reducing_words_per_addr = 4 * degree;
+    let standard_words_per_addr = 2 * degree;
+    let max_data_words = (max_addrs * dim_reducing_words_per_addr)
+        .max(max_addrs * standard_words_per_addr)
+        .max(max_evals * degree);
+    let total = digest_words + max_data_words;
+    let eval_buf_size = (total + block_words - 1) / block_words * block_words;
+
+    // seed + 4 cubic coefficients, rounded up to next Blake2s block boundary
+    let commit_buf_total = digest_words + 4 * degree;
+    let commit_buf_size = (commit_buf_total + block_words - 1) / block_words * block_words;
+
+    let initial_transcript_num_u32_words = {
+        let mut tmp = Vec::<u32>::new();
+        if let Some(top_bits) = proof.inits_and_teardowns_top_bits {
+            tmp.push(top_bits);
+        }
+        proof.external_challenges.flatten_into_buffer(&mut tmp);
+        proof
+            .whir_proof
+            .setup_commitment
+            .commitment
+            .cap
+            .add_into_buffer(&mut tmp);
+        proof
+            .whir_proof
+            .memory_commitment
+            .commitment
+            .cap
+            .add_into_buffer(&mut tmp);
+        proof
+            .whir_proof
+            .witness_commitment
+            .commitment
+            .cap
+            .add_into_buffer(&mut tmp);
+        tmp.len()
+    };
+
+
+    // --- Generate per-layer functions ---
+    let mut layer_functions = TokenStream::new();
+
+    // Standard layers
+    for layer_idx in 0..num_standard_layers {
+        layer_functions.extend(standard_layer::generate_layer_compute_claim::<MW>(
+            &compiled_circuit.layers[layer_idx],
+            layer_idx,
+            get_output_sorted_addrs(layer_idx),
+        ));
+        let layer_max_pow = compute_max_pow(&compiled_circuit.layers[layer_idx]) + 1;
+        layer_functions.extend(standard_layer::generate_layer_final_step_accumulator::<MW, F>(
+            &compiled_circuit.layers[layer_idx],
+            layer_idx,
+            &standard_sorted_addrs[layer_idx],
+            layer_max_pow,
+        ));
+    }
+
+    // Dim-reducing layers
+    for (dim_idx, layer_idx) in (num_standard_layers..=initial_layer_for_sumcheck).enumerate() {
+        layer_functions.extend(dim_reducing_layer::generate_dim_reducing_compute_claim::<MW>(
+            &output_groups,
+            layer_idx,
+        ));
+        let iteration_order_addrs = build_dim_reducing_addrs(layer_idx);
+        let sorted = &dim_reducing_sorted_addrs[dim_idx];
+        let input_sorted_indices: Vec<usize> = iteration_order_addrs
+            .iter()
+            .map(|addr| addr_to_idx(addr, sorted))
+            .collect();
+        layer_functions.extend(
+            dim_reducing_layer::generate_dim_reducing_final_step_accumulator::<MW>(
+                &output_groups,
+                &input_sorted_indices,
+                layer_idx,
+            ),
+        );
+    }
+
+    // --- Generate static data ---
+    let mut static_data = TokenStream::new();
+
+    // Only layer 0 sorted addresses are needed at runtime (returned in GKRVerifierOutput)
+    if !standard_sorted_addrs.is_empty() {
+        let sorted = &standard_sorted_addrs[0];
+        let mut addrs_stream = TokenStream::new();
+        addrs_stream.append_separated(
+            sorted.iter().map(|a| transform_gkr_address(a)),
+            quote! {,},
+        );
+        static_data.extend(quote! {
+            const LAYER_0_SORTED_ADDRS: &[GKRAddress] = &[#addrs_stream];
+        });
+    }
+
+    // Base layer additional openings
+    let base_layer_additional_openings: Vec<TokenStream> = if !compiled_circuit.layers.is_empty() {
+        compiled_circuit.layers[0]
+            .additional_base_layer_openings
+            .iter()
+            .map(|a| transform_gkr_address(a))
+            .collect()
+    } else {
+        vec![]
+    };
+    let mut base_openings_stream = TokenStream::new();
+    base_openings_stream.append_separated(base_layer_additional_openings.iter(), quote! {,});
+
+    // --- Generate the main verify function body ---
+    let total_layers = initial_layer_for_sumcheck + 1;
+
+    let field_struct = MW::field_struct();
+    let quartic_struct = MW::quartic_struct();
+    let quartic_zero = MW::quartic_zero();
+    let quartic_one = MW::quartic_one();
+
+    let mut main_body = TokenStream::new();
+
+    // Transcript setup
+    main_body.extend(quote! {
+        let mut transcript_buf = LazyVec::<u32, GKR_TRANSCRIPT_U32>::new();
+        for _ in 0..GKR_TRANSCRIPT_U32 {
+            transcript_buf.push(I::read_word());
+        }
+        let mut seed = Blake2sTranscript::commit_initial(transcript_buf.as_slice());
+        let mut hasher = DelegatedBlake2sState::new();
+
+        let mut init_challenges = [#quartic_zero; 3];
+        draw_field_els_into::<#field_struct, #quartic_struct>(&mut hasher, &mut seed, &mut init_challenges);
+        let lookup_additive_challenge = init_challenges[1];
+        let constraints_batch_challenge = init_challenges[2];
+    });
+
+    // Inline build_initial_claims with all values hardcoded
+    let total_output_polys: usize = output_groups.iter().map(|g| g.num_addresses).sum();
+    let evals_per_poly = 1usize << final_trace_size_log_2;
+    let total_evals_needed = total_output_polys * evals_per_poly;
+    let num_challenges = final_trace_size_log_2 + 1;
+    let evaluation_point_len = final_trace_size_log_2;
+
+    // Generate the per-group claim accumulation (unrolled)
+    let mut claim_accum_body = TokenStream::new();
+    let mut eval_offset_val = 0usize;
+    for group in &output_groups {
+        let count = match group.output_type {
+            OutputType::PermutationProduct => group.num_addresses,
+            _ => 2,
+        };
+        for _ in 0..count {
+            let off = eval_offset_val;
+            let end = eval_offset_val + evals_per_poly;
+            claim_accum_body.extend(quote! {
+                {
+                    let vals: &[#quartic_struct; #evals_per_poly] =
+                        evals_slice[#off..#end].try_into().unwrap_unchecked();
+                    let eq_arr: &[#quartic_struct; #evals_per_poly] =
+                        eq_buf.as_slice().try_into().unwrap_unchecked();
+                    let claim = dot_eq(vals, eq_arr);
+                    prev_claims.push(claim);
+                }
+            });
+            eval_offset_val += evals_per_poly;
+        }
+    }
+
+    main_body.extend(quote! {
+        // --- build initial claims ---
+        let mut evals_flat = [core::mem::MaybeUninit::<#quartic_struct>::uninit(); GKR_EVALS];
+        let evals_slice = unsafe {
+            let dst = core::slice::from_raw_parts_mut(
+                evals_flat.as_mut_ptr().cast::<#quartic_struct>(), #total_evals_needed);
+            read_field_els::<#field_struct, #quartic_struct, I>(dst);
+            core::slice::from_raw_parts(evals_flat.as_ptr().cast::<#quartic_struct>(), #total_evals_needed)
+        };
+        commit_field_els::<#field_struct, #quartic_struct>(&mut seed, evals_slice);
+
+        let mut all_challenges = [#quartic_zero; GKR_ROUNDS + 1];
+        draw_field_els_into::<#field_struct, #quartic_struct>(
+            &mut hasher, &mut seed, &mut all_challenges[..#num_challenges]);
+        let batching_challenge = all_challenges[#num_challenges - 1];
+
+        let mut eq_buf = LazyVec::<#quartic_struct, #evals_per_poly>::new();
+        let eq_challenges: &[#quartic_struct; #evaluation_point_len] =
+            all_challenges[..#evaluation_point_len].try_into().unwrap_unchecked();
+        make_eq_poly_last(eq_challenges, &mut eq_buf);
+
+        let mut prev_claims: LazyVec<#quartic_struct, GKR_ADDRS> = LazyVec::new();
+        #claim_accum_body
+
+        let mut prev_point = [#quartic_zero; GKR_ROUNDS];
+        prev_point[..#evaluation_point_len].copy_from_slice(&all_challenges[..#evaluation_point_len]);
+
+        let mut state = LayerState {
+            prev_point,
+            prev_point_len: #evaluation_point_len,
+            prev_claims,
+            batching_challenge,
+        };
+
+        let mut eval_buf = AlignedArray64::<u32, GKR_EVAL_BUF>::new_uninit();
+    });
+
+    // Dim-reducing layers (top to bottom, reversed)
+    for config_idx in (num_standard_layers..=initial_layer_for_sumcheck).rev() {
+        let proof_values = proof
+            .sumcheck_intermediate_values
+            .get(&config_idx)
+            .expect("missing sumcheck values");
+        let num_sumcheck_rounds = proof_values.sumcheck_num_rounds;
+        let dim_idx = config_idx - num_standard_layers;
+        let num_input_addrs = dim_reducing_sorted_addrs[dim_idx].len();
+
+
+        let compute_claim_fn = quote::format_ident!("dim_reducing_{}_compute_claim", config_idx);
+        let final_step_fn =
+            quote::format_ident!("dim_reducing_{}_final_step_accumulator", config_idx);
+
+        let num_regular_rounds = num_sumcheck_rounds - 1;
+
+        main_body.extend(quote! {
+            {
+                let initial_claim = #compute_claim_fn(
+                    &state.prev_claims,
+                    state.batching_challenge,
+                );
+
+                let (final_claim, final_eq_prefactor) =
+                    verify_sumcheck_rounds::<#field_struct, #quartic_struct, I, #num_regular_rounds, GKR_COMMIT_BUF>(
+                        &mut seed,
+                        initial_claim,
+                        &mut state.prev_point,
+                        #config_idx,
+                    )?;
+                let mut fc_len = #num_regular_rounds;
+
+                let data_words = #num_input_addrs * 4 * <#quartic_struct as FieldExtension<#field_struct>>::DEGREE;
+                read_eval_data_from_nds::<I, GKR_EVAL_BUF>(&mut eval_buf, data_words);
+
+                {
+                    let evals: &[[#quartic_struct; 4]] = eval_buf.transmute_subslice(
+                        BLAKE2S_DIGEST_SIZE_U32_WORDS, #num_input_addrs);
+                    let f = #final_step_fn(evals, state.batching_challenge);
+                    verify_final_step_check::<#field_struct, #quartic_struct>(
+                        f,
+                        *state.prev_point.get_unchecked(state.prev_point_len - 1),
+                        final_eq_prefactor,
+                        final_claim,
+                        #config_idx,
+                    )?;
+                }
+
+                commit_eval_buffer(&mut eval_buf, &mut hasher, &mut seed, data_words);
+
+                let mut draw_buf = [#quartic_zero; 3];
+                draw_field_els_into::<#field_struct, #quartic_struct>(&mut hasher, &mut seed, &mut draw_buf);
+                let r_before_last = draw_buf[0];
+                let r_last = draw_buf[1];
+                let next_batching = draw_buf[2];
+
+                *state.prev_point.get_unchecked_mut(fc_len) = r_before_last;
+                fc_len += 1;
+                *state.prev_point.get_unchecked_mut(fc_len) = r_last;
+                fc_len += 1;
+
+                const DIM_REDUCING_EXTRA_CHALLENGES: usize = 2;
+                const DIM_REDUCING_EQ_SIZE: usize = 1 << DIM_REDUCING_EXTRA_CHALLENGES;
+                let mut eq4 = LazyVec::<#quartic_struct, DIM_REDUCING_EQ_SIZE>::new();
+                make_eq_poly_last(&[r_before_last, r_last], &mut eq4);
+                let evals: &[[#quartic_struct; DIM_REDUCING_EQ_SIZE]] = eval_buf.transmute_subslice(
+                    BLAKE2S_DIGEST_SIZE_U32_WORDS, #num_input_addrs);
+                let eq4_arr: &[#quartic_struct; DIM_REDUCING_EQ_SIZE] =
+                    eq4.as_slice().try_into().unwrap_unchecked();
+                state.prev_claims.clear();
+                for i in 0..#num_input_addrs {
+                    let e = evals.get_unchecked(i);
+                    state.prev_claims.push(dot_eq(e, eq4_arr));
+                }
+
+                state.batching_challenge = next_batching;
+                state.prev_point_len = fc_len;
+            }
+        });
+    }
+
+    // Build challenge_powers once for all standard layers
+    if num_standard_layers > 0 {
+        let mul_cb = MW::mul_assign(quote! { pow }, quote! { constraints_batch_challenge });
+        main_body.extend(quote! {
+            let challenge_powers: [#quartic_struct; GKR_MAX_POW] = {
+                let mut lv = LazyVec::<#quartic_struct, GKR_MAX_POW>::new();
+                let mut pow = #quartic_one;
+                for _ in 0..GKR_MAX_POW {
+                    lv.push(pow);
+                    #mul_cb;
+                }
+                unsafe { lv.into_array() }
+            };
+        });
+    }
+
+    // Standard layers (top to bottom, reversed)
+    for config_idx in (0..num_standard_layers).rev() {
+        let proof_values = proof
+            .sumcheck_intermediate_values
+            .get(&config_idx)
+            .expect("missing sumcheck values");
+        let num_sumcheck_rounds = proof_values.sumcheck_num_rounds;
+        let num_dedup_addrs = standard_sorted_addrs[config_idx].len();
+
+
+        let compute_claim_fn = quote::format_ident!("layer_{}_compute_claim", config_idx);
+        let final_step_fn =
+            quote::format_ident!("layer_{}_final_step_accumulator", config_idx);
+
+        let num_regular_rounds = num_sumcheck_rounds - 1;
+
+        main_body.extend(quote! {
+            {
+                let initial_claim = #compute_claim_fn(
+                    &state.prev_claims,
+                    state.batching_challenge,
+                );
+
+                let (final_claim, final_eq_prefactor) =
+                    verify_sumcheck_rounds::<#field_struct, #quartic_struct, I, #num_regular_rounds, GKR_COMMIT_BUF>(
+                        &mut seed,
+                        initial_claim,
+                        &mut state.prev_point,
+                        #config_idx,
+                    )?;
+                let mut fc_len = #num_regular_rounds;
+
+                let data_words = #num_dedup_addrs * 2 * <#quartic_struct as FieldExtension<#field_struct>>::DEGREE;
+                read_eval_data_from_nds::<I, GKR_EVAL_BUF>(&mut eval_buf, data_words);
+
+                {
+                    let evals: &[[#quartic_struct; 2]] = eval_buf.transmute_subslice(
+                        BLAKE2S_DIGEST_SIZE_U32_WORDS, #num_dedup_addrs);
+                    let f = #final_step_fn(
+                        evals,
+                        state.batching_challenge,
+                        lookup_additive_challenge,
+                        &challenge_powers,
+                    );
+                    verify_final_step_check::<#field_struct, #quartic_struct>(
+                        f,
+                        *state.prev_point.get_unchecked(state.prev_point_len - 1),
+                        final_eq_prefactor,
+                        final_claim,
+                        #config_idx,
+                    )?;
+                }
+
+                commit_eval_buffer(&mut eval_buf, &mut hasher, &mut seed, data_words);
+
+                let mut draw_buf = [#quartic_zero; 2];
+                draw_field_els_into::<#field_struct, #quartic_struct>(&mut hasher, &mut seed, &mut draw_buf);
+                let last_r = draw_buf[0];
+                let next_batching = draw_buf[1];
+
+                *state.prev_point.get_unchecked_mut(fc_len) = last_r;
+                fc_len += 1;
+
+                fold_standard_claims::<#field_struct, #quartic_struct, #num_dedup_addrs, GKR_ADDRS, GKR_EVAL_BUF>(
+                    &eval_buf, last_r, &mut state.prev_claims,
+                );
+
+                state.batching_challenge = next_batching;
+                state.prev_point_len = fc_len;
+            }
+        });
+    }
+
+    // Grand product accumulator and output
+    main_body.extend(quote! {
+        let grand_product_accumulator: #quartic_struct = read_field_el::<#field_struct, #quartic_struct, I>();
+        commit_field_els::<#field_struct, #quartic_struct>(&mut seed, &[grand_product_accumulator]);
+
+        let mut draw_buf = [#quartic_zero; 1];
+        draw_field_els_into::<#field_struct, #quartic_struct>(&mut hasher, &mut seed, &mut draw_buf);
+        let whir_batching_challenge = draw_buf[0];
+
+        Ok(GKRVerifierOutput {
+            base_layer_claims: state.prev_claims,
+            base_layer_addrs: LAYER_0_SORTED_ADDRS,
+            evaluation_point: state.prev_point,
+            evaluation_point_len: state.prev_point_len,
+            grand_product_accumulator,
+            additional_base_layer_openings: BASE_LAYER_ADDITIONAL_OPENINGS,
+            whir_batching_challenge,
+            whir_transcript_seed: seed,
+        })
+    });
+
+    let field_use_stmts = MW::field_use_statements();
+
+    // --- Assemble the final TokenStream ---
+    quote! {
+        #field_use_stmts
+        use ::verifier_common::cs::definitions::GKRAddress;
+        use ::verifier_common::gkr::{
+            GKRVerifierOutput, GKRVerificationError,
+            LayerState, LazyVec,
+            verify_sumcheck_rounds, verify_final_step_check,
+            fold_standard_claims,
+            make_eq_poly_last, dot_eq,
+            read_eval_data_from_nds, commit_eval_buffer,
+            draw_field_els_into, read_field_el, read_field_els, commit_field_els,
+        };
+        use ::verifier_common::field_ops;
+        use ::verifier_common::transcript::{Blake2sTranscript, Seed};
+        use ::verifier_common::blake2s_u32::{
+            AlignedArray64, DelegatedBlake2sState, BLAKE2S_DIGEST_SIZE_U32_WORDS,
+        };
+        use ::verifier_common::field::{Field, FieldExtension, PrimeField};
+        use ::verifier_common::non_determinism_source::NonDeterminismSource;
+
+        pub const GKR_ROUNDS: usize = #max_sumcheck_rounds;
+        pub const GKR_ADDRS: usize = #max_addrs;
+        pub const GKR_EVALS: usize = #max_evals;
+        pub const GKR_TRANSCRIPT_U32: usize = #initial_transcript_num_u32_words;
+        pub const GKR_MAX_POW: usize = #max_pow;
+        pub const GKR_EVAL_BUF: usize = #eval_buf_size;
+        pub const GKR_COMMIT_BUF: usize = #commit_buf_size;
+
+        #static_data
+
+        const BASE_LAYER_ADDITIONAL_OPENINGS: &[GKRAddress] = &[#base_openings_stream];
+
+        #layer_functions
+
+        #[allow(unused_braces, unused_mut, unused_variables, unused_unsafe)]
+        pub fn verify_gkr_sumcheck<
+            I: NonDeterminismSource,
+        >() -> Result<GKRVerifierOutput<'static, #quartic_struct, GKR_ROUNDS, GKR_ADDRS>, GKRVerificationError>
+        {
+            unsafe {
+                #main_body
+            }
+        }
+    }
+}
