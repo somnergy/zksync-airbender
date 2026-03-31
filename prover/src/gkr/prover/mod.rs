@@ -371,7 +371,6 @@ where
             &mut gkr_storage,
             worker,
         );
-
     // add virtual polys and make them material
     {
         gkr_storage.insert_base_field_at_layer(
@@ -676,7 +675,8 @@ where
             }
             setup_polys_claims.push(value);
         } else {
-            // we have rare case when setup oly is not used, but we keep setup logic simple,
+            // we have rare case when setup poly is not used, but we keep setup logic simple,
+            // we have rare case when setup poly is not used, but we keep setup logic simple,
             // and so we have to re-evaluate it
             let poly = gkr_storage.get_base_layer(key);
             let evaluation = evaluate_with_precomputed_eq::<F, E>(poly, &_eq_at_z[..]);
