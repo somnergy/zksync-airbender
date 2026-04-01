@@ -36,55 +36,13 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E> for Loo
         let [[a, b], [c, d]] = self.inputs;
 
         let mut num_term = BatchedGKRTermDescription::default();
-        if a < d {
-            num_term
-                .quadratic_part_ext_by_ext
-                .entry(a)
-                .or_default()
-                .entry(d)
-                .or_insert(E::ONE);
-        } else {
-            num_term
-                .quadratic_part_ext_by_ext
-                .entry(d)
-                .or_default()
-                .entry(a)
-                .or_insert(E::ONE);
-        }
-        if b < c {
-            num_term
-                .quadratic_part_ext_by_ext
-                .entry(b)
-                .or_default()
-                .entry(c)
-                .or_insert(E::ONE);
-        } else {
-            num_term
-                .quadratic_part_ext_by_ext
-                .entry(c)
-                .or_default()
-                .entry(b)
-                .or_insert(E::ONE);
-        }
-        num_term.output_in_extension = Some(self.outputs[0]);
+        num_term.add_ext_by_ext(a, d, E::ONE);
+        num_term.add_ext_by_ext(b, c, E::ONE);
+        num_term.set_extension_output(self.outputs[0]);
 
         let mut den_term = BatchedGKRTermDescription::default();
-        if b < d {
-            den_term
-                .quadratic_part_ext_by_ext
-                .entry(b)
-                .or_default()
-                .entry(d)
-                .or_insert(E::ONE);
-        } else {
-            den_term
-                .quadratic_part_ext_by_ext
-                .entry(d)
-                .or_default()
-                .entry(b)
-                .or_insert(E::ONE);
-        }
-        den_term.output_in_extension = Some(self.outputs[1]);
+        den_term.add_ext_by_ext(b, d, E::ONE);
+        den_term.set_extension_output(self.outputs[1]);
 
         vec![num_term, den_term]
     }

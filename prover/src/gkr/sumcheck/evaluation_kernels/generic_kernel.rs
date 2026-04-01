@@ -32,6 +32,83 @@ pub struct BatchedGKRTermDescription<F: PrimeField, E: FieldExtension<F> + Field
     pub _marker: core::marker::PhantomData<F>,
 }
 
+impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRTermDescription<F, E> {
+    pub fn add_base_by_base(&mut self, a: GKRAddress, b: GKRAddress, coeff: E) {
+        if a < b {
+            self.quadratic_part_base_by_base
+                .entry(a)
+                .or_default()
+                .entry(b)
+                .or_default()
+                .add_assign(&coeff);
+        } else {
+            self.quadratic_part_base_by_base
+                .entry(b)
+                .or_default()
+                .entry(a)
+                .or_default()
+                .add_assign(&coeff);
+        };
+    }
+
+    pub fn add_base_by_ext(&mut self, a: GKRAddress, b: GKRAddress, coeff: E) {
+        self.quadratic_part_base_by_ext
+            .entry(a)
+            .or_default()
+            .entry(b)
+            .or_default()
+            .add_assign(&coeff);
+    }
+
+    pub fn add_ext_by_ext(&mut self, a: GKRAddress, b: GKRAddress, coeff: E) {
+        if a < b {
+            self.quadratic_part_ext_by_ext
+                .entry(a)
+                .or_default()
+                .entry(b)
+                .or_default()
+                .add_assign(&coeff);
+        } else {
+            self.quadratic_part_ext_by_ext
+                .entry(b)
+                .or_default()
+                .entry(a)
+                .or_default()
+                .add_assign(&coeff);
+        };
+    }
+
+    pub fn add_linear_with_base(&mut self, a: GKRAddress, coeff: E) {
+        self.linear_part_base
+            .entry(a)
+            .or_default()
+            .add_assign(&coeff);
+    }
+
+    pub fn add_linear_with_ext(&mut self, a: GKRAddress, coeff: E) {
+        self.linear_part_ext
+            .entry(a)
+            .or_default()
+            .add_assign(&coeff);
+    }
+
+    pub fn set_base_output(&mut self, a: GKRAddress) {
+        assert!(self.output_in_base.is_none());
+        assert!(self.output_in_extension.is_none());
+        self.output_in_base = Some(a);
+    }
+
+    pub fn set_extension_output(&mut self, a: GKRAddress) {
+        assert!(self.output_in_base.is_none());
+        assert!(self.output_in_extension.is_none());
+        self.output_in_extension = Some(a);
+    }
+
+    pub fn add_constant(&mut self, coeff: E) {
+        self.constant_term.add_assign(&coeff);
+    }
+}
+
 pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + Field> {
     fn num_challenges(&self) -> usize;
     fn get_inputs(&self) -> GKRInputs;

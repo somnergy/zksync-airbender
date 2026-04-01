@@ -40,8 +40,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         _challenge_constants: &BatchedGKRTermDescriptionConstants<F, E>,
     ) -> Vec<BatchedGKRTermDescription<F, E>> {
         let mut term = BatchedGKRTermDescription::default();
-        term.linear_part_base.insert(self.input, E::ONE);
-        term.output_in_base = Some(self.output);
+        term.add_linear_with_base(self.input, E::ONE);
+        term.set_base_output(self.output);
         vec![term]
     }
 
@@ -230,8 +230,8 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         _challenge_constants: &BatchedGKRTermDescriptionConstants<F, E>,
     ) -> Vec<BatchedGKRTermDescription<F, E>> {
         let mut term = BatchedGKRTermDescription::default();
-        term.linear_part_ext.insert(self.input, E::ONE);
-        term.output_in_extension = Some(self.output);
+        term.add_linear_with_ext(self.input, E::ONE);
+        term.set_extension_output(self.output);
         vec![term]
     }
 
