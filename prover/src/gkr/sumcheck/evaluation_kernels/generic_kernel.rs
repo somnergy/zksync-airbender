@@ -1,5 +1,5 @@
 use super::*;
-use crate::gkr::prover::apply_row_wise;
+use crate::gkr::prover::{apply_row_wise, GKRExternalChallenges};
 use crate::gkr::sumcheck::access_and_fold::BaseFieldPolySource;
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -8,6 +8,28 @@ pub struct GKRInputs {
     pub inputs_in_extension: Vec<GKRAddress>,
     pub outputs_in_base: Vec<GKRAddress>,
     pub outputs_in_extension: Vec<GKRAddress>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BatchedGKRTermDescriptionConstants<F: PrimeField, E: FieldExtension<F> + Field> {
+    pub external_challenges: GKRExternalChallenges<F, E>,
+    pub lookup_challenges_multiplicative_part: E,
+    pub lookup_challenges_additive_part: E,
+    pub constraints_batch_challenge: E,
+    pub _marker: core::marker::PhantomData<F>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct BatchedGKRTermDescription<F: PrimeField, E: FieldExtension<F> + Field> {
+    pub quadratic_part_base_by_base: BTreeMap<GKRAddress, BTreeMap<GKRAddress, E>>,
+    pub quadratic_part_base_by_ext: BTreeMap<GKRAddress, BTreeMap<GKRAddress, E>>,
+    pub quadratic_part_ext_by_ext: BTreeMap<GKRAddress, BTreeMap<GKRAddress, E>>,
+    pub linear_part_base: BTreeMap<GKRAddress, E>,
+    pub linear_part_ext: BTreeMap<GKRAddress, E>,
+    pub constant_term: E,
+    pub output_in_base: Option<GKRAddress>,
+    pub output_in_extension: Option<GKRAddress>,
+    pub _marker: core::marker::PhantomData<F>,
 }
 
 pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + Field> {
@@ -31,6 +53,16 @@ pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + Field> {
         last_evaluations: &mut BTreeMap<GKRAddress, [E; N]>,
         worker: &Worker,
     );
+
+    fn terms(
+        &self,
+        _challenge_constants: &BatchedGKRTermDescriptionConstants<F, E>,
+    ) -> Vec<BatchedGKRTermDescription<F, E>> {
+        unimplemented!(
+            "Not implemented yet for {:?}",
+            core::any::type_name::<Self>()
+        );
+    }
 }
 
 pub fn evaluate_single_input_kernel_with_base_inputs<

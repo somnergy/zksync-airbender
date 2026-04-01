@@ -6,10 +6,10 @@ use crate::gkr::prover::dimension_reduction::kernels::pairwise_product::Pairwise
 use crate::gkr::sumcheck::access_and_fold::GKRStorage;
 use crate::gkr::sumcheck::evaluation_kernels::{
     BaseFieldCopyGKRRelation, BatchConstraintEvalGKRRelation, BatchedGKRKernel,
-    ExtensionCopyGKRRelation, LookupBaseExtMinusBaseExtGKRRelation,
-    LookupBaseMinusMultiplicityByBaseGKRRelation, LookupBasePairGKRRelation,
-    LookupExtensionMinusMultiplicityByExtensionGKRRelation, LookupExtensionPairGKRRelation,
-    LookupExtensionPairGKRRelationKernel, LookupPairGKRRelation,
+    BatchedGKRTermDescription, BatchedGKRTermDescriptionConstants, ExtensionCopyGKRRelation,
+    LookupBaseExtMinusBaseExtGKRRelation, LookupBaseMinusMultiplicityByBaseGKRRelation,
+    LookupBasePairGKRRelation, LookupExtensionMinusMultiplicityByExtensionGKRRelation,
+    LookupExtensionPairGKRRelation, LookupExtensionPairGKRRelationKernel, LookupPairGKRRelation,
     LookupRationalPairWithUnbalancedBaseGKRRelation,
     LookupRationalPairWithUnbalancedExtensionGKRRelation,
     LookupRationalPairWithUnbalancedExtensionGKRRelationKernel, MaskIntoIdentityProductGKRRelation,
@@ -48,6 +48,14 @@ macro_rules! define_kernel_variants {
                     $(KernelVariant::$s_name(_, bc, _) => bc,)*
                     $(KernelVariant::$p_name(_, bc, _) => bc,)*
                     $(KernelVariant::$n_name(_, bc) => bc,)*
+                }
+            }
+
+            pub fn get_terms(&self, challenge_constants: &BatchedGKRTermDescriptionConstants<F, E>) -> Vec<BatchedGKRTermDescription<F, E>> {
+                match self {
+                    $(KernelVariant::$s_name(ref k, _, _) => BatchedGKRKernel::<F, E>::terms(k, challenge_constants),)*
+                    $(KernelVariant::$p_name(ref k, _, _) => BatchedGKRKernel::<F, E>::terms(k, challenge_constants),)*
+                    $(KernelVariant::$n_name(ref k, _) => BatchedGKRKernel::<F, E>::terms(k, challenge_constants),)*
                 }
             }
 
@@ -767,7 +775,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelVariant<F, E> {
 }
 
 pub(super) struct KernelCollector<F: PrimeField, E: FieldExtension<F> + Field> {
-    kernels: Vec<KernelVariant<F, E>>,
+    pub(crate) kernels: Vec<KernelVariant<F, E>>,
     current_batch_challenge: E,
     batch_challenge_base: E,
 }
@@ -788,7 +796,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
     pub(super) fn register(&mut self, kernel: KernelVariant<F, E>) {
         // Kernels can have a bug in them, place to debug
         match kernel {
-            // KernelVariant::MaterializeVectorLookupInput(..) => {},
+            // KernelVariant::AggregateLookupPair(..) => {}
             // KernelVariant::EnforceConstraintsMaxQuadratic(..) => {},
             // KernelVariant::LookupExtensionMinusMultiplicityByExtension(..) => {},
             _ => self.kernels.push(kernel),

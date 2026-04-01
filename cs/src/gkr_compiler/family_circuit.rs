@@ -24,6 +24,7 @@ impl<F: PrimeField> GKRCompiler<F> {
         max_bytecode_size_in_words: usize,
         num_inits_and_teardowns: usize,
         trace_len_log2: usize,
+        caching_is_allowed: bool,
     ) -> GKRCircuitArtifact<F> {
         assert!(max_bytecode_size_in_words.is_power_of_two());
         assert_eq!(num_inits_and_teardowns, 0, "TODO");
@@ -198,7 +199,7 @@ impl<F: PrimeField> GKRCompiler<F> {
             (generic_lookup_width, decoder_lookup_pair)
         };
 
-        let mut graph = GKRGraph::new(generic_lookup_width);
+        let mut graph = GKRGraph::new(generic_lookup_width, caching_is_allowed);
 
         let mut all_variables_to_place = BTreeSet::new();
         for variable_idx in 0..num_variables {

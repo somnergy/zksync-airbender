@@ -560,10 +560,10 @@ pub fn add_compiler_defined_variable_from_constraint<F: PrimeField>(
     var
 }
 
-pub(crate) fn mem_permutation_expr_into_cached_expr(
+pub(crate) fn mem_permutation_expr_into_gkr_relation(
     mem: &MemoryPermutationExpression,
     graph: &dyn GraphHolder,
-) -> NoFieldGKRCacheRelation {
+) -> NoFieldSpecialMemoryContributionRelation {
     let address_space = match mem.address_space {
         AddressSpace::Constant(c) => CompiledAddressSpaceRelationStrict::Constant(c as u8 as u32),
         AddressSpace::RegisterOrRam(is_reg) => {
@@ -633,7 +633,14 @@ pub(crate) fn mem_permutation_expr_into_cached_expr(
         timestamp_offset: mem.timestamp_offset,
     };
 
-    NoFieldGKRCacheRelation::MemoryTuple(rel)
+    rel
+}
+
+pub(crate) fn mem_permutation_expr_into_cached_expr(
+    mem: &MemoryPermutationExpression,
+    graph: &dyn GraphHolder,
+) -> NoFieldGKRCacheRelation {
+    NoFieldGKRCacheRelation::MemoryTuple(mem_permutation_expr_into_gkr_relation(mem, graph))
 }
 
 pub(crate) fn lookup_input_into_relation<F: PrimeField, const SINGLE_COLUMN: bool>(

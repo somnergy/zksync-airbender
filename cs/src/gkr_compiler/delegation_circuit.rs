@@ -17,6 +17,7 @@ impl<F: PrimeField> GKRCompiler<F> {
         &self,
         circuit_output: CircuitOutput<F>,
         trace_len_log2: usize,
+        caching_is_allowed: bool,
     ) -> GKRCircuitArtifact<F> {
         let CircuitOutput {
             table_driver,
@@ -134,7 +135,7 @@ impl<F: PrimeField> GKRCompiler<F> {
             (generic_lookup_width, decoder_lookup_pair)
         };
 
-        let mut graph = GKRGraph::new(generic_lookup_width);
+        let mut graph = GKRGraph::new(generic_lookup_width, caching_is_allowed);
 
         let mut all_variables_to_place = BTreeSet::new();
         for variable_idx in 0..num_variables {

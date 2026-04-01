@@ -2,6 +2,7 @@ use crate::gkr::prover::SumcheckIntermediateProofValues;
 use std::collections::BTreeMap;
 
 use crate::gkr::prover::GKRExternalChallenges;
+use crate::gkr::sumcheck::evaluation_kernels::*;
 use crate::gkr::{
     prover::dimension_reduction::forward::DimensionReducingInputOutput,
     sumcheck::{
@@ -23,6 +24,7 @@ use cs::{definitions::GKRAddress, gkr_compiler::OutputType};
 use kernel_collector::KernelCollector;
 use transcript::Seed;
 
+mod batch_evaluation;
 mod kernel_collector;
 
 /// # Panics
@@ -68,12 +70,13 @@ where
     let claim = collector.compute_combined_claim(output_claims);
 
     let (mut folding_challenges, internal_round_coefficients, last_evaluations, final_accumulator) =
-        run_sumcheck_loop::<F, E, 4>(
+        run_sumcheck_loop::<F, E, 4, false>(
             &collector,
             claim,
             prev_challenges,
             &eq_polys,
             gkr_storage,
+            &BatchedGKRTermDescriptionConstants::<F, E>::default(),
             folding_steps,
             worker,
             seed,
@@ -211,13 +214,22 @@ where
 
     let claim = collector.compute_combined_claim(output_claims);
 
+    let challenge_constants = BatchedGKRTermDescriptionConstants::<F, E> {
+        external_challenges: *external_challenges,
+        lookup_challenges_multiplicative_part: lookup_challenges_multiplicative_part,
+        lookup_challenges_additive_part: lookup_challenges_additive_part,
+        constraints_batch_challenge,
+        _marker: core::marker::PhantomData,
+    };
+
     let (mut folding_challenges, internal_round_coefficients, last_evaluations, final_accumulator) =
-        run_sumcheck_loop::<F, E, 2>(
+        run_sumcheck_loop::<F, E, 2, true>(
             &collector,
             claim,
             prev_challenges,
             &eq_polys,
             gkr_storage,
+            &challenge_constants,
             folding_steps,
             worker,
             seed,
@@ -403,12 +415,18 @@ where
     }
 }
 
-fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field, const N: usize>(
+fn run_sumcheck_loop<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    const N: usize,
+    const USE_BATCHING: bool,
+>(
     collector: &KernelCollector<F, E>,
     initial_claim: E,
     prev_challenges: &[E],
     eq_poly: &[Box<[E]>],
     gkr_storage: &mut GKRStorage<F, E>,
+    challenge_constants: &BatchedGKRTermDescriptionConstants<F, E>,
     folding_steps: usize,
     worker: &Worker,
     seed: &mut Seed,
@@ -416,6 +434,12 @@ fn run_sumcheck_loop<F: PrimeField, E: FieldExtension<F> + Field, const N: usize
 where
     [(); E::DEGREE]: Sized,
 {
+    if USE_BATCHING {
+        println!("Running sumcheck loop in batched mode");
+    } else {
+        println!("Running sumcheck loop in individual kernel mode");
+    };
+
     let mut claim = initial_claim;
     let mut folding_challenges = Vec::with_capacity(folding_steps);
     let mut last_evaluations: BTreeMap<GKRAddress, [E; N]> = BTreeMap::new();
@@ -426,6 +450,12 @@ where
     let mut accumulator_buffer = vec![[E::ZERO; 2]; max_acc_size];
     let mut intermediate_coeffs = Vec::with_capacity(folding_steps);
 
+    let batched_description = if USE_BATCHING {
+        collector.make_batched_description(challenge_constants)
+    } else {
+        Default::default()
+    };
+
     for step in 0..folding_steps - 1 {
         let acc_size = 1 << (folding_steps - step - 1);
         let accumulator = &mut accumulator_buffer[..acc_size];
@@ -433,15 +463,29 @@ where
             accumulator.fill([E::ZERO; 2]);
         }
 
-        collector.evaluate_kernels_over_storage(
-            gkr_storage,
-            step,
-            &folding_challenges,
-            accumulator,
-            folding_steps,
-            &mut last_evaluations,
-            worker,
-        );
+        if USE_BATCHING {
+            use crate::gkr::prover::sumcheck_loop::batch_evaluation::evaluate_batched_gkr_description;
+            evaluate_batched_gkr_description(
+                &batched_description,
+                gkr_storage,
+                step,
+                &folding_challenges,
+                accumulator,
+                folding_steps,
+                &mut last_evaluations,
+                worker,
+            );
+        } else {
+            collector.evaluate_kernels_over_storage(
+                gkr_storage,
+                step,
+                &folding_challenges,
+                accumulator,
+                folding_steps,
+                &mut last_evaluations,
+                worker,
+            );
+        }
 
         let eq = &eq_poly[folding_steps - step - 1];
 
@@ -489,21 +533,35 @@ where
         folding_challenges.push(folding_challenge);
     }
 
-    // Final step
+    // Final step - we do not make a new claim, and do not update the transcript yet
     {
         let step = folding_steps - 1;
         let accumulator = &mut accumulator_buffer[..1];
         accumulator.fill([E::ZERO; 2]);
 
-        collector.evaluate_kernels_over_storage(
-            gkr_storage,
-            step,
-            &folding_challenges,
-            accumulator,
-            folding_steps,
-            &mut last_evaluations,
-            worker,
-        );
+        if USE_BATCHING {
+            use crate::gkr::prover::sumcheck_loop::batch_evaluation::evaluate_batched_gkr_description;
+            evaluate_batched_gkr_description(
+                &batched_description,
+                gkr_storage,
+                step,
+                &folding_challenges,
+                accumulator,
+                folding_steps,
+                &mut last_evaluations,
+                worker,
+            );
+        } else {
+            collector.evaluate_kernels_over_storage(
+                gkr_storage,
+                step,
+                &folding_challenges,
+                accumulator,
+                folding_steps,
+                &mut last_evaluations,
+                worker,
+            );
+        }
 
         #[cfg(feature = "gkr_self_checks")]
         {

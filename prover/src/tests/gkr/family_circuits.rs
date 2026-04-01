@@ -17,7 +17,6 @@ use ::field::baby_bear::ext4::BabyBearExt4;
 use common_constants::TIMESTAMP_STEP;
 use cs::definitions::INITIAL_TIMESTAMP;
 use cs::definitions::*;
-use cs::gkr_circuits::mem_word_only_table_driver_fn;
 use cs::gkr_circuits::opcodes_for_full_machine_with_unsigned_mul_div_only_with_mem_word_access_specialization;
 use cs::gkr_circuits::process_binary_into_separate_tables_ext;
 use cs::tables::TableDriver;
@@ -296,9 +295,15 @@ pub fn gkr_run_basic_unrolled_test_impl(
         println!("Will try to prove ADD/SUB/LUI/AUIPC/MOP circuit");
         const CIRCUIT_TYPE: u8 = ADD_SUB_LUI_AUIPC_MOP_CIRCUIT_FAMILY_IDX;
 
+        // let circuit: GKRCircuitArtifact<BabyBearField> = {
+        //     deserialize_from_file(
+        //         "../cs/compiled_circuits/add_sub_lui_auipc_mop_preprocessed_layout_gkr.json",
+        //     )
+        // };
+
         let circuit: GKRCircuitArtifact<BabyBearField> = {
             deserialize_from_file(
-                "../cs/compiled_circuits/add_sub_lui_auipc_mop_preprocessed_layout_gkr.json",
+                "../cs/compiled_circuits/add_sub_lui_auipc_mop_preprocessed_layout_no_caches_gkr.json",
             )
         };
 

@@ -75,16 +75,27 @@ impl GKRGate for GrandProductAccumulationStep {
         match self {
             Self::BasePair { lhs, rhs, .. } => {
                 assert_ne!(lhs, rhs);
-                let input = [lhs, rhs].map(|el| {
-                    let expr = mem_permutation_expr_into_cached_expr(el, graph);
-                    assert!(output_layer > 0);
-                    let cache_layer = output_layer - 1;
-                    graph.add_cached_relation(expr, cache_layer)
-                });
-                let relation = NoFieldGKRRelation::InitialGrandProductFromCaches { input, output };
-                graph.add_enforced_relation(relation.clone(), output_layer);
+                if graph.can_use_caching() {
+                    let input = [lhs, rhs].map(|el| {
+                        let expr = mem_permutation_expr_into_cached_expr(el, graph);
+                        assert!(output_layer > 0);
+                        let cache_layer = output_layer - 1;
+                        graph.add_cached_relation(expr, cache_layer)
+                    });
+                    let relation =
+                        NoFieldGKRRelation::InitialGrandProductFromCaches { input, output };
+                    graph.add_enforced_relation(relation.clone(), output_layer);
 
-                (output, relation)
+                    (output, relation)
+                } else {
+                    let input =
+                        [lhs, rhs].map(|el| mem_permutation_expr_into_gkr_relation(el, graph));
+                    let relation =
+                        NoFieldGKRRelation::InitialGrandProductWithoutCaches { input, output };
+                    graph.add_enforced_relation(relation.clone(), output_layer);
+
+                    (output, relation)
+                }
             }
             Self::AggregationPair { lhs, rhs, .. } => {
                 assert_ne!(lhs, rhs);
