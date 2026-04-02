@@ -1,6 +1,7 @@
 use super::*;
 use crate::gkr::prover::apply_row_wise;
 use cs::definitions::gkr::NoFieldLinearRelation;
+use cs::definitions::gkr::NoFieldSingleColumnLookupRelation;
 use cs::definitions::gkr::NoFieldVectorLookupRelation;
 use cs::gkr_compiler::NoFieldSpecialMemoryContributionRelation;
 use field::{Field, FieldExtension, PrimeField};
@@ -338,4 +339,220 @@ pub(crate) fn evaluate_memory_query<F: PrimeField, E: FieldExtension<F> + Field>
     }
 
     result
+}
+
+pub(crate) fn memory_query_as_flattened_relation<F: PrimeField, E: FieldExtension<F> + Field>(
+    rel: &NoFieldSpecialMemoryContributionRelation,
+    external_challenges: &GKRExternalChallenges<F, E>,
+) -> (BTreeMap<GKRAddress, E>, E) {
+    let mut result = BTreeMap::new();
+    let mut constant_term = external_challenges.permutation_argument_additive_part;
+    // no challenge
+    match rel.address_space {
+        CompiledAddressSpaceRelationStrict::Constant(c) => {
+            assert!(c < (1u32 << 16));
+            constant_term.add_assign_base(&F::from_u32_unchecked(c));
+        }
+        CompiledAddressSpaceRelationStrict::Is(offset) => {
+            assert!(result
+                .insert(GKRAddress::BaseLayerMemory(offset), E::ONE)
+                .is_none());
+        }
+        CompiledAddressSpaceRelationStrict::Not(offset) => {
+            assert!(result
+                .insert(GKRAddress::BaseLayerMemory(offset), E::MINUS_ONE)
+                .is_none());
+            constant_term.add_assign_base(&F::ONE);
+        }
+    }
+    match &rel.address {
+        &CompiledAddressStrict::ConstantU16(c) => {
+            let mut t = external_challenges.permutation_argument_linearization_challenges
+                [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX];
+            t.mul_assign_by_base(&F::from_u32_unchecked(c as u32));
+            constant_term.add_assign(&t);
+        }
+        &CompiledAddressStrict::Constant(c) => {
+            assert!(c < (1u32 << 16));
+            let mut t = external_challenges.permutation_argument_linearization_challenges
+                [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX];
+            t.mul_assign_by_base(&F::from_u32_unchecked(c));
+            constant_term.add_assign(&t);
+        }
+        &CompiledAddressStrict::U16Space(offset) => {
+            let t = external_challenges.permutation_argument_linearization_challenges
+                [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX];
+            assert!(result
+                .insert(GKRAddress::BaseLayerMemory(offset), t)
+                .is_none());
+        }
+        &CompiledAddressStrict::U32Space([low, high]) => {
+            for (idx, offset) in [
+                (MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX, low),
+                (MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_HIGH_IDX, high),
+            ] {
+                let t = external_challenges.permutation_argument_linearization_challenges[idx];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(offset), t)
+                    .is_none());
+            }
+        }
+        CompiledAddressStrict::U32SpaceGeneric(..) => {
+            todo!();
+        }
+        CompiledAddressStrict::U32SpaceSpecialIndirect {
+            low_base,
+            low_dynamic_offset,
+            low_offset,
+            high,
+        } => {
+            if let Some((c, offset)) = *low_dynamic_offset {
+                let mut t = external_challenges.permutation_argument_linearization_challenges
+                    [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX];
+                t.mul_assign_by_base(&F::from_u32_unchecked(c as u32));
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(offset), t)
+                    .is_none());
+            }
+            {
+                let mut t = external_challenges.permutation_argument_linearization_challenges
+                    [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_LOW_IDX];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(*low_base), t)
+                    .is_none());
+                t.mul_assign_by_base(&F::from_u32_unchecked(*low_offset as u32));
+                constant_term.add_assign(&t);
+            }
+            {
+                let t = external_challenges.permutation_argument_linearization_challenges
+                    [MEM_ARGUMENT_CHALLENGE_POWERS_ADDRESS_HIGH_IDX];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(*high), t)
+                    .is_none());
+            }
+        }
+    }
+    // timestamp is a little special as we do add constant offset
+
+    match rel.timestamp {
+        CompiledMemoryTimestamp::Zero => {}
+        CompiledMemoryTimestamp::Normal(ts) => {
+            {
+                let mut t = external_challenges.permutation_argument_linearization_challenges
+                    [MEM_ARGUMENT_CHALLENGE_POWERS_TIMESTAMP_LOW_IDX];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(ts[0]), t)
+                    .is_none());
+                t.mul_assign_by_base(&F::from_u32_unchecked(rel.timestamp_offset as u32));
+                constant_term.add_assign(&t);
+            }
+            {
+                let t = external_challenges.permutation_argument_linearization_challenges
+                    [MEM_ARGUMENT_CHALLENGE_POWERS_TIMESTAMP_HIGH_IDX];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(ts[1]), t)
+                    .is_none());
+            }
+        }
+    }
+    // and values are simplified for now
+    match rel.value {
+        RamWordRepresentation::Zero => {
+            // nothing
+        }
+        RamWordRepresentation::U16Limbs(read_value) => {
+            for (idx, offset) in [
+                (MEM_ARGUMENT_CHALLENGE_POWERS_VALUE_LOW_IDX, read_value[0]),
+                (MEM_ARGUMENT_CHALLENGE_POWERS_VALUE_HIGH_IDX, read_value[1]),
+            ] {
+                let t = external_challenges.permutation_argument_linearization_challenges[idx];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(offset), t)
+                    .is_none());
+            }
+        }
+        RamWordRepresentation::U8Limbs(read_value_bytes) => {
+            let byte_shift = F::from_u32_unchecked(1u32 << 8);
+            for (idx, offset_low, offset_high) in [
+                (
+                    MEM_ARGUMENT_CHALLENGE_POWERS_VALUE_LOW_IDX,
+                    read_value_bytes[0],
+                    read_value_bytes[1],
+                ),
+                (
+                    MEM_ARGUMENT_CHALLENGE_POWERS_VALUE_HIGH_IDX,
+                    read_value_bytes[2],
+                    read_value_bytes[3],
+                ),
+            ] {
+                let mut t = external_challenges.permutation_argument_linearization_challenges[idx];
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(offset_low), t)
+                    .is_none());
+                t.mul_assign_by_base(&byte_shift);
+                assert!(result
+                    .insert(GKRAddress::BaseLayerMemory(offset_high), t)
+                    .is_none());
+            }
+        }
+    }
+
+    (result, constant_term)
+}
+
+pub(crate) fn single_column_lookup_as_flattened_relation<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    const WITH_ADDITIVE_PART: bool,
+>(
+    rel: &NoFieldSingleColumnLookupRelation,
+    lookup_challenges_additive_part: E,
+) -> (BTreeMap<GKRAddress, E>, E) {
+    let mut result = BTreeMap::new();
+    let mut constant_term = E::ZERO;
+    if WITH_ADDITIVE_PART {
+        constant_term = lookup_challenges_additive_part;
+    }
+
+    for (coeff, a) in rel.input.linear_terms.iter() {
+        assert!(result
+            .insert(*a, E::from_base(F::from_u32_unchecked(*coeff)))
+            .is_none());
+    }
+    constant_term.add_assign_base(&F::from_u32_unchecked(rel.input.constant));
+
+    (result, constant_term)
+}
+
+pub(crate) fn vector_lookup_as_flattened_relation<
+    F: PrimeField,
+    E: FieldExtension<F> + Field,
+    const WITH_ADDITIVE_PART: bool,
+>(
+    rel: &NoFieldVectorLookupRelation,
+    lookup_challenges_multiplicative_part: E,
+    lookup_challenges_additive_part: E,
+) -> (BTreeMap<GKRAddress, E>, E) {
+    let mut result = BTreeMap::new();
+    let mut constant_term = E::ZERO;
+    if WITH_ADDITIVE_PART {
+        constant_term = lookup_challenges_additive_part;
+    }
+
+    let mut challenge = E::ONE;
+    for column in rel.columns.iter() {
+        for (coeff, a) in column.linear_terms.iter() {
+            let mut t = challenge;
+            t.mul_assign_by_base(&F::from_u32_unchecked(*coeff));
+
+            assert!(result.insert(*a, t).is_none());
+        }
+        let mut t = challenge;
+        t.mul_assign_by_base(&F::from_u32_unchecked(column.constant));
+        constant_term.add_assign(&t);
+
+        challenge.mul_assign(&lookup_challenges_multiplicative_part);
+    }
+
+    (result, constant_term)
 }

@@ -107,6 +107,49 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRTermDescription<F, E
     pub fn add_constant(&mut self, coeff: E) {
         self.constant_term.add_assign(&coeff);
     }
+
+    pub fn add_product_of_linear_base_terms(
+        &mut self,
+        a: (BTreeMap<GKRAddress, E>, E),
+        b: (BTreeMap<GKRAddress, E>, E),
+    ) {
+        let (a_terms, a_constant) = a;
+        let (b_terms, b_constant) = b;
+
+        for (a, c_a) in a_terms.into_iter() {
+            // first constant
+            let mut coeff = b_constant;
+            coeff.mul_assign(&c_a);
+            self.add_linear_with_base(a, coeff);
+
+            for (b, c_b) in b_terms.iter() {
+                let mut coeff = c_a;
+                coeff.mul_assign(&c_b);
+                self.add_base_by_base(a, *b, coeff);
+            }
+        }
+
+        // remaining with constants
+        for (b, c_b) in b_terms.into_iter() {
+            let mut coeff = a_constant;
+            coeff.mul_assign(&c_b);
+            self.add_linear_with_base(b, coeff);
+        }
+
+        let mut coeff = a_constant;
+        coeff.mul_assign(&b_constant);
+        self.add_constant(coeff);
+    }
+
+    pub fn add_linear_base_terms(&mut self, a: (BTreeMap<GKRAddress, E>, E)) {
+        let (a_terms, a_constant) = a;
+
+        for (a, c_a) in a_terms.into_iter() {
+            self.add_linear_with_base(a, c_a);
+        }
+
+        self.add_constant(a_constant);
+    }
 }
 
 pub trait BatchedGKRKernel<F: PrimeField, E: FieldExtension<F> + Field> {
