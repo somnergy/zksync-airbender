@@ -284,14 +284,16 @@ pub struct RunResult<S: RiscV32MachineSetup> {
     phantom: PhantomData<S::C>,
 }
 
+#[derive(Debug)]
 pub struct RunResultMeasurements {
-    time: RunResultTimes,
-    profiler: Option<ProfilerStats>,
+    pub time: RunResultTimes,
+    pub profiler: Option<ProfilerStats>,
 }
 
+#[derive(Debug)]
 pub struct RunResultTimes {
-    exec_time: std::time::Duration,
-    exec_cycles: usize,
+    pub exec_time: std::time::Duration,
+    pub exec_cycles: usize,
 }
 
 impl RunResultTimes {
