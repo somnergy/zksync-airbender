@@ -40,6 +40,7 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> BatchedGKRKernel<F, E>
         // a/(b + gamma) - c/(d + gamma) -> (a*(d+gamma) - c*(b+gamma)), (b+gamma) * (d+gamma)
         let (a, b) = &self.masked_input;
         let (c, d) = &self.setup;
+        assert_eq!(b.columns.len(), d.len());
 
         let b = vector_lookup_as_flattened_relation::<F, E, true>(
             b,

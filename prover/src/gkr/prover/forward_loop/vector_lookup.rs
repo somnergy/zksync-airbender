@@ -45,13 +45,19 @@ pub(crate) fn materialize_decoder_lookup_minus_setup<
             for i in 0..chunk_size {
                 let row = chunk_start + i;
                 let mapping_index = mapping_ref[row];
-                let mapped_value = preprocessed_generic_lookup[mapping_index as usize];
                 let decoder_predicate = decoder_predicate[row];
+                let decoder_mask_value = decoder_predicate.as_boolean();
+                let mapped_value = if decoder_mask_value {
+                    preprocessed_generic_lookup[mapping_index as usize]
+                } else {
+                    decoder_lookup_fill_value
+                };
+
                 let multiplicity_value = multiplicity[row];
                 let setup_value = preprocessed_generic_lookup
                     .get(row)
                     .copied()
-                    .unwrap_or(decoder_lookup_fill_value);
+                    .unwrap_or(E::ZERO);
 
                 // a/(b + gamma) - c/(d + gamma) -> (a*(d+gamma) - c*(b+gamma)), (b+gamma) * (d+gamma)
 
@@ -77,7 +83,6 @@ pub(crate) fn materialize_decoder_lookup_minus_setup<
 
                 #[cfg(feature = "gkr_self_checks")]
                 {
-                    let decoder_mask_value = decoder_predicate.as_boolean();
                     if decoder_mask_value {
                         assert!(mapping_index >= offset_for_decoder_table, "decoder lookup should have mapping index {} >= decoder table offset {}, and is not zero in padding", mapping_index, offset_for_decoder_table);
                     } else {

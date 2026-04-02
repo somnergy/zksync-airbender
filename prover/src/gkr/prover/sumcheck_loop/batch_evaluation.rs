@@ -1,5 +1,6 @@
 use super::*;
 use crate::definitions::sumcheck_kernel::*;
+use crate::gkr::prover::sumcheck_loop::kernel_collector::KernelVariant;
 use crate::gkr::sumcheck::access_and_fold::ExtensionFieldPolyContinuingSource;
 use crate::gkr::sumcheck::evaluation_kernels::BatchedGKRTermDescriptionConstants;
 
@@ -69,12 +70,22 @@ impl<F: PrimeField, E: FieldExtension<F> + Field> KernelCollector<F, E> {
         for kernel in self.kernels.iter() {
             let terms = kernel.get_terms(challenge_constants);
             let challenges = kernel.batch_challenges();
-            assert_eq!(terms.len(), challenges.len());
+            assert_eq!(
+                terms.len(),
+                challenges.len(),
+                "number of challenges diverged for kernel {:?}",
+                kernel
+            );
 
             for (batch_challege, term) in challenges.iter().zip(terms.iter()) {
                 for (a, other_terms) in term.quadratic_part_base_by_base.iter() {
                     for (b, c) in other_terms.iter() {
-                        assert!(b >= a);
+                        assert!(
+                            b >= a,
+                            "multiplication loop must be ordered, but `a` = {:?}, `b` = {:?}",
+                            a,
+                            b
+                        );
                         let mut c = *c;
                         c.mul_assign(batch_challege);
                         let existing_coeff = draft
