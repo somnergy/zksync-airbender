@@ -315,7 +315,7 @@ template <unsigned K, unsigned V> struct TableDriver {
 
   DEVICE_FORCEINLINE u32 rom_address_space_separator(const bf keys[K], bf *values) const {
     auto setter = [](const u32 index, u32 *result) {
-      constexpr unsigned ROM_ADDRESS_SPACE_SECOND_WORD_BITS = 5;
+      constexpr unsigned ROM_ADDRESS_SPACE_SECOND_WORD_BITS = 6; // 4MB ROM
       result[0] = index >> ROM_ADDRESS_SPACE_SECOND_WORD_BITS != 0;
       result[1] = index & (1u << ROM_ADDRESS_SPACE_SECOND_WORD_BITS) - 1;
     };
