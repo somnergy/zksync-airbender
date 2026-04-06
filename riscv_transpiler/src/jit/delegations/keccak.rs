@@ -77,7 +77,7 @@ pub fn keccak_unrolled_implementation(
         // just run keccak_f1600 over state in sumulation
         let keccak_state = unsafe {
             let mut keccak_state = keccak_state.map(|el| el.assume_init());
-            ::keccak::f1600(core::mem::transmute::<_, &mut [u64; 25]>(&mut keccak_state));
+            ::keccak::p1600(core::mem::transmute::<_, &mut [u64; 25]>(&mut keccak_state));
 
             keccak_state
         };

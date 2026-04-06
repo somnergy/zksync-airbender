@@ -19,7 +19,7 @@ worker = { workspace = true }
 serde = { workspace = true }
 seq-macro = { workspace = true }
 serde-big-array = "*"
-keccak = "*"
+keccak = "0.2"
 
 dynasmrt = { version = "4", optional = true }
 riscv-decode = {version = "0.2", optional = true }
