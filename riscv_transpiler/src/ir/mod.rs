@@ -688,18 +688,28 @@ pub fn decode<OPT: DecodingOptions>(opcode: u32) -> Instruction {
                         0,
                     ),
                     _ => {
-                        panic!("Unknown CSR number 0x{:04x}", csr_number);
+                        // Unknown CSR (e.g. hpmcounter from libgcc unwinder).
+                        // Treat reads as "rd = 0" and writes as NOP.
+                        if rd != 0 && formal_rs1 == 0 {
+                            Instruction::from_imm(InstructionName::Addi, 0, 0, rd, 0)
+                        } else {
+                            Instruction::from_imm(InstructionName::Addi, 0, 0, 0, 0)
+                        }
                     }
                 };
 
-                if funct3 != 0b001 {
-                    // not CSRRW
+                if funct3 != 0b001
+                    && instr.name != InstructionName::Illegal
+                    && instr.name != InstructionName::Addi
+                {
+                    // Only enforce CSRRW for known delegation CSRs
                     panic!("Unknown opcode 0x{:08x}", opcode);
                 }
 
                 instr
             } else {
-                panic!("Unknown system funct3 enc 0x{:08x}", funct3);
+                // funct3=0: ecall/ebreak/mret — NOP (dead code in our binaries)
+                Instruction::from_imm(InstructionName::Addi, 0, 0, 0, 0)
             };
 
             instr
