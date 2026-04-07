@@ -23,13 +23,9 @@ struct offset_iterator {
   using pointer = int *;
   using reference = int &;
 #endif
-  int offset;
+  const int offset;
   const int stride;
   DEVICE_FORCEINLINE int operator[](const int idx) const { return offset + idx * stride; }
-  DEVICE_FORCEINLINE int operator*() const { return offset; }
-  DEVICE_FORCEINLINE offset_iterator &operator+=(const int n) { offset += n * stride; return *this; }
-  DEVICE_FORCEINLINE offset_iterator operator+(const int n) const { return {offset + n * stride, stride}; }
-  DEVICE_FORCEINLINE difference_type operator-(const offset_iterator &rhs) const { return (offset - rhs.offset) / stride; }
 };
 
 #define SEGMENTED_REDUCE(op, arg_t)                                                                                                                            \
