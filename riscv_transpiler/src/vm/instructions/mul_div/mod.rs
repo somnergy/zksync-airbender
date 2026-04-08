@@ -67,3 +67,75 @@ pub(crate) fn remu<C: Counters, S: Snapshotter<C>, R: RAM>(
     default_increase_pc::<C>(state);
     increment_family_counter::<C, MUL_DIV_CIRCUIT_FAMILY_IDX>(state);
 }
+
+#[inline(always)]
+pub(crate) fn mulh<C: Counters, S: Snapshotter<C>, R: RAM>(
+    state: &mut State<C>,
+    _ram: &mut R,
+    _snapshotter: &mut S,
+    instr: Instruction,
+) {
+    let rs1_value = read_register::<C, 0>(state, instr.rs1);
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
+    let mut rd = ((rs1_value as i32 as i64).wrapping_mul(rs2_value as i32 as i64) >> 32) as u32;
+    write_register::<C, 2>(state, instr.rd, &mut rd);
+    default_increase_pc::<C>(state);
+    increment_family_counter::<C, MUL_DIV_CIRCUIT_FAMILY_IDX>(state);
+}
+
+#[inline(always)]
+pub(crate) fn mulhsu<C: Counters, S: Snapshotter<C>, R: RAM>(
+    state: &mut State<C>,
+    _ram: &mut R,
+    _snapshotter: &mut S,
+    instr: Instruction,
+) {
+    let rs1_value = read_register::<C, 0>(state, instr.rs1);
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
+    let mut rd = ((rs1_value as i32 as i64).wrapping_mul(rs2_value as u64 as i64) >> 32) as u32;
+    write_register::<C, 2>(state, instr.rd, &mut rd);
+    default_increase_pc::<C>(state);
+    increment_family_counter::<C, MUL_DIV_CIRCUIT_FAMILY_IDX>(state);
+}
+
+#[inline(always)]
+pub(crate) fn signed_div<C: Counters, S: Snapshotter<C>, R: RAM>(
+    state: &mut State<C>,
+    _ram: &mut R,
+    _snapshotter: &mut S,
+    instr: Instruction,
+) {
+    let rs1_value = read_register::<C, 0>(state, instr.rs1);
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
+    let mut rd = if rs2_value == 0 {
+        0xffffffff
+    } else if rs1_value as i32 == i32::MIN && rs2_value as i32 == -1 {
+        rs1_value
+    } else {
+        (rs1_value as i32).wrapping_div(rs2_value as i32) as u32
+    };
+    write_register::<C, 2>(state, instr.rd, &mut rd);
+    default_increase_pc::<C>(state);
+    increment_family_counter::<C, MUL_DIV_CIRCUIT_FAMILY_IDX>(state);
+}
+
+#[inline(always)]
+pub(crate) fn signed_rem<C: Counters, S: Snapshotter<C>, R: RAM>(
+    state: &mut State<C>,
+    _ram: &mut R,
+    _snapshotter: &mut S,
+    instr: Instruction,
+) {
+    let rs1_value = read_register::<C, 0>(state, instr.rs1);
+    let rs2_value = read_register::<C, 1>(state, instr.rs2);
+    let mut rd = if rs2_value == 0 {
+        rs1_value
+    } else if rs1_value as i32 == i32::MIN && rs2_value as i32 == -1 {
+        0
+    } else {
+        (rs1_value as i32).wrapping_rem(rs2_value as i32) as u32
+    };
+    write_register::<C, 2>(state, instr.rd, &mut rd);
+    default_increase_pc::<C>(state);
+    increment_family_counter::<C, MUL_DIV_CIRCUIT_FAMILY_IDX>(state);
+}

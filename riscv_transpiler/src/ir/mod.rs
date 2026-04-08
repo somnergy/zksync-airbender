@@ -666,18 +666,20 @@ pub fn preprocess_bytecode<OPT: DecodingOptions>(bytecode: &[u32]) -> Vec<Instru
                             illegal_instr
                         }
                         _ => {
-                            panic!("Unknown CSR number 0x{:04x}", csr_number);
+                            // Unknown CSR — treat as illegal instruction
+                            illegal_instr
                         }
                     };
 
                     if funct3 != 0b001 {
-                        // not CSRRW
-                        panic!("Unknown opcode 0x{:08x}", opcode);
+                        // not CSRRW — treat as illegal instruction
+                        illegal_instr
+                    } else {
+                        instr
                     }
-
-                    instr
                 } else {
-                    panic!("Unknown system funct3 enc 0x{:08x}", funct3);
+                    // ecall, ebreak, mret, etc. — not supported, treat as illegal
+                    illegal_instr
                 };
 
                 instr

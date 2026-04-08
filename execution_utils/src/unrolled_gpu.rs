@@ -1,6 +1,7 @@
 use crate::get_padded_binary;
 use crate::unrolled::{
-    compute_setup_for_machine_configuration, flatten_proof_into_responses_for_unrolled_recursion,
+    compute_setup_for_machine_configuration,
+    flatten_proof_into_responses_for_unrolled_recursion_with_full_machine,
     UnrolledProgramProof, UnrolledProgramSetup,
 };
 use gpu_prover::{
@@ -61,13 +62,14 @@ pub fn load_binary_from_path(path: &String) -> Vec<u32> {
 }
 
 #[repr(usize)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
 pub enum UnrolledProverLevel {
     Base = 0,
     RecursionUnrolled = 1,
     RecursionUnified = 2,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct UnrolledProverLevelData {
     pub binary: Vec<u8>,
     pub text: Vec<u8>,
@@ -83,6 +85,10 @@ pub struct UnrolledProver {
     pub max_level: UnrolledProverLevel,
     pub level_data: BTreeMap<UnrolledProverLevel, UnrolledProverLevelData>,
     pub prover: ExecutionProver,
+    /// Whether the base layer uses the Full machine type (with signed mul/div).
+    /// When true, the recursion verifier uses a different op code to select
+    /// the full-machine verification path.
+    pub base_is_full_machine: bool,
 }
 
 #[cfg(feature = "security_80")]
@@ -265,6 +271,7 @@ impl UnrolledProver {
             max_level,
             level_data,
             prover,
+            base_is_full_machine: false,
         }
     }
 
@@ -309,11 +316,12 @@ impl UnrolledProver {
             let previous_layer_data = &self.level_data[&previous_level];
             let setup = &previous_layer_data.setup;
             let layouts = &previous_layer_data.compiled_layouts;
-            let witness = flatten_proof_into_responses_for_unrolled_recursion(
+            let witness = flatten_proof_into_responses_for_unrolled_recursion_with_full_machine(
                 &proof,
                 &setup,
                 &layouts,
                 previous_layer_is_base,
+                previous_layer_is_base && self.base_is_full_machine,
             );
             let source = QuasiUARTSource::new_with_reads(witness);
             let start_time = std::time::Instant::now();

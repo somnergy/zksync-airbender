@@ -284,9 +284,29 @@ pub fn flatten_proof_into_responses_for_unrolled_recursion(
     compiled_layouts: &CompiledCircuitsSet,
     is_base_layer: bool,
 ) -> Vec<u32> {
+    flatten_proof_into_responses_for_unrolled_recursion_with_full_machine(
+        proof,
+        setup,
+        compiled_layouts,
+        is_base_layer,
+        false,
+    )
+}
+
+pub fn flatten_proof_into_responses_for_unrolled_recursion_with_full_machine(
+    proof: &UnrolledProgramProof,
+    setup: &UnrolledProgramSetup,
+    compiled_layouts: &CompiledCircuitsSet,
+    is_base_layer: bool,
+    is_full_machine: bool,
+) -> Vec<u32> {
     let mut responses = vec![];
     let op = if is_base_layer {
-        full_statement_verifier::definitions::OP_VERIFY_BASE_LAYER_IN_UNROLLED_CIRCUITS
+        if is_full_machine {
+            full_statement_verifier::definitions::OP_VERIFY_FULL_MACHINE_BASE_LAYER_IN_UNROLLED_CIRCUITS
+        } else {
+            full_statement_verifier::definitions::OP_VERIFY_BASE_LAYER_IN_UNROLLED_CIRCUITS
+        }
     } else {
         full_statement_verifier::definitions::OP_VERIFY_RECURSIVE_LAYER_IN_UNROLLED_CIRCUITS
     };

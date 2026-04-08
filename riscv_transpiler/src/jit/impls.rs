@@ -833,8 +833,12 @@ impl<I: ContextImpl> JittedCode<I> {
                     | Instruction::Lhu(_)
                     | Instruction::Lw(_)
                     | Instruction::Mul(_)
+                    | Instruction::Mulh(_)
+                    | Instruction::Mulhsu(_)
                     | Instruction::Mulhu(_)
+                    | Instruction::Div(_)
                     | Instruction::Divu(_)
+                    | Instruction::Rem(_)
                     | Instruction::Remu(_)
             ) {
                 let rd = (raw_instruction >> 7) & 0x1F;
@@ -1195,6 +1199,43 @@ impl<I: ContextImpl> JittedCode<I> {
                         );
                         record_circuit_type(&mut ops, CounterType::MulDiv, 1);
                     }
+                    Instruction::Mulh(parts) => {
+                        touch_register_and_increment_timestamp!(ops, parts.rs1());
+                        touch_register_and_increment_timestamp!(ops, parts.rs2());
+                        load_into(&mut ops, parts.rs1(), x64::Rq::RAX as u8);
+                        let other = load(&mut ops, parts.rs2());
+                        dynasm!(ops
+                            ; movsxd rax, eax
+                            ; movsxd Rq(other), Rd(other)
+                            ; imul rax, Rq(other)
+                            ; shr rax, 32
+                        );
+                        if out != x64::Rq::RAX as u8 {
+                            dynasm!(ops
+                                ; mov Rd(out), eax
+                            );
+                        }
+                        record_circuit_type(&mut ops, CounterType::MulDiv, 1);
+                    }
+                    Instruction::Mulhsu(parts) => {
+                        // rs1 signed × rs2 unsigned → high 32 bits
+                        touch_register_and_increment_timestamp!(ops, parts.rs1());
+                        touch_register_and_increment_timestamp!(ops, parts.rs2());
+                        load_into(&mut ops, parts.rs1(), x64::Rq::RAX as u8);
+                        let other = load(&mut ops, parts.rs2());
+                        dynasm!(ops
+                            ; movsxd rax, eax                // sign-extend rs1
+                            ; mov Rd(other), Rd(other)       // zero-extend rs2
+                            ; imul rax, Rq(other)
+                            ; shr rax, 32
+                        );
+                        if out != x64::Rq::RAX as u8 {
+                            dynasm!(ops
+                                ; mov Rd(out), eax
+                            );
+                        }
+                        record_circuit_type(&mut ops, CounterType::MulDiv, 1);
+                    }
                     Instruction::Mulhu(parts) => {
                         touch_register_and_increment_timestamp!(ops, parts.rs1());
                         touch_register_and_increment_timestamp!(ops, parts.rs2());
@@ -1206,6 +1247,22 @@ impl<I: ContextImpl> JittedCode<I> {
                         if out != x64::Rq::RDX as u8 {
                             dynasm!(ops
                                 ; mov Rd(out), edx
+                            );
+                        }
+                        record_circuit_type(&mut ops, CounterType::MulDiv, 1);
+                    }
+                    Instruction::Div(parts) => {
+                        touch_register_and_increment_timestamp!(ops, parts.rs1());
+                        touch_register_and_increment_timestamp!(ops, parts.rs2());
+                        load_into(&mut ops, parts.rs1(), x64::Rq::RAX as u8);
+                        load_into(&mut ops, parts.rs2(), SCRATCH_REGISTER);
+                        dynasm!(ops
+                            ; cdq                            // sign-extend eax into edx:eax
+                            ; idiv Rd(SCRATCH_REGISTER)
+                        );
+                        if out != x64::Rq::RAX as u8 {
+                            dynasm!(ops
+                                ; mov Rd(out), eax
                             );
                         }
                         record_circuit_type(&mut ops, CounterType::MulDiv, 1);
@@ -1224,6 +1281,23 @@ impl<I: ContextImpl> JittedCode<I> {
                         if out != x64::Rq::RAX as u8 {
                             dynasm!(ops
                                 ; mov Rd(out), eax
+                            );
+                        }
+                        record_circuit_type(&mut ops, CounterType::MulDiv, 1);
+                    }
+                    Instruction::Rem(parts) => {
+                        touch_register_and_increment_timestamp!(ops, parts.rs1());
+                        touch_register_and_increment_timestamp!(ops, parts.rs2());
+                        load_into(&mut ops, parts.rs1(), x64::Rq::RAX as u8);
+                        load_into(&mut ops, parts.rs2(), SCRATCH_REGISTER);
+                        dynasm!(ops
+                            ; cdq
+                            ; idiv Rd(SCRATCH_REGISTER)
+                        );
+                        // signed remainder is in RDX
+                        if out != x64::Rq::RDX as u8 {
+                            dynasm!(ops
+                                ; mov Rd(out), edx
                             );
                         }
                         record_circuit_type(&mut ops, CounterType::MulDiv, 1);

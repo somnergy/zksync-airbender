@@ -277,6 +277,8 @@ impl ProgramProver {
                         gpu_prover::execution::prover::ExecutionProverConfiguration::default();
                     prover_configuration.replay_worker_threads_count =
                         config.gpu.replay_worker_threads_count;
+                    prover_configuration.host_allocators_per_job_count = 128; // 8 GB
+                    prover_configuration.host_allocators_per_device_count = 64; // 4 GB
 
                     let max_level = match config.target {
                         ProofTarget::Base => UnrolledProverLevel::Base,

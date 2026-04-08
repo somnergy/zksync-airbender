@@ -193,8 +193,12 @@ impl<C: Counters> ReplayerVM<C> {
                     InstructionName::Sra => shifts::sra::<C, R, false>(state, ram, instr, tracer),
                     InstructionName::Srai => shifts::sra::<C, R, true>(state, ram, instr, tracer),
                     InstructionName::Mul => mul_div::mul::<C, R>(state, ram, instr, tracer),
+                    InstructionName::Mulh => mul_div::mulh::<C, R>(state, ram, instr, tracer),
+                    InstructionName::Mulhsu => mul_div::mulhsu::<C, R>(state, ram, instr, tracer),
                     InstructionName::Mulhu => mul_div::mulhu::<C, R>(state, ram, instr, tracer),
+                    InstructionName::Div => mul_div::signed_div::<C, R>(state, ram, instr, tracer),
                     InstructionName::Divu => mul_div::divu::<C, R>(state, ram, instr, tracer),
+                    InstructionName::Rem => mul_div::signed_rem::<C, R>(state, ram, instr, tracer),
                     InstructionName::Remu => mul_div::remu::<C, R>(state, ram, instr, tracer),
 
                     InstructionName::ZimopAdd => mop::mop_addmod::<C, R>(state, ram, instr, tracer),
