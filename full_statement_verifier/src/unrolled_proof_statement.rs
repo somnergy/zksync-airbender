@@ -978,6 +978,30 @@ pub fn verify_unrolled_recursion_layer(security: verifier_common::SecurityModel)
     }
 }
 
+pub fn verify_full_machine_base_layer(security: verifier_common::SecurityModel) -> [u32; 16] {
+    unsafe {
+        let circuits_setups = read_setups::<
+            DefaultNonDeterminismSource,
+            FULL_MACHINE_NUM_UNROLLED_CIRCUITS,
+        >();
+        let circuits_setups_refs = circuits_setups.each_ref();
+        let inits_and_teardowns_setups = read_setups::<DefaultNonDeterminismSource, 1>();
+        verify_full_statement_for_unrolled_circuits::<
+            true,
+            { inits_and_teardowns_verifier::concrete::size_constants::NUM_AUX_BOUNDARY_VALUES },
+        >(
+            &circuits_setups_refs,
+            full_machine_unrolled_circuits_verification_parameters(security),
+            (
+                &inits_and_teardowns_setups[0],
+                inits_and_teardowns_verifier_ptr(security),
+            ),
+            base_layer_delegation_circuits_verification_parameters(security),
+            security,
+        )
+    }
+}
+
 pub fn verify_base_or_recursion_unrolled_circuits(
     security: verifier_common::SecurityModel,
 ) -> [u32; 16] {
@@ -987,6 +1011,9 @@ pub fn verify_base_or_recursion_unrolled_circuits(
     match op_type {
         OP_VERIFY_BASE_LAYER_IN_UNROLLED_CIRCUITS => verify_unrolled_base_layer(security),
         OP_VERIFY_RECURSIVE_LAYER_IN_UNROLLED_CIRCUITS => verify_unrolled_recursion_layer(security),
+        OP_VERIFY_FULL_MACHINE_BASE_LAYER_IN_UNROLLED_CIRCUITS => {
+            verify_full_machine_base_layer(security)
+        }
         _ => {
             panic!("Unknown op");
         }

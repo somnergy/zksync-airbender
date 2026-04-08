@@ -432,8 +432,12 @@ impl<C: Counters, E: ExecutionObserver<C>> VM<C, E> {
                     shifts::sra::<C, S, R, true>(state, ram, snapshotter, instr)
                 }
                 InstructionName::Mul => mul_div::mul::<C, S, R>(state, ram, snapshotter, instr),
+                InstructionName::Mulh => mul_div::mulh::<C, S, R>(state, ram, snapshotter, instr),
+                InstructionName::Mulhsu => mul_div::mulhsu::<C, S, R>(state, ram, snapshotter, instr),
                 InstructionName::Mulhu => mul_div::mulhu::<C, S, R>(state, ram, snapshotter, instr),
+                InstructionName::Div => mul_div::signed_div::<C, S, R>(state, ram, snapshotter, instr),
                 InstructionName::Divu => mul_div::divu::<C, S, R>(state, ram, snapshotter, instr),
+                InstructionName::Rem => mul_div::signed_rem::<C, S, R>(state, ram, snapshotter, instr),
                 InstructionName::Remu => mul_div::remu::<C, S, R>(state, ram, snapshotter, instr),
 
                 InstructionName::ZimopAdd => {
